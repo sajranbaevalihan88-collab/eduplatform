@@ -1,0 +1,208 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* MiSans (Xiaomi, OFL) self-hosted Latin+ Cyrillic — презентации с fontFamily MiSans рендерятся как в оригинале, офлайн */
+@font-face { font-family: 'MiSans'; src: url('/fonts/MiSans-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'MiSans'; src: url('/fonts/MiSans-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+
+* { font-family: Inter, system-ui, sans-serif; }
+h1,h2,h3 { font-family: Manrope, sans-serif; }
+.scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
+* { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+/* ——— Professional motion ——— */
+@keyframes enter { 
+  from { opacity:0; transform: translateY(6px) scale(0.98); } 
+  to { opacity:1; transform: none; } 
+}
+@keyframes enterUp { 
+  from { opacity:0; transform: translateY(12px); } 
+  to { opacity:1; transform: none; } 
+}
+@keyframes enterScale { 
+  from { opacity:0; transform: scale(0.97); } 
+  to { opacity:1; transform: scale(1); } 
+}
+@keyframes shimmer { 0%{background-position:-500px 0} 100%{background-position:500px 0} }
+@keyframes floatSubtle { 0%,100%{transform: translateY(0)} 50%{transform: translateY(-4px)} }
+@keyframes pulseDot { 0%,100%{transform: scale(1); opacity:1} 50%{transform: scale(0.9); opacity:0.7} }
+@keyframes spinSlow { from{transform: rotate(0)} to{transform: rotate(360deg)} }
+
+.animate-enter { animation: enter 0.55s cubic-bezier(0.16, 1, 0.3, 1) both; will-change: transform, opacity; }
+.animate-enterUp { animation: enterUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-enterScale { animation: enterScale 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-floatSubtle { animation: floatSubtle 5s ease-in-out infinite; }
+.animate-pulseDot { animation: pulseDot 2s ease-in-out infinite; }
+
+/* Stagger professional — 40ms */
+.stagger > * { opacity:0; animation: enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; will-change: transform, opacity; }
+.stagger > *:nth-child(1){animation-delay:0.04s}
+.stagger > *:nth-child(2){animation-delay:0.08s}
+.stagger > *:nth-child(3){animation-delay:0.12s}
+.stagger > *:nth-child(4){animation-delay:0.16s}
+.stagger > *:nth-child(5){animation-delay:0.20s}
+.stagger > *:nth-child(6){animation-delay:0.24s}
+.stagger > *:nth-child(7){animation-delay:0.28s}
+.stagger > *:nth-child(8){animation-delay:0.32s}
+
+/* Legacy aliases keep */
+.animate-fadeIn { animation: enter 0.55s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-slideIn { animation: enterUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-scaleIn { animation: enterScale 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-float { animation: floatSubtle 5s ease-in-out infinite; }
+.animate-pulseSoft { animation: pulseDot 2s ease-in-out infinite; }
+
+/* Slide transitions */
+@keyframes slideInRight { from{transform:translateX(40px); opacity:0} to{transform:none; opacity:1} }
+@keyframes zoomIn { from{transform:scale(0.92); opacity:0} to{transform:scale(1); opacity:1} }
+@keyframes wipeIn { from{clip-path:inset(0 100% 0 0)} to{clip-path:inset(0 0 0 0)} }
+@keyframes splitIn { from{clip-path:inset(0 50% 0 50%)} to{clip-path:inset(0 0 0 0)} }
+.animate-slide { animation: slideInRight 0.45s cubic-bezier(0.22,1,0.36,1) both; }
+.animate-zoom { animation: zoomIn 0.45s cubic-bezier(0.22,1,0.36,1) both; }
+.animate-wipe { animation: wipeIn 0.5s cubic-bezier(0.22,1,0.36,1) both; }
+.animate-split { animation: splitIn 0.5s cubic-bezier(0.22,1,0.36,1) both; }
+.animate-random { animation: enter 0.5s both; }
+
+/* Block animations */
+@keyframes bounceIn { 0%{transform:translateY(20px) scale(0.95); opacity:0} 60%{transform:translateY(-4px) scale(1.02); opacity:1} 100%{transform:none} }
+@keyframes flipIn { from{transform:rotateY(90deg); opacity:0} to{transform:rotateY(0); opacity:1} }
+.animate-bounce { animation: bounceIn 0.6s cubic-bezier(0.22,1,0.36,1) both; }
+.animate-flip { animation: flipIn 0.6s ease both; transform-style: preserve-3d; }
+.animate-zoomIn { animation: zoomIn 0.4s both; }
+
+/* Professional card — subtle lift, border highlight, no scale junk */
+.card-hover { 
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.3s ease; 
+  will-change: transform;
+}
+.card-hover:hover { 
+  transform: translateY(-2px); 
+  box-shadow: 0 8px 24px -10px rgba(15,23,42,0.12), 0 4px 10px -6px rgba(15,23,42,0.06); 
+  border-color: rgba(139,92,246,0.15);
+}
+.card-hover:active { transform: translateY(0); transition-duration: 0.12s; }
+
+/* Button — 150ms press, 200ms hover, no jumpy scale */
+.btn-hover { 
+  transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s ease, background-color 0.2s ease; 
+  will-change: transform;
+}
+.btn-hover:hover { transform: translateY(-1px); box-shadow: 0 4px 12px -4px rgba(139,92,246,0.25); }
+.btn-hover:active { transform: translateY(0) scale(0.985); box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+
+/* Glass — more blur, subtle border */
+.glass { backdrop-filter: blur(16px) saturate(1.1); background: rgba(255,255,255,0.82); border: 1px solid rgba(255,255,255,0.5); }
+.glass-dark { backdrop-filter: blur(16px); background: rgba(15,23,42,0.78); }
+
+.gradient-text { background: linear-gradient(135deg,#7c3aed 0%,#4f46e5 50%,#2563eb 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+
+.skeleton { background: linear-gradient(90deg,#f1f5f9 25%,#e8eef5 37%,#f1f5f9 63%); background-size:500px 100%; animation: shimmer 1.6s ease infinite; }
+
+.focus-ring:focus { outline:none; box-shadow: 0 0 0 3px rgba(139,92,246,0.18); border-color: rgba(139,92,246,0.6); }
+.focus-ring:focus-visible { box-shadow: 0 0 0 3px rgba(139,92,246,0.25); }
+
+.page-enter { animation: enter 0.45s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* Word editor page */
+.word-page table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+.word-page td, .word-page th { border: 1px solid #94a3b8; padding: 6px; min-width: 40px; }
+.word-page img { max-width: 100%; height: auto; }
+.word-page img.sel { outline: 3px solid #7c3aed; outline-offset: 2px; border-radius: 4px; }
+.word-page td:focus, .word-page th:focus { outline: 2px solid rgba(124,58,237,.4); }
+.word-page a { color: #4f46e5; text-decoration: underline; }
+/* уголок размера фото */
+.img-handle { position: absolute; width: 16px; height: 16px; background: #7c3aed; border: 3px solid #fff; border-radius: 5px; cursor: nwse-resize; z-index: 20; transform: translate(-50%,-50%); box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+.word-page img[data-free="1"] { cursor: move; }
+/* границы листов как в Word */
+.page-guide { position: absolute; left: 0; right: 0; border-top: 2px dashed #c084fc; }
+.page-guide span { position: absolute; top: -11px; right: 12px; background: #f5f3ff; color: #7c3aed; font-size: 11px; font-weight: 700; padding: 0 8px; border-radius: 999px; border: 1px solid #ddd6fe; }
+/* разрыв страницы */
+.word-page .page-break { border: 2px dashed #10b981; background: #ecfdf5; color: #047857; text-align: center; font-size: 12px; font-weight: 700; padding: 6px; border-radius: 8px; margin: 10px 0; user-select: none; }
+@media print {
+  .page-guide { display: none; }
+  .word-page .page-break { break-after: page; border: none; background: none; color: transparent; height: 0; padding: 0; margin: 0; }
+}
+
+/* Monkeytype-каретка: плавная + мигание */
+.mt-caret { transition: left 0.08s ease, top 0.08s ease; animation: mt-blink 1.1s steps(1) infinite; }
+@keyframes mt-blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
+
+/* Аркан: кыргызская арена — небо, солнце, горы, луг */
+.arkan-arena {
+  position: relative; overflow: hidden;
+  background: linear-gradient(180deg, #38bdf8 0%, #bae6fd 34%, #fef9c3 58%, #bbf7d0 100%);
+  border-radius: 24px; border: 1px solid rgba(12,74,110,.15);
+}
+.arkan-arena::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(circle at 82% 12%, #fde047 0 34px, rgba(253,224,71,0) 36px),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 120' preserveAspectRatio='none'%3E%3Cpolygon points='0,120 70,40 140,120' fill='%23065f46' opacity='0.85'/%3E%3Cpolygon points='110,120 200,20 290,120' fill='%23047857'/%3E%3Cpolygon points='190,38 200,20 210,38 204,44 196,44' fill='white'/%3E%3Cpolygon points='250,120 330,50 410,120' fill='%23065f46' opacity='0.7'/%3E%3C/svg%3E");
+  background-size: auto, 100% 46%;
+  background-position: center, bottom;
+  background-repeat: no-repeat;
+}
+.arkan-arena > * { position: relative; z-index: 1; }
+/* кыргызский орнамент-тесьма */
+.oimo-strip {
+  height: 14px; border-radius: 999px;
+  background: repeating-linear-gradient(45deg, #dc2626 0 12px, #fbbf24 12px 24px, #0d9488 24px 36px, #1d4ed8 36px 48px);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.25);
+}
+
+/* Аркан: отсчёт 3-2-1 */
+.count-pop { animation: count-pop 0.7s cubic-bezier(0.22,1,0.36,1) both; }
+@keyframes count-pop {
+  0% { transform: scale(2.2); opacity: 0; }
+  30% { transform: scale(1); opacity: 1; }
+  80% { transform: scale(0.95); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.9; }
+}
+/* кольцо таймера */
+.timer-ring { transition: stroke-dashoffset 1s linear, stroke 0.3s; }
+/* живой канат — тряска при рывке */
+@keyframes ropeShake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 50%{transform:translateX(6px)} 75%{transform:translateX(-3px)} }
+.rope-shake { animation: ropeShake 0.35s ease; }
+/* финал — конфетти */
+@keyframes confettiFall { 0%{transform:translateY(-10vh) rotate(0); opacity:1} 100%{transform:translateY(105vh) rotate(720deg); opacity:0.9} }
+.confetti-piece { position:absolute; top:-4vh; animation: confettiFall linear infinite; will-change: transform; }
+
+/* Проектор — интерактивная доска: всё крупное под тач и дальний ряд */
+.projector body { font-size: 125%; }
+.projector main { font-size: 1.2rem; }
+.projector button, .projector a, .projector input, .projector select, .projector textarea { font-size: 1.1em; }
+.projector .card-hover, .projector .btn-hover { transform: none !important; }
+
+/* Poor vision — база под скринридер (NVDA/JAWS/VoiceOver/TalkBack) + свои кнопки.
+   Скринридер читает семантику сам; мы даём контраст, крупный шрифт, видимый фокус
+   (Tab-навигация без мыши) и гасим анимации. Esc — стоп озвучки (см. UIContext). */
+.poor-vision { --poor-contrast:1; }
+.poor-vision body { font-size: 112%; line-height:1.7; letter-spacing:0.02em; }
+.poor-vision main { font-size: 1.125rem; }
+.poor-vision .card-hover, .poor-vision .btn-hover { transform:none !important; }
+.poor-vision * { border-color: #000 !important; }
+.poor-vision .bg-white { background: #fff !important; color:#000 !important; }
+.poor-vision .text-slate-500, .poor-vision .text-slate-400, .poor-vision .text-slate-600 { color:#000 !important; }
+.poor-vision :focus-visible { outline: 3px solid #000 !important; outline-offset: 2px; border-radius: 6px; }
+.poor-vision [role="button"][tabindex="0"]:focus { outline: 3px solid #7c3aed !important; outline-offset: 2px; }
+.poor-vision .animate-enter, .poor-vision .animate-enterUp, .poor-vision .animate-enterScale,
+.poor-vision .stagger > *, .poor-vision .page-enter, .poor-vision .animate-floatSubtle { animation: none !important; opacity:1 !important; }
+
+/* Poor vision: крупный шрифт 125–200% разъезжает фиксированные ширины — чиним */
+.poor-vision aside { width: 320px !important; }
+.poor-vision aside .font-display { white-space: normal !important; line-height: 1.2 !important; }
+.poor-vision header { flex-wrap: wrap !important; height: auto !important; min-height: 64px; row-gap: 8px; padding-top: 8px !important; padding-bottom: 8px !important; }
+.poor-vision main { overflow-x: hidden; }
+.poor-vision nav { overflow-x: auto; }
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .animate-enter, .animate-enterUp, .animate-enterScale, .stagger > *, .page-enter { animation: none; opacity:1; transform:none; }
+  .card-hover, .btn-hover { transition: none; }
+}
+
+/* Subtle hover for nav */
+.nav-item { transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1); }
+.nav-item:active { transform: scale(0.98); }

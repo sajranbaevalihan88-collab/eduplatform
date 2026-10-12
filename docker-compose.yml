@@ -1,0 +1,114 @@
+services:
+  # Топовая БД: PostgreSQL 16 + pgvector + PostGIS + pg_trgm
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: eduplatform
+      POSTGRES_USER: edu
+      POSTGRES_PASSWORD: edu_password_change_me
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # init-postgres.sql встроен в миграцию Django (CREATE EXTENSION IF NOT EXISTS) — без потери качества
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edu -d eduplatform"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+    command: postgres -c shared_preload_libraries=vector -c max_connections=200 -c shared_buffers=256MB -c effective_cache_size=1GB -c work_mem=8MB
+
+  # Топ: Redis 7 для кэша, сессий, Channels (доска realtime), Celery
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save 60 1
+
+  # PgBouncer для пула соединений (топ для высокой нагрузки)
+  pgbouncer:
+    image: pgbouncer/pgbouncer:latest
+    environment:
+      DATABASES_HOST: db
+      DATABASES_PORT: 5432
+      DATABASES_USER: edu
+      DATABASES_PASSWORD: edu_password_change_me
+      DATABASES_DBNAME: eduplatform
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 100
+      DEFAULT_POOL_SIZE: 20
+    ports:
+      - "6432:5432"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    build: .
+    command: bash -c "python manage.py migrate --noinput && python manage.py createcachetable || true && gunicorn backend.wsgi:application --bind 0.0.0.0:8000 --workers 3 --worker-class sync --timeout 120"
+    volumes:
+      - ./media:/app/media
+      - ./staticfiles:/app/staticfiles
+    ports:
+      - "8000:8000"
+    environment:
+      DEBUG: "False"
+      DJANGO_SECRET_KEY: "change-me-in-prod-generate-strong-key"
+      DATABASE_URL: postgres://edu:edu_password_change_me@db:5432/eduplatform
+      REDIS_URL: redis://redis:6379/1
+      ALLOWED_HOSTS: ".onrender.com,localhost,127.0.0.1"
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173"
+      PISTON_URL: "http://piston:2000/api/v2/piston/execute"
+      PISTON_DAILY_LIMIT: "5000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      piston:
+        condition: service_started
+
+  # Self-hosted Piston — реальная изоляция запуска кода для языков, которых нет
+  # в локальном subprocess-раннере (go, rust, c#, php, ruby, kotlin и т.д.),
+  # вместо публичного emkc.org (с 15.02.2026 — whitelist-only, отвечает 401, см. логи выше).
+  # Публичный API теперь отдаёт: {"message":"Public Piston API is now whitelist only..."}
+  # или 502 Deploying. Self-hosted решает проблему изоляции и надёжности.
+  piston:
+    image: ghcr.io/engineer-man/piston:3.8.0
+    privileged: true
+    ports:
+      - "2000:2000"
+    volumes:
+      - piston-packages:/piston/packages
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:2000/api/v2/piston/runtimes || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # pgAdmin для просмотра топовой БД
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@edu.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
+  redisdata:
+  piston-packages:
