@@ -5,7 +5,6 @@ media/
 staticfiles/
 frontend/node_modules/
 frontend/dist/
-frontend/package-lock.json
 .env
 .venv/
 *.log
