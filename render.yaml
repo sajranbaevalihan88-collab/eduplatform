@@ -1,0 +1,65 @@
+# ВАЖНО: имена сервисов ниже (edu-backend, edu-frontend) используются
+# для построения URL вида https://<name>.onrender.com в ALLOWED_HOSTS,
+# CORS_ALLOWED_ORIGINS и VITE_API_URL. Если такое имя уже занято на Render,
+# он допишет случайный суффикс к реальному URL (например edu-backend-ab12.onrender.com).
+# После первого деплоя сверь реальные URL в дашборде Render и, если они
+# отличаются от прописанных здесь, обнови вручную:
+#   - edu-backend  -> ALLOWED_HOSTS и CORS_ALLOWED_ORIGINS (в этом файле)
+#   - edu-frontend -> VITE_API_URL (в этом файле), потом передеплой frontend
+
+services:
+  - type: web
+    name: edu-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com,localhost,edu-backend.onrender.com"
+      - key: CORS_ALLOWED_ORIGINS
+        value: "https://edu-frontend.onrender.com,https://edu-backend.onrender.com"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: edu-db
+          property: connectionString
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      # Gemini для ИИ-генерации вопросов. Значение НЕ храним в репо:
+      # Render попросит ввести его в дашборде (sync: false = секрет).
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: "gemini-2.5-flash"
+      # REDIS_URL намеренно не задан: для одного preview-инстанса backend
+      # сам переключается на LocMemCache и InMemoryChannelLayer (см. settings.py).
+      # Это ок для демо/превью, но НЕ переживёт рестарт контейнера или
+      # несколько gunicorn-воркеров/инстансов — realtime-доска (apps/board)
+      # будет терять состояние между воркерами. Если понадобится
+      # масштабирование или устойчивый realtime — добавь Redis-сервис на
+      # Render и пропиши сюда REDIS_URL.
+    buildCommand: ""
+    startCommand: ""
+
+  - type: web
+    name: edu-frontend
+    runtime: node
+    plan: starter
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://edu-backend.onrender.com
+      - key: NODE_VERSION
+        value: "20"
+
+databases:
+  - name: edu-db
+    plan: starter
+    databaseName: eduplatform
+    user: edu
