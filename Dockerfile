@@ -22,7 +22,9 @@ EXPOSE 8000
 
 # Миграции гоняем при старте контейнера (не на этапе build — DATABASE_URL
 # там ещё недоступен). set -e гарантирует, что если migrate упадёт,
-# gunicorn не запустится и ошибка будет видна в логах Render, а не скрыта.
+# сервер не запустится и ошибка будет видна в логах Render, а не скрыта.
+# Daphne (а не gunicorn): отдаёт и HTTP, и WebSocket ws/run — живой
+# интерактивный ввод в редакторе кода работает и на проде, как локально.
 CMD set -e; \
     python manage.py migrate --noinput; \
-    exec gunicorn backend.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 120
+    exec python -m daphne -b 0.0.0.0 -p $PORT backend.asgi:application
