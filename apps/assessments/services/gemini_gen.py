@@ -6,20 +6,23 @@
 import json
 import re
 
-ALLOWED_TYPES = {'single', 'true_false', 'text'}
-MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-lite']
+ALLOWED_TYPES = {'single', 'multiple', 'true_false'}
+MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-3-flash-preview']
 
 
 def _prompt(text, count, instruction=''):
     base = (
         "Ты — генератор тестовых вопросов для школьной платформы. "
         f"Составь РОВНО {count} вопросов по тексту ниже. "
-        "Типы: single (один правильный из 4), true_false (Верно/Неверно), text (дать определение). "
+        "Разрешены ТОЛЬКО три типа: single (один правильный из 4), "
+        "multiple (несколько правильных из 4-6) и "
+        "true_false (Верно/Неверно). Тип text (свободный ответ) СТРОГО ЗАПРЕЩЁН — не используй его никогда. "
         "Отвечай ТОЛЬКО валидным JSON-массивом, без пояснений и markdown, в формате:\n"
         '[{"text":"...","type":"single","points":1,"explanation":"...?",'
         '"options":[{"text":"...","is_correct":true},{"text":"...","is_correct":false}]}]\n'
         "Правила: single — ровно 4 варианта, правильный ровно 1; "
-        "true_false — варианты Верно/Неверно; text — options пустой."
+        "multiple — 4-6 вариантов, правильных минимум 1; "
+        "true_false — варианты Верно/Неверно."
     )
     extra = str(instruction or '').strip()[:2000]
     if extra:
@@ -50,8 +53,9 @@ def _normalize(items, count):
             continue
         text = str(q.get('text') or '').strip()
         qtype = str(q.get('type') or 'single').strip()
-        if qtype not in ALLOWED_TYPES:
-            qtype = 'single'
+        # текстовые вопросы отключены — пропускаем
+        if qtype not in ('single', 'multiple', 'true_false'):
+            continue
         opts = []
         for o in (q.get('options') or []):
             if not isinstance(o, dict):
@@ -63,6 +67,10 @@ def _normalize(items, count):
             if sum(1 for o in opts if o['is_correct']) != 1 or len(opts) < 2:
                 continue
             opts = opts[:4]
+        elif qtype == 'multiple':
+            if sum(1 for o in opts if o['is_correct']) < 1 or len(opts) < 2:
+                continue
+            opts = opts[:6]
         elif qtype == 'true_false':
             if len(opts) < 2:
                 continue

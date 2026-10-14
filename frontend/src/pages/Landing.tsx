@@ -9,16 +9,19 @@ export default function Landing(){
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-grid-slate-100 dark:bg-grid-slate-800 [mask-image:linear-gradient(to_bottom,white,transparent)]"/>
-        <div className="absolute top-20 left-10 w-72 h-72 bg-violet-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-floatSubtle"/>
-        <div className="absolute top-40 right-10 w-96 h-96 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-floatSubtle" style={{animationDelay:'1s'}}/>
+        <div className="absolute top-20 left-10 w-72 h-72 bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-floatSubtle"/>
+        <div className="absolute top-40 right-10 w-96 h-96 bg-cyan-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-floatSubtle" style={{animationDelay:'1s'}}/>
         <div className="max-w-6xl mx-auto px-6 pt-16 pb-12 relative">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-violet-100 dark:bg-violet-900/40 border border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-200 text-xs font-semibold">{t('new_board_anim')}</div>
-          <h1 className="mt-4 text-4xl md:text-5xl lg:text-6xl font-display font-extrabold leading-tight">
-            <span className="gradient-text">EduPlatform AI</span> <span className="text-slate-900 dark:text-white">{t('hero_title1')}<br/>{t('hero_title2')}</span>
-          </h1>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-200 text-xs font-semibold">{t('new_board_anim')}</div>
+          <div className="mt-4 flex items-center gap-4">
+            <img src="/logo.svg" alt="EduPlatform AI — логотип" className="w-20 h-20 md:w-24 md:h-24 shrink-0 drop-shadow-xl animate-floatSubtle" />
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-extrabold leading-tight">
+              <span className="text-slate-900 dark:text-white">EduPlatform </span><span className="brand-ai">AI</span> <span className="text-slate-900 dark:text-white">{t('hero_title1')}<br/>{t('hero_title2')}</span>
+            </h1>
+          </div>
           <p className="mt-4 text-lg text-slate-600 dark:text-slate-300 max-w-2xl" dangerouslySetInnerHTML={{__html: t('hero_sub')}} />
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link to="/lessons" className="px-6 py-3 rounded-xl bg-slate-900 dark:bg-white dark:text-slate-900 text-white font-bold flex items-center gap-2 btn-hover shadow-lg hover:shadow-xl">{t('view_lessons')} <ArrowRight size={18}/></Link>
+            <Link to="/lessons" className="px-6 py-3 rounded-xl bg-blue-700 dark:bg-white dark:text-slate-900 text-white font-bold flex items-center gap-2 btn-hover shadow-lg hover:shadow-xl">{t('view_lessons')} <ArrowRight size={18}/></Link>
             <Link to="/lessons/new" className="px-6 py-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white font-semibold flex items-center gap-2 btn-hover hover:bg-slate-50 dark:hover:bg-slate-700"><Sparkles size={18}/> {t('create_lesson')}</Link>
             <a href="#features" className="px-6 py-3 rounded-xl bg-white/80 dark:bg-slate-800/80 backdrop-blur border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-semibold flex items-center gap-2 hover:bg-white dark:hover:bg-slate-700"><Play size={18}/> {t('how_it_works')}</a>
           </div>
@@ -40,7 +43,7 @@ export default function Landing(){
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('lessons_desc')}</p>
           </div>
           <div className="bg-white dark:bg-slate-800 rounded-2xl border p-6 card-hover">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-pink-500 flex items-center justify-center text-white"><Presentation size={20}/></div>
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-400 flex items-center justify-center text-white"><Presentation size={20}/></div>
             <h3 className="font-bold mt-3 text-slate-900 dark:text-white">{t('presentations_clone')}</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('presentations_desc')}</p>
           </div>
@@ -55,11 +58,11 @@ export default function Landing(){
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('tests_desc')}</p>
           </div>
           <div className="bg-white dark:bg-slate-800 rounded-2xl border p-6 card-hover">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white"><BookOpen size={20}/></div>
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white"><BookOpen size={20}/></div>
             <h3 className="font-bold mt-3 text-slate-900 dark:text-white">{t('subjects_title')}</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('subjects_desc')}</p>
           </div>
-          <div className="bg-gradient-to-br from-slate-900 to-indigo-900 dark:from-slate-800 dark:to-violet-900 rounded-2xl p-6 text-white card-hover border dark:border-slate-700">
+          <div className="bg-gradient-to-br from-slate-900 to-blue-900 dark:from-slate-800 dark:to-blue-900 rounded-2xl p-6 text-white card-hover border dark:border-slate-700">
             <h3 className="font-bold">{t('ready')}</h3>
             <p className="text-sm text-white/80 mt-1">{t('ready_sub')}</p>
             <Link to="/login" className="inline-flex mt-3 px-4 py-2 rounded-xl bg-white text-slate-900 font-bold text-sm btn-hover">{t('login_btn')}</Link>
@@ -73,12 +76,12 @@ export default function Landing(){
           <div className="flex-1">
             <h3 className="font-bold text-lg text-slate-900 dark:text-white">{t('how_to_start')}</h3>
             <ol className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-              <li>1. <Link to="/login" className="text-violet-600 dark:text-violet-400 underline">{t('step1')}</Link> {t('step1_as')}</li>
+              <li>1. <Link to="/login" className="text-blue-600 dark:text-blue-400 underline">{t('step1')}</Link> {t('step1_as')}</li>
               <li>2. {t('step2')}</li>
               <li>3. {t('step3')}</li>
             </ol>
           </div>
-          <Link to="/lessons/new" className="px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-bold shadow-lg btn-hover">{t('create_first')}</Link>
+          <Link to="/lessons/new" className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold shadow-lg btn-hover">{t('create_first')}</Link>
         </div>
         <div className="text-center text-xs text-slate-400 dark:text-slate-500 mt-6">{t('footer')}</div>
       </section>

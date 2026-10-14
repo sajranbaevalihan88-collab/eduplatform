@@ -354,4 +354,4 @@ CODE_USE_DOCKER = os.environ.get('CODE_USE_DOCKER', 'False') == 'True'
 # Ключ взять: https://aistudio.google.com/apikey (бесплатный тариф).
 # Без ключа generate честно падает на офлайн-генератор и отвечает source='offline'.
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash')
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')

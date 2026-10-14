@@ -4,12 +4,13 @@ import client from '../api/client'
 import { useAccessibility } from '../context/UIContext'
 import { playArkanSound } from '../utils/sound'
 import { READY_TOPICS } from '../data/readyTopics'
-import { isStudent } from '../utils/role'
+import { isStudent, isGuest } from '../utils/role'
 import { Play, Volume2, ArrowRight, RotateCcw } from 'lucide-react'
+import { useLang } from '../context/LangContext'
 
 type Opt = { id?: number; text: string; is_correct: boolean }
 type Q = { id?: number; text: string; type: string; points: number; options: Opt[]; explanation?: string }
-type T = { id: number | string; title: string; questions?: Q[] }
+type TestT = { id: number | string; title: string; questions?: Q[] }
 
 const PULL_CORRECT = 12
 const PULL_MISS = 5
@@ -58,13 +59,15 @@ const DEMO_QS: Q[] = [
 
 export default function Arkan() {
   const { speak } = useAccessibility()
+const tr = useLang().t
   const [searchParams] = useSearchParams()
   const [phase, setPhase] = useState<'lobby' | 'battle' | 'result'>('lobby')
   const [tab, setTab] = useState<'topics' | 'mine' | 'public'>('topics')
   const student = isStudent()
-  const [mine, setMine] = useState<T[]>([])
-  const [pub, setPub] = useState<T[]>([])
-  const [sel, setSel] = useState<T | null>(null)
+  const noMine = student || isGuest()
+  const [mine, setMine] = useState<TestT[]>([])
+  const [pub, setPub] = useState<TestT[]>([])
+  const [sel, setSel] = useState<TestT | null>(null)
   const [busy, setBusy] = useState(false)
   const [teamA, setTeamA] = useState('Көк')
   const [teamB, setTeamB] = useState('Кызыл')
@@ -91,12 +94,23 @@ export default function Arkan() {
   const [countdown, setCountdown] = useState<number | null>(null)
   const [combo, setCombo] = useState(0)
   const [lastGain, setLastGain] = useState<string | null>(null)
-  const [shake, setShake] = useState(0)
   const qStartRef = useRef(0)
+  const ropeRef = useRef<HTMLDivElement>(null)
+  const shakeRope = () => {
+    // перезапуск CSS-анимации без перемонтирования узла (иначе двоится канат)
+    requestAnimationFrame(() => {
+      const el = ropeRef.current
+      if (!el) return
+      el.classList.remove('rope-shake')
+      void el.offsetWidth
+      el.classList.add('rope-shake')
+    })
+  }
   const tickRef = useRef(0)
 
   useEffect(() => {
-    client.get('/tests/?owner=me').then(r => setMine(Array.isArray(r.data) ? r.data : r.data.results || [])).catch(() => {})
+    // гостям — только Даяр-темы и демо-бой, без входа
+    if (!isGuest()) client.get('/tests/?owner=me').then(r => setMine(Array.isArray(r.data) ? r.data : r.data.results || [])).catch(() => {})
     client.get('/tests/?is_public=true').then(r => setPub(Array.isArray(r.data) ? r.data : r.data.results || [])).catch(() => {})
   }, [])
 
@@ -115,7 +129,7 @@ export default function Arkan() {
     const tid = searchParams.get('test')
     if (!tid) return
     client.get(`/tests/${tid}/`).then(r => {
-      const full: T = { id: r.data.id, title: r.data.title, questions: r.data.questions || [] }
+      const full : TestT = { id: r.data.id, title: r.data.title, questions: r.data.questions || [] }
       if (playable(full).length) {
         setSel(full)
         setTab(isStudent() ? 'public' : 'mine')
@@ -124,18 +138,18 @@ export default function Arkan() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const playable = (t: T): Q[] =>
-    (t.questions || []).filter(q => (q.type === 'single' || q.type === 'true_false') && q.options && q.options.length >= 2)
+  const playable = (test: TestT): Q[] =>
+    (test.questions || []).filter((qq: Q) => (qq.type === 'single' || qq.type === 'true_false') && qq.options && qq.options.length >= 2)
 
-  const pickTest = async (t: T) => {
+  const pickTest = async (tests: TestT) => {
     setBusy(true)
     try {
-      const r = await client.get(`/tests/${t.id}/`)
-      const full: T = { id: r.data.id, title: r.data.title, questions: r.data.questions || [] }
+      const r = await client.get(`/tests/${tests.id}/`)
+      const full : TestT = { id: r.data.id, title: r.data.title, questions: r.data.questions || [] }
       const pl = playable(full)
-      if (!pl.length) { alert('В тесте нет вопросов с вариантами (нужны «один ответ» или «верно/неверно»)'); return }
+      if (!pl.length) { alert(tr('arkan_no_opts')); return }
       setSel(full)
-    } catch { alert('Не получилось открыть тест (нет сети?)') } finally { setBusy(false) }
+    } catch { alert(tr('arkan_open_err')) } finally { setBusy(false) }
   }
 
   // --- бой ---
@@ -157,32 +171,32 @@ export default function Arkan() {
   const pickTopic = (topicId: string) => {
     const topic = READY_TOPICS.find(t => t.id === topicId)
     if (!topic) return
-    const t: T = {
+    const tq : TestT = {
       id: `ready-${topic.id}`,
-      title: `${topic.icon} ${topic.title} (Даяр)`,
+      title: `${topic.icon} ${topic.title} (${tr('arkan_ready_badge')})`,
       questions: topic.questions.map(q => ({ ...q, options: q.options.map(o => ({ ...o })) })),
     }
-    setSel(t)
+    setSel(tq)
   }
 
   const startBattle = async () => {
-    const t = sel
-    if (!t) { alert('Выбери тему или тест'); return }
+    const cur = sel
+    if (!cur) { alert(tr('arkan_pick_first')); return }
     // готовая тема — играем сразу, без сети
-    if (typeof t.id === 'string' && t.id.startsWith('ready-')) {
-      const pl = playable(t)
-      if (!pl.length) { alert('Нет playable-вопросов'); return }
-      resetBattle(pl, t.id)
+    if (typeof cur.id === 'string' && cur.id.startsWith('ready-')) {
+      const pl = playable(cur)
+      if (!pl.length) { alert(tr('arkan_no_playable')); return }
+      resetBattle(pl, cur.id)
       return
     }
     setBusy(true)
     try {
-      const r = await client.get(`/tests/${t.id}/`)
-      const full: T = { id: r.data.id, title: r.data.title, questions: r.data.questions || [] }
+      const r = await client.get(`/tests/${cur.id}/`)
+      const full : TestT = { id: r.data.id, title: r.data.title, questions: r.data.questions || [] }
       const pl = playable(full)
-      if (!pl.length) { alert('В тесте нет вопросов с вариантами'); return }
+      if (!pl.length) { alert(tr('arkan_no_opts_short')); return }
       resetBattle(pl, full.id)
-    } catch { alert('Не получилось открыть тест (нет сети?)') } finally { setBusy(false) }
+    } catch { alert(tr('arkan_open_err')) } finally { setBusy(false) }
   }
 
   useEffect(() => {
@@ -197,20 +211,20 @@ export default function Arkan() {
   useEffect(() => {
     if (phase !== 'battle' || countdown === null) return
     if (countdown > 0) {
-      const t = setTimeout(() => {
+      const timeout = setTimeout(() => {
         setCountdown(c => (c !== null && c > 0 ? c - 1 : c))
         playArkanSound('tick')
       }, 700)
-      return () => clearTimeout(t)
+      return () => clearTimeout(timeout)
     }
-    const t = setTimeout(() => {
+    const timeout = setTimeout(() => {
       setCountdown(null)
       tickRef.current = 0
       setLeft(qtime)
       qStartRef.current = Date.now()
       playArkanSound('go')
     }, 600)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, countdown])
 
@@ -226,22 +240,22 @@ export default function Arkan() {
 
   useEffect(() => {
     if (phase !== 'result') return
-    const t = setTimeout(() => playArkanSound('win'), 400)
+    const timeout = setTimeout(() => playArkanSound('win'), 400)
     try {
-      const msg = winner === 'Ничья' ? 'Тең чыкты!' : `Жеңүүчү: ${winner}!`
+      const msg = winner === 'Ничья' ? tr('arkan_draw') : `${tr('arkan_winner_a')}${winner}!`
       speak(msg)
     } catch {}
-    return () => clearTimeout(t)
+    return () => clearTimeout(timeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
   // автопереход: верно — быстро, неверно — дать время увидеть правильный
   useEffect(() => {
     if (phase !== 'battle' || !lock || countdown !== null) return
-    const t = setTimeout(() => {
+    const timeout = setTimeout(() => {
       applyResult(lock.ok)
     }, lock.ok ? 1000 : 1800)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, lock, countdown])
 
@@ -266,10 +280,10 @@ export default function Arkan() {
     const nb = scoreB + (ok && turn === 'B' ? 1 : 0)
     setRope(nr); setScoreA(na); setScoreB(nb)
     setCombo(newCombo)
-    setShake(s => s + 1)
+    shakeRope()
     if (ok) {
       const parts = [`+${PULL_CORRECT + speedBonus + comboBonus}`]
-      if (speedBonus > 0) parts.push(`⚡${elapsed.toFixed(1)}с`)
+      if (speedBonus > 0) parts.push(`⚡${elapsed.toFixed(1)}${tr('arkan_sec_short')}`)
       if (newCombo >= 2) parts.push(`🔥x${newCombo}`)
       setLastGain(parts.join(' '))
       setTimeout(() => setLastGain(null), 1400)
@@ -299,7 +313,7 @@ export default function Arkan() {
       }
       throw new Error('local')
     } catch (e: any) {
-      if (e.response) { alert('Нет связи с сервером'); return }
+      if (e.response) { alert(tr('arkan_offline')); return }
       // офлайн-фолбэк: свои тесты (ответы известны)
       if (typeof opt.is_correct === 'boolean') {
         const ok = opt.is_correct
@@ -334,7 +348,7 @@ export default function Arkan() {
     const rematch = () => {
       setQi(0); setRope(0); setScoreA(0); setScoreB(0)
       setTurn('A'); setLeft(qtime); setLock(null); setWinner(null)
-      setCombo(0); setLastGain(null); setShake(0)
+      setCombo(0); setLastGain(null)
       tickRef.current = 0
       qStartRef.current = 0
       setPhase('battle')
@@ -362,26 +376,26 @@ export default function Arkan() {
             ))}
           </div>
         )}
-        <Link to="/games" className="inline-flex items-center gap-1 text-sm font-bold text-violet-600 dark:text-violet-400">
-          ← К играм
+        <Link to="/games" className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 dark:text-blue-400">
+          {tr('arkan_to_games')}
         </Link>
         <div className="arkan-arena p-8 space-y-4">
           <div className="oimo-strip" />
           <div className="text-8xl animate-enter">{wMasc}</div>
           <h1 className="font-display font-bold text-4xl text-slate-900">
-            {isDraw ? 'Тең чыкты!' : `Жеңүүчү: ${winner}!`}
+            {isDraw ? tr('arkan_draw') : `${tr('arkan_winner_a')}${winner}!`}
           </h1>
           <div className="text-2xl text-slate-800 font-bold">{mascA} {teamA} {scoreA} : {scoreB} {teamB} {mascB}</div>
-          {!isDraw && <div className="font-bold text-amber-700">🎉 Куттуктайбыз! 🎉</div>}
+          {!isDraw && <div className="font-bold text-amber-700">{tr('arkan_congrats')}</div>}
           <div className="oimo-strip" />
         </div>
         <div className="flex gap-3 justify-center">
           <button onClick={rematch}
-            className="px-6 py-3 min-h-[56px] rounded-2xl bg-violet-600 text-white font-bold flex items-center gap-2">
-            <RotateCcw size={18} /> Реванш
+            className="px-6 py-3 min-h-[56px] rounded-2xl bg-blue-600 text-white font-bold flex items-center gap-2">
+            <RotateCcw size={18} /> {tr('arkan_rematch')}
           </button>
           <button onClick={() => setPhase('lobby')} className="px-6 py-3 min-h-[56px] rounded-2xl bg-white border dark:bg-slate-800 dark:text-white dark:border-slate-700 font-bold">
-            К выбору темы
+            {tr('arkan_to_topics')}
           </button>
         </div>
       </div>
@@ -395,17 +409,17 @@ export default function Arkan() {
     return (
       <div className="max-w-4xl mx-auto space-y-4">
         <button onClick={() => setPhase('lobby')}
-          className="inline-flex items-center gap-1 text-sm font-bold text-violet-600 dark:text-violet-400">
-          ← Выйти из боя
+          className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 dark:text-blue-400">
+          {tr('arkan_exit_battle')}
         </button>
         <div className="arkan-arena p-4 sm:p-6 space-y-4">
           <div className="oimo-strip" />
           {/* счёт + канат */}
           <div className="flex items-center gap-3 font-display font-bold text-xl sm:text-2xl">
-            <span className={`${turn === 'A' ? 'text-blue-700' : 'text-slate-500'}`}>{mascA} {teamA} {scoreA}</span>
-            <span className="ml-auto text-slate-500">{scoreB} {teamB} {mascB}</span>
+            <span className={`px-3 py-1 rounded-xl bg-white/70 ${turn === 'A' ? 'text-blue-700' : 'text-slate-500'}`}>{mascA} {teamA} {scoreA}</span>
+            <span className="ml-auto px-3 py-1 rounded-xl bg-white/70 text-slate-500">{scoreB} {teamB} {mascB}</span>
           </div>
-        <div key={shake} className="rope-shake relative h-14 rounded-2xl overflow-hidden border dark:border-slate-700" aria-label="Канат">
+        <div ref={ropeRef} className="relative h-14 rounded-2xl overflow-hidden border dark:border-slate-700" aria-label={tr('arkan_rope')}>
           <div className="absolute inset-y-0 left-0 bg-blue-500/80 transition-all duration-500" style={{ width: `${marker}%` }} />
           <div className="absolute inset-y-0 right-0 bg-red-500/80 transition-all duration-500" style={{ width: `${100 - marker}%` }} />
           <div className="absolute inset-y-0 left-1/2 w-1 bg-white" />
@@ -418,14 +432,14 @@ export default function Arkan() {
         </div>
         {combo >= 2 && (
           <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-orange-100 text-orange-800 text-sm font-bold w-fit" aria-live="polite">
-            🔥 Комбо x{combo} — тянешь сильнее!
+            {tr('arkan_combo_a')}{combo}{tr('arkan_combo_b')}
           </div>
         )}
         <div className="flex items-center gap-3">
           <span className={`px-4 py-2 rounded-xl font-bold ${turn === 'A' ? 'bg-blue-600 text-white' : 'bg-red-600 text-white'}`}>
-            Отвечают: {turn === 'A' ? `${mascA} ${teamA}` : `${mascB} ${teamB}`}
+            {tr('arkan_answering')} {turn === 'A' ? `${mascA} ${teamA}` : `${mascB} ${teamB}`}
           </span>
-          <span className="ml-auto flex items-center gap-2" role="timer" aria-label={`Осталось ${left} секунд`}>
+          <span className="ml-auto flex items-center gap-2" role="timer" aria-label={`${tr('arkan_time_a')}${left}${tr('arkan_time_b')}`}>
             <svg width="44" height="44" viewBox="0 0 44 44" className="shrink-0">
               <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(15,23,42,.12)" strokeWidth="5" />
               <circle
@@ -440,21 +454,21 @@ export default function Arkan() {
             </svg>
             <span className={`font-mono font-bold text-2xl ${left <= 5 ? 'text-red-600' : 'text-slate-900'}`}>0:{String(Math.max(0, left)).padStart(2, '0')}</span>
           </span>
-          <button onClick={() => speak(q.text)} className="p-2.5 rounded-xl bg-white/80 text-slate-800 border border-sky-200" aria-label="Озвучить вопрос"><Volume2 size={18} /></button>
-          <button onClick={toggleAutoRead} aria-pressed={autoRead} title="Читать каждый вопрос вслух автоматически"
-            className={`px-3 py-2.5 rounded-xl text-xs font-bold border ${autoRead ? 'bg-violet-600 text-white border-violet-600' : 'bg-white/80 text-slate-800 border-sky-200'}`}>
-            {autoRead ? '🔊 Авто' : '🔇 Авто'}
+          <button onClick={() => speak(q.text)} className="p-2.5 rounded-xl bg-white/80 text-slate-800 border border-sky-200" aria-label={tr('arkan_speak_q')}><Volume2 size={18} /></button>
+          <button onClick={toggleAutoRead} aria-pressed={autoRead} title={tr('arkan_autoread_title')}
+            className={`px-3 py-2.5 rounded-xl text-xs font-bold border ${autoRead ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/80 text-slate-800 border-sky-200'}`}>
+            {autoRead ? tr('arkan_auto_on') : tr('arkan_auto_off')}
           </button>
         </div>
         {countdown !== null && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-900/40 rounded-2xl" aria-live="assertive">
             <div key={countdown} className="count-pop font-display font-bold text-7xl text-white drop-shadow-lg">
-              {countdown > 0 ? countdown : 'Баштадык!'}
+              {countdown > 0 ? countdown : tr('arkan_go')}
             </div>
           </div>
         )}
-        <div className="text-sm text-slate-600 font-semibold">Вопрос {qi + 1} из {qs.length}</div>
-        <div key={qi} className="animate-slide space-y-3">
+        <div className="text-sm text-slate-600 font-semibold">{tr('arkan_q')} {qi + 1} {tr('arkan_of')} {qs.length}</div>
+        <div key={qi} className="motion-safe:animate-slide space-y-3">
         <h2 className="font-display font-bold text-2xl sm:text-3xl text-slate-900 leading-snug">{q.text}</h2>
         <div className="grid gap-3">
           {q.options.map((o, i) => {
@@ -476,9 +490,9 @@ export default function Arkan() {
         </div>
         {lock && (
           <div className="w-full px-6 py-4 min-h-[64px] rounded-2xl bg-slate-900 text-white font-bold text-xl flex items-center justify-center gap-2 animate-enter" aria-live="polite">
-            {lock.ok ? '✅ Туура!' : lock.pick === -1 ? '⏰ Убакыт бүттү!' : '❌ Туура эмес!'}
+            {lock.ok ? tr('arkan_correct') : lock.pick === -1 ? tr('arkan_timeout') : tr('arkan_wrong')}
             <span className="text-amber-300">
-              Дальше: {turn === 'A' ? `${mascB} ${teamB}` : `${mascA} ${teamA}`} <ArrowRight size={20} className="inline" />
+              {tr('arkan_next')} {turn === 'A' ? `${mascB} ${teamB}` : `${mascA} ${teamA}`} <ArrowRight size={20} className="inline" />
             </span>
           </div>
         )}
@@ -491,56 +505,56 @@ export default function Arkan() {
   // --- лобби ---
   return (
     <div className="max-w-3xl mx-auto space-y-5">
-      <Link to="/games" className="inline-flex items-center gap-1 text-sm font-bold text-violet-600 dark:text-violet-400">
-        ← К играм
+      <Link to="/games" className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 dark:text-blue-400">
+        {tr('arkan_to_games')}
       </Link>
       <div className="arkan-arena p-5 sm:p-7 text-center space-y-2">
         <div className="oimo-strip" />
         <div className="text-5xl sm:text-6xl">{mascA} 🤼 {mascB}</div>
         <h1 className="font-display font-bold text-2xl sm:text-3xl text-slate-900">Аркан тартыш</h1>
-        <p className="text-slate-700 font-semibold">Эки команда — бир аркан. Туура жооп — бир кадам жеңишке!</p>
+        <p className="text-slate-700 font-semibold">{tr('arkan_sub')}</p>
         <div className="oimo-strip" />
       </div>
 
       <button onClick={demoBattle}
         className="w-full px-6 py-4 min-h-[64px] rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold text-xl flex items-center justify-center gap-2">
-        ⚡ Демо-бой — 5 вопросов, без подготовки
+        {tr('arkan_demo')}
       </button>
 
       <div className="grid sm:grid-cols-3 gap-3">
-        <div className="text-sm dark:text-slate-300">Команда слева
+        <div className="text-sm dark:text-slate-300">{tr('arkan_team_left')}
           <div className="mt-1 flex gap-1">
-            <input value={teamA} onChange={e => setTeamA(e.target.value.slice(0, 20))} aria-label="Команда слева" className="flex-1 min-w-0 px-3 py-2.5 min-h-[48px] rounded-xl border dark:bg-slate-700 dark:text-white" />
+            <input value={teamA} onChange={e => setTeamA(e.target.value.slice(0, 20))} aria-label={tr('arkan_team_left')} className="flex-1 min-w-0 px-3 py-2.5 min-h-[48px] rounded-xl border dark:bg-slate-700 dark:text-white" />
           </div>
-          <div className="mt-1 flex gap-1" role="group" aria-label="Талисман левой команды">
+          <div className="mt-1 flex gap-1" role="group" aria-label={tr('arkan_masc_left')}>
             {MASCOTS.map(m => (
               <button key={m} onClick={() => pickMasc('A', m)} aria-pressed={mascA === m}
                 className={`flex-1 min-h-[44px] rounded-xl text-xl border ${mascA === m ? 'bg-amber-200 border-amber-500' : 'bg-white dark:bg-slate-800 dark:border-slate-700'}`}>{m}</button>
             ))}
           </div>
         </div>
-        <div className="text-sm dark:text-slate-300">Команда справа
+        <div className="text-sm dark:text-slate-300">{tr('arkan_team_right')}
           <div className="mt-1 flex gap-1">
-            <input value={teamB} onChange={e => setTeamB(e.target.value.slice(0, 20))} aria-label="Команда справа" className="flex-1 min-w-0 px-3 py-2.5 min-h-[48px] rounded-xl border dark:bg-slate-700 dark:text-white" />
+            <input value={teamB} onChange={e => setTeamB(e.target.value.slice(0, 20))} aria-label={tr('arkan_team_right')} className="flex-1 min-w-0 px-3 py-2.5 min-h-[48px] rounded-xl border dark:bg-slate-700 dark:text-white" />
           </div>
-          <div className="mt-1 flex gap-1" role="group" aria-label="Талисман правой команды">
+          <div className="mt-1 flex gap-1" role="group" aria-label={tr('arkan_masc_right')}>
             {MASCOTS.map(m => (
               <button key={m} onClick={() => pickMasc('B', m)} aria-pressed={mascB === m}
                 className={`flex-1 min-h-[44px] rounded-xl text-xl border ${mascB === m ? 'bg-amber-200 border-amber-500' : 'bg-white dark:bg-slate-800 dark:border-slate-700'}`}>{m}</button>
             ))}
           </div>
         </div>
-        <label className="text-sm dark:text-slate-300">Секунд на вопрос
+        <label className="text-sm dark:text-slate-300">{tr('arkan_sec_per_q')}
           <select value={qtime} onChange={e => setQtime(parseInt(e.target.value))} className="mt-1 w-full px-3 py-2.5 min-h-[48px] rounded-xl border dark:bg-slate-700 dark:text-white">
             <option value={10}>10</option><option value={15}>15</option><option value={30}>30</option>
           </select>
         </label>
       </div>
 
-      <div className="flex gap-2" role="tablist" aria-label="Источник вопросов">
-        {((student ? [['topics', 'Даяр темы'], ['public', 'Публичные']] : [['topics', 'Даяр темы'], ['mine', 'Мои'], ['public', 'Публичные']]) as Array<['topics' | 'mine' | 'public', string]>).map(([k, l]) => (
+      <div className="flex gap-2" role="tablist" aria-label={tr('arkan_src')}>
+        {((noMine ? [['topics', tr('arkan_tab_topics')], ['public', tr('arkan_tab_public')]] : [['topics', tr('arkan_tab_topics')], ['mine', tr('arkan_tab_mine')], ['public', tr('arkan_tab_public')]]) as Array<['topics' | 'mine' | 'public', string]>).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} role="tab" aria-selected={tab === k}
-            className={`flex-1 px-4 py-3 min-h-[52px] rounded-xl font-bold ${tab === k ? 'bg-violet-600 text-white' : 'bg-white dark:bg-slate-800 dark:text-white border dark:border-slate-700'}`}>{l}</button>
+            className={`flex-1 px-4 py-3 min-h-[52px] rounded-xl font-bold ${tab === k ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-800 dark:text-white border dark:border-slate-700'}`}>{l}</button>
         ))}
       </div>
 
@@ -549,20 +563,20 @@ export default function Arkan() {
           {READY_TOPICS.map(topic => (
             <button key={topic.id} onClick={() => pickTopic(topic.id)} disabled={busy}
               className={`w-full text-left px-4 py-3 min-h-[64px] rounded-xl border dark:text-white ${sel?.id === `ready-${topic.id}` ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/30' : 'bg-white dark:bg-slate-800 dark:border-slate-700'}`}>
-              <div className="font-bold">{topic.icon} {topic.title} <span className="text-xs font-semibold text-amber-600">Даяр</span></div>
+              <div className="font-bold">{topic.icon} {topic.title} <span className="text-xs font-semibold text-amber-600">{tr('arkan_ready_badge')}</span></div>
               <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{topic.desc}</div>
             </button>
           ))}
-          <div className="text-xs text-slate-500 text-center">Свою викторину собери в профиле — вкладка «Мои игры».</div>
+          <div className="text-xs text-slate-500 text-center">{tr('arkan_profile_hint')}</div>
         </div>
       )}
 
       {tab !== 'topics' && (
         <div className="space-y-2 max-h-[40vh] overflow-auto">
-          {(tab === 'mine' ? mine : pub).length === 0 && <div className="text-slate-400 text-center py-4">Пусто — собери свою в профиле, вкладка «Мои игры»</div>}
+          {(tab === 'mine' ? mine : pub).length === 0 && <div className="text-slate-400 text-center py-4">{tr('arkan_empty_mine')}</div>}
           {(tab === 'mine' ? mine : pub).map(t => (
             <button key={t.id} onClick={() => pickTest(t)} disabled={busy}
-              className={`w-full text-left px-4 py-3 min-h-[56px] rounded-xl border font-semibold dark:text-white ${sel?.id === t.id ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/30' : 'bg-white dark:bg-slate-800 dark:border-slate-700'}`}>
+              className={`w-full text-left px-4 py-3 min-h-[56px] rounded-xl border font-semibold dark:text-white ${sel?.id === t.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'bg-white dark:bg-slate-800 dark:border-slate-700'}`}>
               {t.title}
             </button>
           ))}
@@ -571,7 +585,7 @@ export default function Arkan() {
 
       <button onClick={startBattle} disabled={busy || !sel}
         className="w-full px-6 py-4 min-h-[64px] rounded-2xl bg-emerald-600 text-white font-bold text-xl flex items-center justify-center gap-2 disabled:opacity-50">
-        <Play size={22} /> {`Играть${sel ? `: ${sel.title.slice(0, 40)}` : ''}`}
+        <Play size={22} /> {`${tr('arkan_play')}${sel ? `: ${sel.title.slice(0, 40)}` : ''}`}
       </button>
     </div>
   )

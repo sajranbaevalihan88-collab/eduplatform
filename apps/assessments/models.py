@@ -21,7 +21,6 @@ class Question(models.Model):
     TYPE_CHOICES = [
         ('single', 'Один ответ'),
         ('multiple', 'Несколько ответов'),
-        ('text', 'Текстовый ответ'),
         ('true_false', 'Верно/Неверно'),
     ]
     test = models.ForeignKey(Test, on_delete=models.CASCADE, related_name='questions')

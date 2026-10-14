@@ -4,7 +4,12 @@ import Layout from './components/Layout'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { ThemeProvider, AccessibilityProvider, ToastContainer } from './context/UIContext'
 import { LangProvider } from './context/LangContext'
+import { configureMonacoLocale } from './monacoLocale'
 import Landing from './pages/Landing'
+
+// Меню Monaco (правый клик в редакторе) — на языке интерфейса, по умолчанию русское.
+// Конфиг должен примениться ДО первого монтирования <Editor/>.
+configureMonacoLocale()
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const [token,setToken]=useState<string|null>(()=>localStorage.getItem('token'))
@@ -18,7 +23,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-function ErrorFallback(){ return <div className="p-8 text-center"><h2 className="text-xl font-bold">Что-то пошло не так</h2><a href="/" className="text-violet-600 underline">На главную</a></div> }
+function ErrorFallback(){ return <div className="p-8 text-center"><h2 className="text-xl font-bold">Что-то пошло не так</h2><a href="/" className="text-blue-600 underline">На главную</a></div> }
 
 // Только для учителей: ученик видит заглушку (создавать нельзя, бэк тоже запретит)
 function TeacherRoute({ children }: { children: React.ReactNode }) {
@@ -29,7 +34,7 @@ function TeacherRoute({ children }: { children: React.ReactNode }) {
       <div className="text-5xl">🔒</div>
       <h2 className="text-xl font-bold">Только для учителей</h2>
       <p className="text-slate-500 text-sm">Ученики могут открывать уроки, тесты, игры и код, а создавать — нет. Word и заметки доступны в профиле.</p>
-      <Link to="/" className="inline-block px-5 py-2.5 rounded-xl bg-violet-600 text-white font-semibold">На главную</Link>
+      <Link to="/" className="inline-block px-5 py-2.5 rounded-xl bg-blue-600 text-white font-semibold">На главную</Link>
     </div>
   )
   return <>{children}</>
@@ -93,7 +98,7 @@ export default function App() {
                 <Route path="/word" element={<PrivateRoute><WordEditor /></PrivateRoute>} />
                 <Route path="/games" element={<Games />} />
                 <Route path="/guide" element={<Guide />} />
-                <Route path="/games/arkan" element={<PrivateRoute><Arkan /></PrivateRoute>} />
+                <Route path="/games/arkan" element={<Arkan />} />
                 <Route path="/games/sprint" element={<Sprint />} />
                 <Route path="/games/pairs" element={<Pairs />} />
                 <Route path="/s/:token" element={<SharedView />} />

@@ -18,7 +18,11 @@ class NoteViewSet(viewsets.ModelViewSet):
             qs = qs.filter(owner=user)
         lesson = self.request.query_params.get('lesson')
         if lesson:
-            qs = qs.filter(lesson__id=lesson)
+            try:
+                qs = qs.filter(lesson__id=int(lesson))
+            except (TypeError, ValueError):
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({'lesson': 'Некорректный id урока'})
         return qs
 
     def perform_create(self, serializer):

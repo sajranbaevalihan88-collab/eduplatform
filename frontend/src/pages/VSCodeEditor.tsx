@@ -5,6 +5,7 @@ import client from '../api/client'
 import { useRunSession } from '../hooks/useRunSession'
 import { Link } from 'react-router-dom'
 import { toast } from '../context/UIContext'
+import { useLang } from '../context/LangContext'
 
 type VFile = { id:string, name:string, content:string, lang:string }
 
@@ -49,6 +50,7 @@ function FileIcon({name}:{name:string}){
 }
 
 export default function VSCodeEditor(){
+  const {t}=useLang()
   const [files,setFiles]=useState<VFile[]>(()=>{
     try{
       const raw=localStorage.getItem('vscode-files')
@@ -105,14 +107,14 @@ export default function VSCodeEditor(){
   const [shareUrl,setShareUrl]=useState('')
   const [sharing,setSharing]=useState(false)
   const shareFiles=async()=>{
-    if(!isAuth){ toast('Войди чтобы делиться кодом','error'); return }
+    if(!isAuth){ toast(t('vsc_share_need_auth'),'error'); return }
     setSharing(true)
     try{
       const r=await client.post('/shared/',{title:active.name, files:files.map(f=>({name:f.name, content:f.content})), days:shareDays})
       const url=`${window.location.origin}/s/${r.data.token}`
       setShareUrl(url)
-      try{ await navigator.clipboard.writeText(url); toast('Ссылка скопирована','success') }catch{}
-    }catch(e:any){ toast(e.response?.data?.error||'Не получилось поделиться','error') }
+      try{ await navigator.clipboard.writeText(url); toast(t('shared_copied'),'success') }catch{}
+    }catch(e:any){ toast(e.response?.data?.error||t('vsc_share_fail'),'error') }
     setSharing(false)
   }
   const explainCode=async()=>{
@@ -123,7 +125,7 @@ export default function VSCodeEditor(){
       const r=await client.post('/code-tasks/explain/',{code:active.content, language:active.lang, output})
       setExplanation(r.data)
     }catch(e:any){
-      setExplanation({title:'Не получилось', what:String(e.response?.data?.error||e.message||e), fix:''})
+      setExplanation({title:t('codelab_explain_fail'), what:String(e.response?.data?.error||e.message||e), fix:''})
     }
     setExplaining(false)
   }
@@ -189,7 +191,7 @@ export default function VSCodeEditor(){
   const updateContent=(v:string)=> setFiles(fs=> fs.map(f=> f.id===activeId? {...f, content:v}:f))
 
   const handleNew=()=>{
-    if(files.length>=MAX_FILES){ toast(`Лимит ${MAX_FILES} файлов — как на GitHub (макс 100). Удали лишнее.`,'error'); return }
+    if(files.length>=MAX_FILES){ toast(`${t('vsc_limit_a')}${MAX_FILES}${t('vsc_limit_gh')}`,'error'); return }
     let n=newName.trim(); if(!n) return
     if(!n.includes('.')) n+='.js'
     if(files.some(f=>f.name===n)){ const ext=n.includes('.')? n.slice(n.lastIndexOf('.')):''; const stem=n.slice(0, n.length-ext.length); n=`${stem}_${Date.now().toString().slice(-3)}${ext}`; }
@@ -197,40 +199,40 @@ export default function VSCodeEditor(){
     const c= TEMPLATES[lang] || `// ${getLabel(lang)} — новый файл\n`
     const f: VFile={ id:Date.now().toString(), name:n, content:c, lang }
     setFiles([...files,f]); setActiveId(f.id); setNewName(''); setShowNew(false)
-    toast(`Файл ${n} создан (${getLabel(lang)})`, 'success')
+    toast(`${t('vsc_file_a')}${n}${t('vsc_file_created_b')}(${getLabel(lang)})`, 'success')
   }
   const handleDelete=(id:string)=>{
-    if(files.length===1){ toast('Нельзя удалить последний файл','error'); return }
+    if(files.length===1){ toast(t('vsc_last_file'),'error'); return }
     const nf=files.filter(f=>f.id!==id); setFiles(nf); if(activeId===id) setActiveId(nf[0].id)
-    toast('Файл удалён','info')
+    toast(t('vsc_file_deleted'),'info')
   }
   const handleDuplicate=(id:string)=>{
-    if(files.length>=MAX_FILES){ toast(`Лимит ${MAX_FILES} файлов — удали лишнее.`,'error'); return }
+    if(files.length>=MAX_FILES){ toast(`${t('vsc_limit_a')}${MAX_FILES}${t('vsc_limit_b')}`,'error'); return }
     const src=files.find(f=>f.id===id); if(!src) return
     const ext=src.name.includes('.')? src.name.slice(src.name.lastIndexOf('.')):''
     const stem=src.name.slice(0, src.name.length-ext.length)
     const f={...src, id:Date.now().toString(), name: `${stem}_copy${ext}`}
     setFiles([...files,f]); setActiveId(f.id)
-    toast('Дубликат создан','success')
+    toast(t('vsc_duplicated'),'success')
   }
   const handleRename=(id:string)=>{
     const cur=files.find(f=>f.id===id); if(!cur) return
-    const nm=prompt('Новое имя', cur.name); if(!nm || nm===cur.name) return
-    if(files.some(f=>f.name===nm && f.id!==id)){ toast('Имя уже занято','error'); return }
+    const nm=prompt(t('vsc_new_name'), cur.name); if(!nm || nm===cur.name) return
+    if(files.some(f=>f.name===nm && f.id!==id)){ toast(t('vsc_name_taken'),'error'); return }
     setFiles(files.map(f=> f.id===id? {...f, name:nm.trim(), lang:getLang(nm.trim())}:f))
-    toast('Переименовано','success')
+    toast(t('vsc_renamed'),'success')
   }
 
   const handleSave=async()=>{
     try{ localStorage.setItem('vscode-files', JSON.stringify(files)) }
-    catch{ toast('localStorage переполнен — сожми файлы','error') }
-    if(!isAuth){ setOutput('✓ Сохранено локально (localStorage). Войди для облака.'); toast('Сохранено локально','success'); return }
+    catch{ toast(t('vsc_ls_full'),'error') }
+    if(!isAuth){ setOutput(t('vsc_saved_local')); toast(t('vsc_saved_local_t'),'success'); return }
     setSaving(true)
     try{
       await client.post('/code-tasks/',{ title:active.name, language: active.lang, description:'VS Code', starter_code: active.content })
-      setOutput('✓ Сохранено в облако — доступно везде')
-      toast('Сохранено в облако','success')
-    }catch(e:any){ setOutput('Ошибка: '+(e.response?.data?.detail||e.message)); toast('Ошибка сохранения','error') }
+      setOutput(t('vsc_saved_cloud'))
+      toast(t('vsc_saved_cloud_t'),'success')
+    }catch(e:any){ setOutput(t('vsc_error_a')+(e.response?.data?.detail||e.message)); toast(t('vsc_save_err'),'error') }
     setSaving(false)
   }
 
@@ -239,7 +241,7 @@ export default function VSCodeEditor(){
     const usedEntry = entryOverride || entry || active.name
     setUseLive(false); live.close()
     setShowOutput(true)
-    setRunning(true); setOutput('Запуск проекта '+files.length+' файлов → '+usedEntry+' ...')
+    setRunning(true); setOutput(`${t('vsc_run_project_a')}${files.length}${t('vsc_run_project_b')}${usedEntry}${t('vsc_run_project_c')}`)
     try{
       const payload:any={
         files: files.map(f=>({path:f.name, content:f.content})),
@@ -248,10 +250,10 @@ export default function VSCodeEditor(){
         input: stdinInput
       }
       const r=await client.post('/code-tasks/run_project/', payload)
-      const out = (r.data.output||'').trim() ? r.data.output : '(пусто — программа ничего не вывела)'
+      const out = (r.data.output||'').trim() ? r.data.output : t('vsc_empty_out')
       setOutput('▶ '+usedEntry+'\n'+out)
-      if(r.data.passed) toast('Проект выполнен ✓','success')
-      else toast('Проект ошибка','error')
+      if(r.data.passed) toast(t('vsc_proj_done'),'success')
+      else toast(t('vsc_proj_err'),'error')
     }catch(e:any){ const m=e.response?.data?.output || e.response?.data?.error || e.response?.data?.detail || e.message; setOutput('▶ '+usedEntry+'\n'+m); toast(m,'error') }
     setRunning(false)
   }
@@ -269,12 +271,12 @@ export default function VSCodeEditor(){
     // Живая сессия (интерактивный ввод) для python/javascript, иначе пакетный запуск
     if(active.lang==='python' || active.lang==='javascript'){
       setUseLive(true); setShowOutput(true); setExplanation(null)
-      setOutput('▶ '+active.name+'\nПодключение…')
+      setOutput('▶ '+active.name+'\n'+t('vsc_connecting'))
       fbRef.current=true
       const ok=live.start(active.lang, active.content, (p)=>{
         fbRef.current=false
         if(active.lang==='python'||active.lang==='javascript'){
-          p ? toast(`${active.lang==='python'?'Python':'JavaScript'} выполнен ✓`,'success') : toast('Есть ошибки — жми «Объясни»','error')
+          p ? toast(active.lang==='python'?t('vsc_py_done'):t('vsc_js_done'),'success') : toast(t('vsc_has_errors'),'error')
         }
       })
       if(!ok){ fbRef.current=false; setUseLive(false); return runBatch() }
@@ -289,37 +291,38 @@ export default function VSCodeEditor(){
     setShowOutput(true)
     setRunning(true); setOutput(''); setExplanation(null)
     const code=active.content
-    if(!code.trim()){ setOutput('Файл пустой — напиши код'); setRunning(false); return }
-    if(code.length>8000){ setOutput('Код >8000 символов'); setRunning(false); return }
-    const withFile=(out:string)=> '▶ '+active.name+'\n'+((out||'').trim()?out:'(пусто — программа ничего не вывела)')
+    if(!code.trim()){ setOutput(t('vsc_empty_file')); setRunning(false); return }
+    if(code.length>8000){ setOutput(t('vsc_too_long')); setRunning(false); return }
+    const withFile=(out:string)=> '▶ '+active.name+'\n'+((out||'').trim()?out:t('vsc_empty_out'))
     try{
       if(active.lang==='html'){
         if(iframeRef.current) iframeRef.current.srcdoc=code
-        setOutput('▶ '+active.name+'\nHTML → Preview обновлён справа')
-        toast('Preview обновлён','success')
+        setOutput('▶ '+active.name+'\n'+t('vsc_html_preview'))
+        toast(t('vsc_preview_upd'),'success')
       } else if(active.lang==='css'){
-        setOutput(withFile('CSS → Preview: подключи style.css к index.html через <link>. Файл валиден, запуск не нужен.\n--- Код ---\n'+code.slice(0,1000)))
-        toast('CSS — подсветка OK','info')
+        setOutput(withFile(t('vsc_css_preview')+code.slice(0,1000)))
+        toast(t('vsc_css_ok'),'info')
       } else if(active.lang==='javascript'){
+        // Безопасно: JS всегда через бэкенд-раннер, без new Function в origin страницы
+        // (new Function давал коду доступ к localStorage с JWT).
         try{
-          const fn = new Function(`return (function(){ const logs=[]; const console={log:(...a)=>logs.push(a.map(x=> typeof x==='object'?JSON.stringify(x):String(x)).join(' '))}; try{ ${code} }catch(e){ logs.push('Error: '+e.message) } return logs.join("\\n") })()`)
-          const res = fn()
-          const out=res || '(нет вывода — добавь console.log)'
-          setOutput(withFile(out)); toast('JavaScript выполнен локально','success')
-        } catch(e:any){
           const r=await client.post('/code-tasks/run_code/',{code, language:'javascript'})
-          setOutput(withFile(r.data.output))
+          const out=r.data.output
+          setOutput(withFile(out)); toast(r.data.passed?t('vsc_js_done'):t('vsc_js_err'), r.data.passed?'success':'error')
+        } catch(e:any){
+          const m=e.response?.data?.output || e.response?.data?.detail || e.message
+          setOutput(withFile(m)); toast(m,'error')
         }
       } else if(active.lang==='python'){
         const payload:any={code, language:'python'}
         if(code.includes('input(')) payload.input=stdinInput
         const r=await client.post('/code-tasks/run_code/',payload)
         setOutput(withFile(r.data.output))
-        if(r.data.passed) toast('Python выполнен ✓','success')
-        else toast('Python ошибка','error')
+        if(r.data.passed) toast(t('vsc_py_done'),'success')
+        else toast(t('vsc_py_err'),'error')
       } else {
-        setOutput(withFile(`Файл «${active.name}» не запускается. Создай файл с расширением .py, .js, .html или .css — они выполняются.`))
-        toast('Неизвестный тип файла','error')
+        setOutput(withFile(`${t('vsc_unknown_type_a')}${active.name}${t('vsc_unknown_type_b')}`))
+        toast(t('vsc_unknown_type'),'error')
       }
     } catch(e:any){ const m=e.response?.data?.output || e.response?.data?.detail || e.message; setOutput(withFile(m)); toast(m,'error') }
     setRunning(false)
@@ -333,7 +336,7 @@ export default function VSCodeEditor(){
     a.href=URL.createObjectURL(blob); a.download=active.name
     document.body.appendChild(a); a.click(); a.remove()
     setTimeout(()=>URL.revokeObjectURL(a.href), 5000)
-    toast(`Файл ${active.name} скачан`,'success')
+    toast(`${t('vsc_file_a')}${active.name}${t('vsc_downloaded')}`,'success')
   }
 
   const filtered = files.filter(f=>{
@@ -344,10 +347,10 @@ export default function VSCodeEditor(){
   })
 
   const resetFiles=()=>{
-    if(confirm('Сбросить файлы к дефолту?')){
+    if(confirm(t('vsc_reset_confirm'))){
       localStorage.removeItem('vscode-files')
       setFiles(DEFAULT_FILES); setActiveId(DEFAULT_FILES[0].id)
-      toast('Сброшено','success')
+      toast(t('vsc_reset_done'),'success')
     }
   }
 
@@ -357,12 +360,12 @@ export default function VSCodeEditor(){
       <div className="h-7 bg-[#181818] flex items-center px-2 gap-2 text-xs border-b border-[#2d2d2d] shrink-0">
         <div className="flex gap-1.5 mr-1"><span className="w-3 h-3 rounded-full bg-[#ff5f56]"/><span className="w-3 h-3 rounded-full bg-[#ffbd2e]"/><span className="w-3 h-3 rounded-full bg-[#27c93f]"/></div>
         <FileCode2 size={12} className="text-[#007acc] hidden sm:block"/> <span className="text-slate-300 hidden md:inline truncate">EduPlatform AI — VS Code • {active.name}</span>
-        {isFull && <button onClick={()=>setIsFull(false)} className="px-3 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-1 shrink-0"><X size={11}/> Выйти (Esc)</button>}
+        {isFull && <button onClick={()=>setIsFull(false)} className="px-3 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-1 shrink-0"><X size={11}/> {t('vsc_exit_esc')}</button>}
         <button onClick={()=>setShowCmd(v=>!v)} className="mx-auto hidden md:flex items-center gap-1.5 bg-[#252526] hover:bg-[#2a2d2e] border border-[#3c3c3c] rounded px-3 py-0.5 text-slate-400 text-xs">
-          <Command size={10}/> Ctrl+P — команды
+          <Command size={10}/> {t('vsc_cmd')}
         </button>
-        <span className={`hidden sm:flex items-center gap-1 px-2 py-0.5 rounded text-xs ${isAuth?'bg-[#16825d] text-white':'bg-[#3c3c3c] text-slate-300'}`}>{isAuth?<><Cloud size={10}/> Облако</>:<><HardDrive size={10}/> Гость</>}</span>
-        {!isAuth && <Link to="/login" className="px-2 py-0.5 rounded bg-[#007acc] text-white text-xs flex items-center gap-1"><LogIn size={10}/> Войти</Link>}
+        <span className={`hidden sm:flex items-center gap-1 px-2 py-0.5 rounded text-xs ${isAuth?'bg-[#16825d] text-white':'bg-[#3c3c3c] text-slate-300'}`}>{isAuth?<><Cloud size={10}/> {t('vsc_cloud')}</>:<><HardDrive size={10}/> {t('vsc_guest')}</>}</span>
+        {!isAuth && <Link to="/login" className="px-2 py-0.5 rounded bg-[#007acc] text-white text-xs flex items-center gap-1"><LogIn size={10}/> {t('login')}</Link>}
       </div>
 
       <div className="flex flex-1 min-h-0">
@@ -379,14 +382,14 @@ export default function VSCodeEditor(){
               <div className="h-8 flex items-center justify-between px-3 text-[11px] font-bold tracking-widest text-slate-400">
                 <span>EXPLORER</span>
                 <div className="flex gap-1">
-                  <button onClick={()=>{ if(files.length>=MAX_FILES){ toast(`Лимит ${MAX_FILES} файлов — удали лишнее.`,'error'); return } setShowNew(v=>!v) }} className="p-1 hover:bg-[#2a2d2e] rounded text-slate-400 hover:text-white" title={files.length>=MAX_FILES?`Лимит ${MAX_FILES} файлов`:'New File'}><Plus size={12}/></button>
+                  <button onClick={()=>{ if(files.length>=MAX_FILES){ toast(`${t('vsc_limit_a')}${MAX_FILES}${t('vsc_limit_b')}`,'error'); return } setShowNew(v=>!v) }} className="p-1 hover:bg-[#2a2d2e] rounded text-slate-400 hover:text-white" title={files.length>=MAX_FILES?`${t('vsc_limit_a')}${MAX_FILES}${t('vsc_files_unit')}`:'New File'}><Plus size={12}/></button>
                   <button onClick={resetFiles} className="p-1 hover:bg-[#2a2d2e] rounded text-slate-400 hover:text-white" title="Reset"><RefreshCw size={12}/></button>
                 </div>
               </div>
               <div className="px-2 pb-1">
                 <div className="relative">
                   <Search size={12} className="absolute left-2 top-2 text-slate-500"/>
-                  <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск файлов" className="w-full pl-7 pr-2 py-1 rounded bg-[#3c3c3c] border border-transparent focus:border-[#007acc] text-xs text-white placeholder:text-slate-500 outline-none"/>
+                  <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t('vsc_search_files')} className="w-full pl-7 pr-2 py-1 rounded bg-[#3c3c3c] border border-transparent focus:border-[#007acc] text-xs text-white placeholder:text-slate-500 outline-none"/>
                 </div>
               </div>
               <div className="px-2 py-1 text-xs font-bold text-slate-300 flex items-center gap-1">
@@ -417,11 +420,11 @@ export default function VSCodeEditor(){
                     <button onClick={(e)=>{e.stopPropagation(); handleDelete(f.id)}} className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-white/10 rounded" title="Delete"><Trash2 size={10} className="text-slate-400 hover:text-red-400"/></button>
                   </div>
                 ))}
-                {filtered.length===0 && <div className="px-3 py-4 text-xs text-slate-500 text-center">Нет файлов</div>}
+                {filtered.length===0 && <div className="px-3 py-4 text-xs text-slate-500 text-center">{t('vsc_no_files')}</div>}
               </div>
               <div className="p-2 border-t border-[#2d2d2d] bg-[#181818] text-[11px]">
-                <div className="text-slate-400 flex items-center gap-1"><File size={10}/> {files.length}/{MAX_FILES} файлов • компакт</div>
-                <div className="text-slate-500">{isAuth?'Облако ✓':'Гость — localStorage'} • макс {MAX_FILES} (лимит GitHub)</div>
+                <div className="text-slate-400 flex items-center gap-1"><File size={10}/> {files.length}/{MAX_FILES} {t('vsc_files_compact')}</div>
+                <div className="text-slate-500">{isAuth?t('vsc_cloud_ok'):t('vsc_guest_ls')}{t('vsc_max_a')}{MAX_FILES}{t('vsc_max_b')}</div>
               </div>
             </>
           )}
@@ -429,8 +432,8 @@ export default function VSCodeEditor(){
             <div className="flex flex-col h-full">
               <div className="h-8 flex items-center px-3 text-[11px] font-bold tracking-widest text-slate-400">SEARCH</div>
               <div className="px-2 space-y-2">
-                <input value={searchContent} onChange={e=>setSearchContent(e.target.value)} placeholder="Поиск в файлах (Ctrl+F)" className="w-full px-2 py-1 rounded bg-[#3c3c3c] border border-transparent focus:border-[#007acc] text-xs text-white outline-none"/>
-                <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Имя файла" className="w-full px-2 py-1 rounded bg-[#3c3c3c] border border-transparent focus:border-[#007acc] text-xs text-white outline-none"/>
+                <input value={searchContent} onChange={e=>setSearchContent(e.target.value)} placeholder={t('vsc_search_in_files')} className="w-full px-2 py-1 rounded bg-[#3c3c3c] border border-transparent focus:border-[#007acc] text-xs text-white outline-none"/>
+                <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t('vsc_file_name_ph')} className="w-full px-2 py-1 rounded bg-[#3c3c3c] border border-transparent focus:border-[#007acc] text-xs text-white outline-none"/>
               </div>
               <div className="flex-1 overflow-auto mt-2 px-2">
                 {filtered.map(f=>(
@@ -440,7 +443,7 @@ export default function VSCodeEditor(){
                   </button>
                 ))}
               </div>
-              <div className="p-2 text-[11px] text-slate-500">{filtered.length} совпадений</div>
+              <div className="p-2 text-[11px] text-slate-500">{filtered.length} {t('vsc_matches')}</div>
             </div>
           )}
         </div>
@@ -458,27 +461,27 @@ export default function VSCodeEditor(){
             ))}
             </div>
             <div className="ml-auto flex items-center gap-1 px-1.5 shrink-0 py-0.5">
-              <button onClick={()=>setFontSize(f=>Math.max(10,f-1))} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs flex items-center justify-center" title="Шрифт меньше">A-</button>
-              <button onClick={()=>setFontSize(f=>Math.min(24,f+1))} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs flex items-center justify-center" title="Шрифт больше">A+</button>
-              <button onClick={()=>setEditorTheme(t=>t==='vs-dark'?'light':'vs-dark')} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs flex items-center justify-center" title="Светлая/тёмная тема">{editorTheme==='vs-dark'?'☀':'🌙'}</button>
+              <button onClick={()=>setFontSize(f=>Math.max(10,f-1))} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs flex items-center justify-center" title={t('vsc_font_down')}>A-</button>
+              <button onClick={()=>setFontSize(f=>Math.min(24,f+1))} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs flex items-center justify-center" title={t('vsc_font_up')}>A+</button>
+              <button onClick={()=>setEditorTheme(t=>t==='vs-dark'?'light':'vs-dark')} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs flex items-center justify-center" title={t('vsc_theme')}>{editorTheme==='vs-dark'?'☀':'🌙'}</button>
               <span className="w-px h-4 bg-[#3c3c3c] mx-0.5 hidden sm:block"/>
-              <button onClick={downloadFile} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs hidden sm:flex items-center justify-center gap-1" title="Скачать файл"><Download size={11}/><span className="hidden lg:inline">Скачать</span></button>
-              <button onClick={()=>{setShareUrl(''); setShowShare(v=>!v)}} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs hidden sm:flex items-center justify-center gap-1" title="Поделиться ссылкой"><Share2 size={11}/><span className="hidden lg:inline">Поделиться</span></button>
-              <button onClick={()=>setIsFull(v=>!v)} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs flex items-center justify-center gap-1" title={isFull?'Выйти из полного экрана (Esc)':'На весь экран'}><Maximize2 size={11}/><span className="hidden xl:inline">{isFull?'Свернуть':'Во весь'}</span></button>
+              <button onClick={downloadFile} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs hidden sm:flex items-center justify-center gap-1" title={t('vsc_download_title')}><Download size={11}/><span className="hidden lg:inline">{t('vsc_download')}</span></button>
+              <button onClick={()=>{setShareUrl(''); setShowShare(v=>!v)}} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs hidden sm:flex items-center justify-center gap-1" title={t('vsc_share_title')}><Share2 size={11}/><span className="hidden lg:inline">{t('vsc_share')}</span></button>
+              <button onClick={()=>setIsFull(v=>!v)} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs flex items-center justify-center gap-1" title={isFull?t('vsc_exit_full'):t('vsc_fullscreen')}><Maximize2 size={11}/><span className="hidden xl:inline">{isFull?t('vsc_min'):t('vsc_maximize')}</span></button>
               <button onClick={handleSave} disabled={saving} className="h-9 sm:h-6 px-2.5 rounded bg-[#0e639c] hover:bg-[#1177bb] text-white text-xs flex items-center gap-1"><Save size={10}/><span className="hidden sm:inline">{saving?'..':'Save'}</span></button>
-              <button onClick={run} disabled={running} title="Запустить (Ctrl+Enter)" className="h-9 sm:h-7 px-3 sm:px-4 rounded-lg bg-[#16825d] hover:bg-[#1a9c6e] text-white text-sm font-bold flex items-center gap-1.5 shadow"><Play size={12}/>{running?'...':'Run ▶'}</button>
+              <button onClick={run} disabled={running} title={t('vsc_run_title')} className="h-9 sm:h-7 px-3 sm:px-4 rounded-lg bg-[#16825d] hover:bg-[#1a9c6e] text-white text-sm font-bold flex items-center gap-1.5 shadow"><Play size={12}/>{running?'...':'Run ▶'}</button>
             </div>
           </div>
           <div className="h-5 bg-[#1e1e1e] flex items-center px-2 text-xs text-slate-500 border-b border-[#2d2d2d]/40 shrink-0">
-            <span className="text-slate-500">EDUPLATFORM</span> <span className="mx-1 text-slate-600">›</span> <span className="text-slate-300 font-mono text-xs">{active.name}</span> <span className="ml-auto hidden sm:inline text-slate-600">{active.lang} • Tab:2 • {active.content.split('\n').length} строк</span>
+            <span className="text-slate-500">EDUPLATFORM</span> <span className="mx-1 text-slate-600">›</span> <span className="text-slate-300 font-mono text-xs">{active.name}</span> <span className="ml-auto hidden sm:inline text-slate-600">{active.lang} • Tab:2 • {active.content.split('\n').length} {t('vsc_lines')}</span>
           </div>
           {/* Проект-бар для мини-проектов (django/pygame) — компакт, на телефоне в 2 ряда */}
           <div className="min-h-[2rem] bg-[#252526] flex flex-wrap items-center gap-1.5 px-2 py-1 text-xs border-b border-[#2d2d2d] shrink-0">
-            <label className="flex items-center gap-1 text-slate-400 cursor-pointer"><input type="checkbox" checked={projectMode} onChange={e=>setProjectMode(e.target.checked)} className="w-3 h-3"/> Проект</label>
+            <label className="flex items-center gap-1 text-slate-400 cursor-pointer"><input type="checkbox" checked={projectMode} onChange={e=>setProjectMode(e.target.checked)} className="w-3 h-3"/> {t('vsc_project')}</label>
             <select value={entry} onChange={e=>setEntry(e.target.value)} className="bg-[#3c3c3c] border border-transparent focus:border-[#007acc] text-white text-xs rounded px-1 py-0.5 max-w-[120px]">
               {files.map(f=> <option key={f.id} value={f.name}>{f.name}</option>)}
             </select>
-            <input value={requirements} onChange={e=>setRequirements(e.target.value)} placeholder="requirements: django pygame" className="flex-1 min-w-0 bg-[#3c3c3c] border border-transparent focus:border-[#007acc] text-white text-xs rounded px-2 py-0.5 hidden sm:block" title="Напиши django или pygame если нужно"/>
+            <input value={requirements} onChange={e=>setRequirements(e.target.value)} placeholder="requirements: django pygame" className="flex-1 min-w-0 bg-[#3c3c3c] border border-transparent focus:border-[#007acc] text-white text-xs rounded px-2 py-0.5 hidden sm:block" title={t('vsc_req_hint')}/>
             <button onClick={()=>runProject()} disabled={running} className="px-2 py-0.5 rounded bg-[#16825d] hover:bg-[#1a9c6e] text-white text-xs flex items-center gap-1 shrink-0"><Play size={10}/> Run Project</button>
           </div>
           <div className="flex-1 min-h-0 relative flex">
@@ -520,7 +523,7 @@ export default function VSCodeEditor(){
                 renderLineHighlight:'line',
                 occurrencesHighlight:'off',
               }}
-              loading={<div className="flex items-center justify-center h-full bg-[#1e1e1e] text-slate-500 text-xs">Загрузка Monaco...</div>}
+              loading={<div className="flex items-center justify-center h-full bg-[#1e1e1e] text-slate-500 text-xs">{t('vsc_monaco_loading')}</div>}
             />
             </div>
             {active.lang==='html' && (
@@ -528,13 +531,10 @@ export default function VSCodeEditor(){
                 <div className="px-2 py-1 bg-[#f3f3f3] border-b text-xs font-semibold text-slate-600 flex items-center justify-between shrink-0">
                   <span>Preview — live</span>
                   <div className="flex gap-1">
-                    <button onClick={()=>{ if(iframeRef.current) iframeRef.current.srcdoc=active.content }} className="px-2 py-0.5 rounded bg-[#007acc] text-white text-xs">Обновить</button>
-                    <button onClick={()=>{
-                      const w=window.open('','_blank'); if(w){ w.document.write(active.content); w.document.close() }
-                    }} className="px-2 py-0.5 rounded bg-[#3c3c3c] text-white text-xs">Новая вкладка</button>
+                    <button onClick={()=>{ if(iframeRef.current) iframeRef.current.srcdoc=active.content }} className="px-2 py-0.5 rounded bg-[#007acc] text-white text-xs">{t('vsc_refresh')}</button>
                   </div>
                 </div>
-                <iframe ref={iframeRef} srcDoc={active.content} className="flex-1 w-full border-0" sandbox="allow-scripts allow-same-origin allow-modals allow-popups allow-forms allow-downloads" allow="fullscreen"/>
+                <iframe ref={iframeRef} srcDoc={active.content} className="flex-1 w-full border-0" sandbox="allow-scripts allow-modals allow-forms" allow="fullscreen"/>
               </div>
             )}
             {showCmd && (
@@ -542,7 +542,7 @@ export default function VSCodeEditor(){
                 <div onClick={e=>e.stopPropagation()} className="w-[600px] max-w-[90%] bg-[#252526] rounded-lg border border-[#3c3c3c] shadow-2xl overflow-hidden">
                   <div className="flex items-center gap-2 px-3 py-2 border-b border-[#3c3c3c]">
                     <Search size={14} className="text-slate-500"/>
-                    <input autoFocus placeholder="> Введи команду или файл" className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-slate-500"/>
+                    <input autoFocus placeholder={t('vsc_cmd_ph')} className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-slate-500"/>
                     <button onClick={()=>setShowCmd(false)} className="p-1 text-slate-500"><X size={14}/></button>
                   </div>
                   <div className="p-2 space-y-0.5 max-h-[300px] overflow-auto">
@@ -560,24 +560,24 @@ export default function VSCodeEditor(){
               <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-start justify-center pt-10 z-20" onClick={()=>setShowShare(false)}>
                 <div onClick={e=>e.stopPropagation()} className="w-[480px] max-w-[90%] bg-[#252526] rounded-lg border border-[#3c3c3c] shadow-2xl overflow-hidden p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-white text-sm font-bold">Поделиться кодом</span>
+                    <span className="text-white text-sm font-bold">{t('vsc_share_code')}</span>
                     <button onClick={()=>setShowShare(false)} className="p-1 text-slate-500"><X size={14}/></button>
                   </div>
-                  <div className="text-xs text-slate-400">Пойдет весь проект ({files.length} файлов). Получатель увидит код и сможет забрать к себе.</div>
+                  <div className="text-xs text-slate-400">{t('vsc_share_desc_a')}{files.length}{t('vsc_share_desc_b')}</div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400">Срок ссылки:</span>
+                    <span className="text-xs text-slate-400">{t('vsc_share_days')}</span>
                     <select value={shareDays} onChange={e=>setShareDays(parseInt(e.target.value))} className="bg-[#3c3c3c] text-white text-xs rounded px-2 py-1">
-                      <option value={1}>24 часа</option>
-                      <option value={30}>1 месяц</option>
-                      <option value={180}>6 месяцев</option>
-                      <option value={0}>Навсегда</option>
+                      <option value={1}>{t('vsc_24h')}</option>
+                      <option value={30}>{t('vsc_1m')}</option>
+                      <option value={180}>{t('vsc_6m')}</option>
+                      <option value={0}>{t('vsc_forever')}</option>
                     </select>
-                    <button onClick={shareFiles} disabled={sharing} className="ml-auto px-3 py-1.5 rounded bg-[#007acc] text-white text-xs font-bold disabled:opacity-50">{sharing?'...':'Создать ссылку'}</button>
+                    <button onClick={shareFiles} disabled={sharing} className="ml-auto px-3 py-1.5 rounded bg-[#007acc] text-white text-xs font-bold disabled:opacity-50">{sharing?'...':t('vsc_create_link')}</button>
                   </div>
                   {shareUrl && (
                     <div className="flex items-center gap-2 bg-[#1e1e1e] rounded p-2">
                       <span className="flex-1 truncate text-xs text-emerald-300 font-mono">{shareUrl}</span>
-                      <button onClick={async()=>{ try{ await navigator.clipboard.writeText(shareUrl); toast('Скопировано','success') }catch{} }} className="p-1.5 rounded bg-[#3c3c3c] text-white"><Copy size={12}/></button>
+                      <button onClick={async()=>{ try{ await navigator.clipboard.writeText(shareUrl); toast(t('shared_copied'),'success') }catch{} }} className="p-1.5 rounded bg-[#3c3c3c] text-white"><Copy size={12}/></button>
                     </div>
                   )}
                 </div>
@@ -594,43 +594,43 @@ export default function VSCodeEditor(){
                 document.body.style.userSelect='none'
               }}
               className="h-2 bg-[#007acc]/0 hover:bg-[#007acc] cursor-row-resize flex items-center justify-center shrink-0"
-              title="Тяни вверх-вниз чтобы изменить высоту"
+              title={t('vsc_drag_hint')}
             >
               <div className="w-10 h-1 bg-[#3c3c3c] rounded"/>
             </div>
             <div className="h-7 flex items-center gap-2 px-2 border-b border-[#2d2d2d] bg-[#252526] text-xs shrink-0">
-              <span className="text-white font-semibold px-1">Вывод</span>
+              <span className="text-white font-semibold px-1">{t('vsc_output')}</span>
               {useLive && <span className="px-1.5 py-0.5 rounded bg-emerald-900 text-emerald-300 text-[10px] font-bold">LIVE</span>}
               <span className="text-slate-500 hidden sm:inline">— {active.name}</span>
               <div className="ml-auto flex gap-1">
-                <button onClick={()=>setOutput('')} className="p-1 text-slate-500 hover:text-white" title="Очистить"><Trash2 size={12}/></button>
-                <button onClick={()=>{setShowOutput(false); setOutput(''); setExplanation(null); setUseLive(false); live.close()}} className="p-1 text-slate-500 hover:text-white" title="Закрыть"><X size={12}/></button>
+                <button onClick={()=>setOutput('')} className="p-1 text-slate-500 hover:text-white" title={t('vsc_clear_title')}><Trash2 size={12}/></button>
+                <button onClick={()=>{setShowOutput(false); setOutput(''); setExplanation(null); setUseLive(false); live.close()}} className="p-1 text-slate-500 hover:text-white" title={t('close')}><X size={12}/></button>
                 {(active.lang==='python'||active.lang==='javascript') && output && (
-                  <button onClick={explainCode} disabled={explaining} className="px-2 py-0.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-xs flex items-center gap-1 disabled:opacity-50">✨ {explaining?'...':'Объясни'}</button>
+                  <button onClick={explainCode} disabled={explaining} className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs flex items-center gap-1 disabled:opacity-50">✨ {explaining?'...':t('vsc_explain')}</button>
                 )}
                 {(live.state==='running'||live.state==='waiting') && (
-                  <button onClick={()=>live.stop()} className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-bold" title="Остановить">■ Стоп</button>
+                  <button onClick={()=>live.stop()} className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-bold" title={t('vsc_stop_title')}>{t('vsc_stop')}</button>
                 )}
                 <button onClick={run} className="px-2 py-0.5 rounded bg-[#16825d] text-white text-xs flex items-center gap-1"><Play size={10}/> Run</button>
               </div>
             </div>
             {!useLive && active.lang==='python' && active.content.includes('input(') && (
               <div className="px-2 py-1.5 bg-[#252526] border-b border-[#2d2d2d] flex items-start gap-2 shrink-0">
-                <span className="text-xs text-amber-300 whitespace-nowrap pt-1">Ввод для input() — введено {stdinInput.trim() ? stdinInput.split('\n').length : 0} из {active.content.split('\n').filter((l:string)=>{ const t=l.trim(); return t && !t.startsWith('#') && /(?<![\w.])input\s*\(/.test(t.split('#')[0]) }).length}:</span>
+                <span className="text-xs text-amber-300 whitespace-nowrap pt-1">{t('codelab_stdin_a')} {stdinInput.trim() ? stdinInput.split('\n').length : 0} {t('codelab_stdin_b')} {active.content.split('\n').filter((l:string)=>{ const t=l.trim(); return t && !t.startsWith('#') && /(?<![\w.])input\s*\(/.test(t.split('#')[0]) }).length}:</span>
                 <textarea value={stdinInput} onChange={e=>setStdinInput(e.target.value)} rows={2} placeholder={'Каждое значение с новой строки:\nАйбек\n20\n1.75\nда'} className="flex-1 px-2 py-1 rounded bg-[#3c3c3c] border border-[#007acc] text-white text-xs outline-none resize-y min-h-[3rem]"/>
               </div>
             )}
-            <pre className="overflow-auto p-2 font-mono text-xs leading-5 whitespace-pre-wrap break-words text-[#e6e6e6]" style={{height: panelHeight}}>{output||'Вывод появится здесь...'}</pre>
+            <pre className="overflow-auto p-2 font-mono text-xs leading-5 whitespace-pre-wrap break-words text-[#e6e6e6]" style={{height: panelHeight}}>{output||t('vsc_output_ph')}</pre>
             {useLive && live.state==='waiting' && (
               <div className="px-2 py-1.5 bg-amber-950/50 border-t border-amber-800/40 flex items-center gap-2 shrink-0">
-                <span className="text-xs text-amber-300 font-bold whitespace-nowrap animate-pulse">⏳ Ждёт ввод:</span>
-                <input autoFocus value={liveInput} onChange={e=>setLiveInput(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ live.sendInput(liveInput); setLiveInput('') } }} placeholder="Введи значение и Enter" className="flex-1 px-2 py-1 rounded bg-[#3c3c3c] border border-amber-500 text-white text-xs outline-none font-mono"/>
+                <span className="text-xs text-amber-300 font-bold whitespace-nowrap animate-pulse">{t('vsc_wait_input')}</span>
+                <input autoFocus value={liveInput} onChange={e=>setLiveInput(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ live.sendInput(liveInput); setLiveInput('') } }} placeholder={t('vsc_enter_value')} className="flex-1 px-2 py-1 rounded bg-[#3c3c3c] border border-amber-500 text-white text-xs outline-none font-mono"/>
                 <button onClick={()=>{ live.sendInput(liveInput); setLiveInput('') }} className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold">↵</button>
               </div>
             )}
             {explanation && (
-              <div className="m-2 rounded-lg bg-violet-950/60 border border-violet-500/30 p-2.5 text-xs space-y-1">
-                <div className="font-bold text-violet-200">💡 {explanation.title}</div>
+              <div className="m-2 rounded-lg bg-blue-950/60 border border-blue-500/30 p-2.5 text-xs space-y-1">
+                <div className="font-bold text-blue-200">💡 {explanation.title}</div>
                 <div className="text-slate-200">{explanation.what}</div>
                 {explanation.fix && <div className="text-emerald-300">✅ {explanation.fix}</div>}
               </div>
@@ -640,11 +640,11 @@ export default function VSCodeEditor(){
         </div>
       </div>
       <div className="h-5 bg-[#007acc] text-white flex items-center px-2 text-xs gap-3 shrink-0">
-        <span className="hidden sm:flex items-center gap-1">{files.length}/{MAX_FILES} файлов</span>
+        <span className="hidden sm:flex items-center gap-1">{files.length}/{MAX_FILES} {t('vsc_files_short')}</span>
         <span className="flex items-center gap-1"><span className={`w-2 h-2 rounded-full ${active.lang==='python'?'bg-yellow-400':active.lang==='javascript'?'bg-yellow-300':active.lang==='html'?'bg-orange-400':'bg-white'}`}/>{active.name}</span>
-        <span className="hidden md:inline">Spaces:2 • UTF-8 • LF • {active.lang} • {active.content.split('\n').length} строк</span>
+        <span className="hidden md:inline">Spaces:2 • UTF-8 • LF • {active.lang} • {active.content.split('\n').length} {t('vsc_lines')}</span>
         <span className="ml-auto hidden lg:inline">Ln {cursor.line}, Col {cursor.col}</span>
-        <span>{isAuth?'Вход ✓':'Гость'}</span>
+        <span>{isAuth?t('vsc_logged_in'):t('vsc_guest')}</span>
       </div>
       <div className="md:hidden flex gap-1 p-1 bg-[#252526] border-t border-[#2d2d2d] overflow-auto shrink-0">
         {files.map(f=>(

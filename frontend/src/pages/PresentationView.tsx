@@ -3,10 +3,12 @@ import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import client, { mediaUrl } from '../api/client'
 import { Eye, Edit, Play, ChevronLeft, ChevronRight, Maximize2, Copy, Trash2 } from 'lucide-react'
 import { toast } from '../context/UIContext'
+import { useLang } from '../context/LangContext'
 
 const resolveSrc = (src?:string)=> src?.startsWith('/media') ? mediaUrl(src) : (src||'')
 
 export default function PresentationView(){
+  const {t}=useLang()
   const {id}=useParams()
   const nav=useNavigate()
   const [pres,setPres]=useState<any>(null)
@@ -33,8 +35,8 @@ export default function PresentationView(){
   const cur=slides[idx]
   const isOwner = me && (String(pres.owner)===String(me.id) || String(pres.owner_id)===String(me.id) || me.role==='admin' || me.is_staff)
   const handleDelete=async()=>{
-    if(!confirm('Удалить презентацию? Это действие нельзя отменить.')) return
-    try{ await client.delete(`/presentations/${id}/`); toast('Презентация удалена','success'); nav('/presentations') }catch(err:any){ toast(err?.response?.data?.detail||'Не удалось удалить','error') }
+    if(!confirm(t('pv_del_confirm'))) return
+    try{ await client.delete(`/presentations/${id}/`); toast(t('pres_deleted'),'success'); nav('/presentations') }catch(err:any){ toast(err?.response?.data?.detail||t('pv_del_err'),'error') }
   }
   const bgStyle = (s:any)=>{
     // senior: поддержка solid/gradient/image + legacy
@@ -126,7 +128,7 @@ export default function PresentationView(){
   }
 
   const renderBlocks = (blocks:any[], isSlideshow=false, slide?:any) => {
-    if(!blocks||blocks.length===0) return <div className="flex-1 flex items-center justify-center text-slate-400">Пустой слайд</div>
+    if(!blocks||blocks.length===0) return <div className="flex-1 flex items-center justify-center text-slate-400">{t('pv_empty_slide')}</div>
     const slideBg = slide?.background||slide?.gradient||'#ffffff'
     const hasGeometry = blocks.some((b:any)=> b.style && (b.style.x!==undefined || b.style.w!==undefined))
     // legacy rebus/title fallback только для старых импортов без геометрии
@@ -185,7 +187,7 @@ export default function PresentationView(){
           {b.type==='text' && <div className="max-w-[90%] text-center w-full">{renderRichText(b,false,isSlideshow,slideBg)}</div>}
           {b.type==='image' && <img src={resolveSrc(b.src)} className={`${isSlideshow?'max-h-[360px]':'max-h-[300px]'} max-w-[80%] object-contain rounded-xl mx-auto`} alt=""/>}
           {b.type==='shape' && null}
-          {b.type==='table' && <div className="border rounded-lg overflow-hidden w-full max-w-[90%] mx-auto"><div className="grid gap-px bg-slate-200" style={{gridTemplateColumns:`repeat(${b.table?.cols||3},1fr)`}}>{Array.from({length:(b.table?.rows||3)*(b.table?.cols||3)}).map((_,k)=><div key={k} className="bg-white p-2 text-sm">Ячейка</div>)}</div></div>}
+          {b.type==='table' && <div className="border rounded-lg overflow-hidden w-full max-w-[90%] mx-auto"><div className="grid gap-px bg-slate-200" style={{gridTemplateColumns:`repeat(${b.table?.cols||3},1fr)`}}>{Array.from({length:(b.table?.rows||3)*(b.table?.cols||3)}).map((_,k)=><div key={k} className="bg-white p-2 text-sm">{t('pv_cell')}</div>)}</div></div>}
         </div>
       ))
     }
@@ -231,7 +233,7 @@ export default function PresentationView(){
             return <div key={b.id} style={{...common, height: hasH ? `${s.h}%` : 'auto', overflow:'visible', display:'block', padding: common.padding || defPad, border: s.stroke ? `${s.strokeWidth||1}px ${s.dash||'solid'} ${s.stroke}` : undefined}} className={animClass}><div style={innerAnchor}><div className="w-full" style={{...textStyleWithBg(b,isTitle,isSlideshow,isCardBg && needCard ? '#ffffff' : slideBg), textAlign: s.align||'left', width:'100%'}}>{renderRichText(b,isTitle,isSlideshow,isCardBg && needCard ? '#ffffff' : slideBg)}</div></div></div>
           }
           if(b.type==='image'){
-            if(b.unrenderable) return <div key={b.id} style={{...common, padding:0, background:'transparent'}} className={animClass}><div className="w-full h-full rounded flex flex-col items-center justify-center bg-slate-100/80 border border-dashed border-slate-300 text-slate-500 text-xs p-2 text-center">🖼 Картинка .{b.origExt||'emf'} не поддерживается браузером</div></div>
+            if(b.unrenderable) return <div key={b.id} style={{...common, padding:0, background:'transparent'}} className={animClass}><div className="w-full h-full rounded flex flex-col items-center justify-center bg-slate-100/80 border border-dashed border-slate-300 text-slate-500 text-xs p-2 text-center">{t('pv_img_na_a')}.{b.origExt||'emf'}{t('pv_img_na_b')}</div></div>
             return <div key={b.id} style={{...common, padding:0, background:'transparent'}} className={animClass}><img src={resolveSrc(b.src)} style={{width:'100%', height:'100%', objectFit: s.objectFit||'contain', borderRadius: s.borderRadius||4, opacity: s.opacity||1, boxShadow: s.shadow? '0 4px 16px rgba(0,0,0,0.15)':'none'}} alt=""/></div>
           }
           if(b.type==='shape'){
@@ -286,10 +288,10 @@ export default function PresentationView(){
           </div>
         </div>
         <div className="h-14 bg-white/10 backdrop-blur flex items-center justify-center gap-3 text-white">
-          <button onClick={()=>setIdx(i=>Math.max(0,i-1))} className="px-4 py-2 rounded-lg bg-white text-slate-900">‹ Назад</button>
+          <button onClick={()=>setIdx(i=>Math.max(0,i-1))} className="px-4 py-2 rounded-lg bg-white text-slate-900">{t('pv_back')}</button>
           <span>{idx+1} / {slides.length}</span>
-          <button onClick={()=>setIdx(i=>Math.min(slides.length-1,i+1))} className="px-4 py-2 rounded-lg bg-white text-slate-900">Вперед ›</button>
-          <button onClick={()=>setSlideshow(false)} className="ml-4 px-4 py-2 rounded-lg bg-red-600">Выйти</button>
+          <button onClick={()=>setIdx(i=>Math.min(slides.length-1,i+1))} className="px-4 py-2 rounded-lg bg-white text-slate-900">{t('pv_next')}</button>
+          <button onClick={()=>setSlideshow(false)} className="ml-4 px-4 py-2 rounded-lg bg-red-600">{t('pv_exit')}</button>
         </div>
       </div>
     )
@@ -299,9 +301,9 @@ export default function PresentationView(){
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-2 text-sm text-slate-500">
         {fromPath ? (
-          <Link to={fromPath} className="px-3 py-1.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700">← Вернуться к уроку</Link>
+          <Link to={fromPath} className="px-3 py-1.5 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700">{t('tt_back_lesson')}</Link>
         ) : (
-          <Link to="/presentations" className="hover:text-violet-600">Презентации</Link>
+          <Link to="/presentations" className="hover:text-blue-600">{t('presentations')}</Link>
         )}
         <span>›</span>
         <span className="text-slate-900 font-medium truncate">{pres.title}</span>
@@ -310,21 +312,21 @@ export default function PresentationView(){
       <div className="bg-white rounded-2xl border p-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-display font-bold dark:text-white">{pres.title}</h1>
-          <p className="text-slate-500 mt-1">{pres.description||'Без описания'}</p>
+          <p className="text-slate-500 mt-1">{pres.description||t('pres_no_desc')}</p>
           <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-            <span className="px-2 py-1 rounded-full bg-slate-100">{slides.length} слайдов</span>
+            <span className="px-2 py-1 rounded-full bg-slate-100">{slides.length} {t('pres_slides')}</span>
             <span>• {new Date(pres.updated_at).toLocaleDateString()}</span>
-            {pres.is_public ? <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Публичная</span> : pres.is_lesson_private ? <span className="px-2 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200" title="Видна только тебе, пока урок не опубликован">Только для урока</span> : <span className="px-2 py-1 rounded-full bg-amber-50 text-amber-700">Приватная</span>}
+            {pres.is_public ? <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{t('pv_public')}</span> : pres.is_lesson_private ? <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200" title={t('pv_lesson_only_hint')}>{t('pv_lesson_only')}</span> : <span className="px-2 py-1 rounded-full bg-amber-50 text-amber-700">{t('pv_private')}</span>}
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={()=>setSlideshow(true)} className="px-4 py-2 rounded-xl bg-slate-900 text-white flex items-center gap-2 text-sm"><Play size={16}/> Слайд-шоу</button>
+          <button onClick={()=>setSlideshow(true)} className="px-4 py-2 rounded-xl bg-blue-700 text-white flex items-center gap-2 text-sm"><Play size={16}/> {t('pv_slideshow')}</button>
           {isOwner ? (
-            <Link to={`/presentations/${id}/edit`} className="px-4 py-2 rounded-xl bg-violet-600 text-white flex items-center gap-2 text-sm"><Edit size={16}/> Редактировать</Link>
+            <Link to={`/presentations/${id}/edit`} className="px-4 py-2 rounded-xl bg-blue-600 text-white flex items-center gap-2 text-sm"><Edit size={16}/> {t('edit')}</Link>
           ) : (
-            <span className="px-4 py-2 rounded-xl bg-slate-100 text-slate-400 text-sm" title="Только автор может редактировать">🔒 Только чтение</span>
+            <span className="px-4 py-2 rounded-xl bg-slate-100 text-slate-400 text-sm" title={t('lessons_edit_lock')}>{t('pv_readonly')}</span>
           )}
-          {isOwner && <button onClick={handleDelete} className="px-4 py-2 rounded-xl bg-red-50 text-red-600 border border-red-200 flex items-center gap-2 text-sm hover:bg-red-100" title="Удалить свою презентацию"><Trash2 size={16}/>Удалить</button>}
+          {isOwner && <button onClick={handleDelete} className="px-4 py-2 rounded-xl bg-red-50 text-red-600 border border-red-200 flex items-center gap-2 text-sm hover:bg-red-100" title={t('pv_del_title')}><Trash2 size={16}/>{t('delete')}</button>}
         </div>
       </div>
 
@@ -336,8 +338,8 @@ export default function PresentationView(){
             <button onClick={()=>setIdx(i=>Math.min(slides.length-1,i+1))} disabled={idx===slides.length-1} className="p-2 rounded-xl bg-slate-100 disabled:opacity-40"><ChevronRight size={18}/></button>
           </div>
           <div className="flex gap-2">
-            <button onClick={()=>setSlideshow(true)} className="px-3 py-1.5 rounded-xl bg-white border flex items-center gap-1.5 text-sm"><Maximize2 size={14}/> На весь</button>
-            {isOwner && <Link to={`/presentations/${id}/edit`} className="px-3 py-1.5 rounded-xl bg-violet-50 border border-violet-200 text-violet-700 text-sm flex items-center gap-1"><Edit size={14}/> Изменить</Link>}
+            <button onClick={()=>setSlideshow(true)} className="px-3 py-1.5 rounded-xl bg-white border flex items-center gap-1.5 text-sm"><Maximize2 size={14}/> {t('pv_fullscreen')}</button>
+            {isOwner && <Link to={`/presentations/${id}/edit`} className="px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm flex items-center gap-1"><Edit size={14}/> {t('edit')}</Link>}
           </div>
         </div>
 
@@ -348,21 +350,21 @@ export default function PresentationView(){
                 <div className="absolute inset-0">
                   {renderBlocks(cur.content?.blocks||[], false, cur)}
                 </div>
-                {(!cur.content?.blocks || cur.content.blocks.length===0) && <div className="absolute inset-0 flex items-center justify-center text-slate-400">Пустой слайд</div>}
+                {(!cur.content?.blocks || cur.content.blocks.length===0) && <div className="absolute inset-0 flex items-center justify-center text-slate-400">{t('pv_empty_slide')}</div>}
               </>
             ) : (
               <div className="flex-1 p-6 flex flex-col items-center justify-center gap-3 overflow-auto">
                 {renderBlocks(cur.content?.blocks||[], false, cur)}
-                {(!cur.content?.blocks || cur.content.blocks.length===0) && <div className="flex-1 flex items-center justify-center text-slate-400">Пустой слайд</div>}
+                {(!cur.content?.blocks || cur.content.blocks.length===0) && <div className="flex-1 flex items-center justify-center text-slate-400">{t('pv_empty_slide')}</div>}
               </div>
             )}
-            <div className="absolute bottom-0 left-0 right-0 h-8 bg-slate-50/95 backdrop-blur border-t flex items-center justify-between px-3 text-xs text-slate-500 opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity" title="Информация о слайде">
-              <span>Слайд {idx+1} • {cur.layout||'blank'} {cur.transition && `• ${cur.transition}`}</span>
+            <div className="absolute bottom-0 left-0 right-0 h-8 bg-slate-50/95 backdrop-blur border-t flex items-center justify-between px-3 text-xs text-slate-500 opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity" title={t('pv_slide_info')}>
+              <span>{t('pv_slide')} {idx+1} • {cur.layout||'blank'} {cur.transition && `• ${cur.transition}`}</span>
               <span className="truncate max-w-[50%]">{cur.background?.slice(0,60)}</span>
             </div>
           </div>
         ) : (
-          <div className="aspect-video shrink-0 rounded-xl border flex items-center justify-center text-slate-400">Нет слайдов</div>
+          <div className="aspect-video shrink-0 rounded-xl border flex items-center justify-center text-slate-400">{t('pv_no_slides')}</div>
         )}
 
         <div className="mt-4 flex gap-2 overflow-auto pb-2">
@@ -371,7 +373,7 @@ export default function PresentationView(){
             const thumbIsDark = thumbBg && !isLight(thumbBg) && !thumbBg.startsWith('linear-gradient')
             const thumbHasGeom = (s.content?.blocks||[]).some((b:any)=> b.style?.x!==undefined)
             return (
-            <button key={i} onClick={()=>setIdx(i)} className={`shrink-0 w-32 aspect-video rounded-lg border-2 overflow-hidden text-left relative ${i===idx?'border-violet-600 ring-2 ring-violet-100':'border-slate-200 hover:border-slate-300'}`}>
+            <button key={i} onClick={()=>setIdx(i)} className={`shrink-0 w-32 aspect-video rounded-lg border-2 overflow-hidden text-left relative ${i===idx?'border-blue-600 ring-2 ring-blue-100':'border-slate-200 hover:border-slate-300'}`}>
               <div className="h-full w-full relative overflow-hidden" style={bgStyle(s)}>
                 {thumbHasGeom ? (
                   <div className="absolute inset-0 scale-[0.18] origin-top-left w-[555%] h-[555%]">
@@ -399,7 +401,7 @@ export default function PresentationView(){
                   </div>
                 )}
               </div>
-              <div className="absolute bottom-0 left-0 right-0 px-1.5 py-0.5 bg-slate-900/70 text-white text-[8px] text-center">Слайд {i+1}</div>
+              <div className="absolute bottom-0 left-0 right-0 px-1.5 py-0.5 bg-slate-900/70 text-white text-[8px] text-center">{t('pv_slide')} {i+1}</div>
             </button>
             )
           })}
@@ -408,7 +410,7 @@ export default function PresentationView(){
 
       {cur?.notes && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-          <div className="text-xs font-bold text-amber-800">Заметки докладчика</div>
+          <div className="text-xs font-bold text-amber-800">{t('pv_notes')}</div>
           <div className="text-sm text-slate-700 mt-1 whitespace-pre-wrap">{cur.notes}</div>
         </div>
       )}

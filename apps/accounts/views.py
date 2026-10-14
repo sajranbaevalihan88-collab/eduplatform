@@ -50,6 +50,7 @@ def me_view(request):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def logout_view(request):
+    import logging as _lg
     try:
         refresh_token = request.data.get('refresh')
         if not refresh_token:
@@ -57,8 +58,9 @@ def logout_view(request):
         token = RefreshToken(refresh_token)
         token.blacklist()
         return Response({'status': 'ok'})
-    except Exception as e:
-        return Response({'error': str(e)}, status=400)
+    except Exception:
+        _lg.getLogger(__name__).exception("logout failed")
+        return Response({'error': 'Не удалось выйти'}, status=400)
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
@@ -69,7 +71,7 @@ def list_users(request):
     # не-админ видит только себя, админ — до 20
     if request.user.role != 'admin' and not request.user.is_staff:
         return Response(UserSerializer([request.user], many=True).data)
-    users = User.objects.all()[:20]
+    users = User.objects.all().order_by('id')[:20]
     # скрываем email для списка
     data = [{'id': u.id, 'username': u.username, 'role': u.role} for u in users]
     return Response(data)

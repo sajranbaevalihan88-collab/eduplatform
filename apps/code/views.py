@@ -197,10 +197,10 @@ def _is_safe_code(code: str, lang: str):
 
 class CodeRunThrottle(throttling.UserRateThrottle):
     scope = 'code_run'
-    rate = '1000/minute'
+    rate = '120/minute'
 
 class AnonCodeThrottle(throttling.AnonRateThrottle):
-    rate = '1000/minute'
+    rate = '30/minute'
 
 class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
     queryset = CodeTask.objects.all().order_by('-created_at')
@@ -249,7 +249,7 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             raise PermissionDenied("Только владелец")
         instance.delete()
 
-    @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny], throttle_classes=[throttling.AnonRateThrottle, throttling.UserRateThrottle])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny], throttle_classes=[AnonCodeThrottle, CodeRunThrottle])
     def run(self, request, pk=None):
         task = self.get_object()
         code = request.data.get('code','')
@@ -272,7 +272,25 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
         output, passed = run_single(code, task.language, stdin_data)
         if task.tests:
             try:
-                passed = all(exp in output for t in task.tests for exp in [t.get('expected','')] if exp)
+                # строгое сравнение построчно: expected должен совпасть с целой строкой вывода,
+                # а не с подстрокой ("1" больше не проходит при любом выводе с единицей)
+                if isinstance(task.tests, list) and task.tests:
+                    out_lines = [ln.strip() for ln in (output or '').splitlines()]
+                    out_full = (output or '').strip()
+                    ok_all = True
+                    for t in task.tests:
+                        if not isinstance(t, dict):
+                            continue
+                        exp = str(t.get('expected', '') or '')
+                        if not exp.strip():
+                            continue
+                        exp_s = exp.strip()
+                        if exp_s != out_full and exp_s not in out_lines and exp_s not in out_full.split():
+                            # fallback: подстрока только если expected длиннее 1 символа
+                            if len(exp_s) <= 1 or exp_s not in (output or ''):
+                                ok_all = False
+                                break
+                    passed = ok_all
             except Exception:
                 passed = False
         if request.user.is_authenticated:
@@ -281,7 +299,7 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             except: pass
         return Response({'output': output[:5000], 'passed': passed})
 
-    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny], throttle_classes=[throttling.AnonRateThrottle, throttling.UserRateThrottle])
+    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny], throttle_classes=[AnonCodeThrottle, CodeRunThrottle])
     def run_project(self, request):
         """Запуск мультифайлового проекта (POST /api/code-tasks/run_project/). Гости тоже могут (троттлинг + песочница)."""
         files = request.data.get('files') or request.data.get('files[]') or []
@@ -304,8 +322,10 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             from .services.runner import run_project as runner_run_project
             output, passed = runner_run_project(files, entry=entry, requirements=requirements, stdin_data=stdin_data)
             return Response({'output': output[:5000], 'passed': passed})
-        except Exception as e:
-            return Response({'output': f"Ошибка: {e}", 'passed': False}, status=500)
+        except Exception:
+            import logging as _lg
+            _lg.getLogger(__name__).exception("run_project failed")
+            return Response({'output': 'Не удалось запустить проект, проверь файлы и entry', 'passed': False}, status=400)
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny], throttle_classes=[], url_path='capabilities')
     def capabilities(self, request):
@@ -325,7 +345,7 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             runners[lang] = 'preview'
         return Response({'runners': runners})
 
-    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny], throttle_classes=[throttling.AnonRateThrottle, throttling.UserRateThrottle], url_path='run_code')
+    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny], throttle_classes=[AnonCodeThrottle, CodeRunThrottle], url_path='run_code')
     def run_code(self, request):
         """Универсальный раннер для всех языков (POST /api/code-tasks/run_code/). Требует авторизации."""
         code = request.data.get('code', '')
@@ -353,8 +373,10 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             from .services.runner import run_single
             output, passed = run_single(code, lang, stdin_data)
             return Response({'output': output[:5000], 'passed': passed, 'language': lang, 'label': get_label(lang)})
-        except Exception as e:
-            return Response({'output': f"Ошибка: {e}", 'passed': False}, status=500)
+        except Exception:
+            import logging as _lg2
+            _lg2.getLogger(__name__).exception("run_code failed")
+            return Response({'output': 'Не удалось выполнить код, попробуй позже', 'passed': False}, status=400)
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny], throttle_classes=[throttling.AnonRateThrottle, throttling.UserRateThrottle], url_path='explain')
     def explain(self, request):
@@ -380,8 +402,10 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                                  'fix': 'Скопируй вывод целиком и разбери вместе с учителем.',
                                  'line': None})
             return Response(result)
-        except Exception as e:
-            return Response({'error': f"Ошибка: {e}"}, status=500)
+        except Exception:
+            import logging as _lg3
+            _lg3.getLogger(__name__).exception("explain failed")
+            return Response({'error': 'Не удалось разобрать ошибку'}, status=400)
 
 class CodeSubmissionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = CodeSubmission.objects.all().order_by('-created_at')

@@ -54,7 +54,6 @@ def generate_questions(text, count=5):
     if len(sentences) < 2:
         return []
     defs = _definitions(sentences)
-    keywords = _keywords(sentences)
     questions = []
     # 1. single: что такое X?
     for i, (term, defi) in enumerate(defs):
@@ -93,15 +92,6 @@ def generate_questions(text, count=5):
                 'options': [{'text': 'Верно', 'is_correct': False}, {'text': 'Неверно', 'is_correct': True}],
                 'explanation': 'Проверь текст урока — здесь подвох.',
             })
-    # 3. text: дать определение топ-терминам
-    for kw in keywords[:6]:
-        if len(questions) >= count:
-            break
-        if any(kw in q['text'].lower() for q in questions):
-            continue
-        questions.append({
-            'text': f'Дайте определение термина «{kw}» своими словами.',
-            'type': 'text', 'points': 2, 'options': [],
-            'explanation': f'В ответе должно быть слово «{kw}» и его смысл из урока.',
-        })
+    # Текстовый тип вопросов отключён — только single и true_false.
+    # Возвращаем сколько получилось (может быть меньше count).
     return questions[:count]

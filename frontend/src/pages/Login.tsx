@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import client from '../api/client'
 import { useNavigate } from 'react-router-dom'
+import { useLang } from '../context/LangContext'
 
 export default function Login(){
+  const {t}=useLang()
   const [isReg,setIsReg]=useState(false)
   const [form,setForm]=useState({username:'',password:'',email:'',role:'teacher'})
   const nav=useNavigate()
@@ -11,13 +13,13 @@ export default function Login(){
     e.preventDefault()
     setError('')
     // клиентская валидация
-    if (form.username.trim().length < 3) { setError('Логин минимум 3 символа'); return; }
-    if (form.password.length < 8) { setError('Пароль минимум 8 символов'); return; }
-    if (isReg && form.email && !form.email.includes('@')) { setError('Укажи корректный email'); return; }
+    if (form.username.trim().length < 3) { setError(t('login_err_login_min')); return; }
+    if (form.password.length < 8) { setError(t('login_err_pass_min')); return; }
+    if (isReg && form.email && !form.email.includes('@')) { setError(t('login_err_email')); return; }
     try{
       if(isReg){
         await client.post('/auth/register/',form)
-        alert('Регистрация успешна — теперь войди')
+        alert(t('login_reg_ok'))
         setIsReg(false)
         setError('')
       } else {
@@ -34,7 +36,7 @@ export default function Login(){
       }
     }catch(err:any){ 
       const data = err.response?.data
-      let msg = 'Ошибка'
+      let msg = t('error')
       if (data) {
         if (typeof data === 'string') msg = data
         else if (data.detail) msg = data.detail
@@ -56,18 +58,18 @@ export default function Login(){
   return (
     <div className="max-w-md mx-auto">
       <div className="bg-white rounded-2xl border p-8">
-        <h1 className="text-2xl font-display font-bold text-center">{isReg?'Регистрация':'Вход'}</h1>
-        <p className="text-sm text-slate-500 text-center mt-1">{isReg?'Создай аккаунт учителя или ученика':'Войди чтобы создавать уроки'}</p>
+        <h1 className="text-2xl font-display font-bold text-center">{isReg?t('login_title_reg'):t('login')}</h1>
+        <p className="text-sm text-slate-500 text-center mt-1">{isReg?t('login_sub_reg'):t('login_to_create')}</p>
         <form onSubmit={submit} className="mt-6 space-y-3">
-          <input placeholder="Логин (мин 3 символа, без пробелов)" value={form.username} onChange={e=>setForm({...form,username:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50" required minLength={3}/>
-          {isReg && <input placeholder="Email (необязательно)" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50" type="email"/>}
-          <input type="password" placeholder="Пароль (мин 8 символов)" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50" required minLength={8}/>
-          {isReg && <select value={form.role} onChange={e=>setForm({...form,role:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50"><option value="teacher">Учитель</option><option value="student">Ученик</option></select>}
+          <input placeholder={t('login_ph_user')} value={form.username} onChange={e=>setForm({...form,username:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50" required minLength={3}/>
+          {isReg && <input placeholder={t('login_ph_email')} value={form.email} onChange={e=>setForm({...form,email:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50" type="email"/>}
+          <input type="password" placeholder={t('login_ph_pass')} value={form.password} onChange={e=>setForm({...form,password:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50" required minLength={8}/>
+          {isReg && <select value={form.role} onChange={e=>setForm({...form,role:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50"><option value="teacher">{t('login_teacher')}</option><option value="student">{t('login_student')}</option></select>}
           {error && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 whitespace-pre-wrap">{error}</div>}
-          <button className="w-full py-2.5 rounded-xl bg-violet-600 text-white font-bold">{isReg?'Зарегистрироваться':'Войти'}</button>
+          <button className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-bold">{isReg?t('login_btn_reg'):t('login_submit')}</button>
         </form>
-        <button onClick={()=>{setIsReg(!isReg); setError('')}} className="w-full mt-3 text-sm text-violet-600 font-medium">{isReg?'Уже есть аккаунт? Войти':'Нет аккаунта? Регистрация'}</button>
-        <div className="mt-6 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-slate-700">✨ Глобальная база: все уроки/презентации/тесты видны всем без входа. Войди чтобы создавать свои.</div>
+        <button onClick={()=>{setIsReg(!isReg); setError('')}} className="w-full mt-3 text-sm text-blue-600 font-medium">{isReg?t('login_to_in'):t('login_to_reg')}</button>
+        <div className="mt-6 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-slate-700">{t('login_hint')}</div>
       </div>
     </div>
   )
