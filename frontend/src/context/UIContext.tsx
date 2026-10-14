@@ -15,7 +15,7 @@ export function ToastContainer(){
     return ()=>{ push=null }
   },[])
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-[360px]">
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-[360px]" role="status" aria-live="polite">
       {toasts.map(t=>(
         <div key={t.id} className={`px-4 py-3 rounded-xl shadow-lg border text-sm font-medium ${t.type==='error'?'bg-red-50 border-red-200 text-red-700': t.type==='success'?'bg-emerald-50 border-emerald-200 text-emerald-700':'bg-white border-slate-200 text-slate-700'}`}>
           {t.msg}
@@ -127,7 +127,7 @@ export function AccessibilityProvider({children}:{children:React.ReactNode}){
       }
     }catch{}
   }
-  const speak=(t:string)=>{
+  const speak=(t:string, _retry?:boolean)=>{
     try{
       const s=window.speechSynthesis
       if(!s){ toast('В этом браузере нет голоса','error'); return }
@@ -135,7 +135,20 @@ export function AccessibilityProvider({children}:{children:React.ReactNode}){
       const clean=String(t||'').replace(/[<>{}[\]]/g,' ').replace(/\s+/g,' ').trim().slice(0,1500)
       if(!clean) return
       if(!pickVoice()) toast('Голоса в системе нет — почитаю как смогу','info')
-      const say=()=>speakQueue(clean.match(/[^.!?…]+[.!?…]?/g)?.map(x=>x.trim()).filter(Boolean).slice(0,12) || [clean])
+      const parts=clean.match(/[^.!?…]+[.!?…]?/g)?.map(x=>x.trim()).filter(Boolean).slice(0,12) || [clean]
+      const say=()=>{ speakQueue(parts); watch(parts.join(' ').length) }
+      const watch=(len:number)=>{
+        // короткие фразы успевают прозвучать — проверяем только длинные
+        if(len < 14) return
+        setTimeout(()=>{
+          try{
+            if(!s.speaking && !s.pending){
+              if(!_retry){ try{ s.cancel() }catch{}; setTimeout(()=>speak(t, true), 200) }
+              else toast('Браузер молчит: проверь звук в системе и нажми ещё раз','error')
+            }
+          }catch{}
+        }, 900)
+      }
       // cancel() вплотную перед speak() глушит фразу в Chrome — только если реально говорит, и с паузой
       if(s.speaking||s.pending){ try{ s.cancel() }catch{}; setTimeout(say,150) }
       else say()

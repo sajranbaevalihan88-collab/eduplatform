@@ -16,6 +16,13 @@ class AnswerOptionPublicSerializer(serializers.ModelSerializer):
 
 class QuestionSerializer(serializers.ModelSerializer):
     options = AnswerOptionSerializer(many=True, required=False)
+
+    def validate_type(self, value):
+        allowed = {'single', 'multiple', 'true_false'}
+        if value not in allowed:
+            raise serializers.ValidationError("Текстовые вопросы отключены. Доступны: single, multiple, true_false")
+        return value
+
     class Meta:
         model = Question
         fields = ['id','text','type','points','order','explanation','options']
@@ -29,15 +36,17 @@ class QuestionSerializer(serializers.ModelSerializer):
         return question
     
     def update(self, instance, validated_data):
-        options_data = validated_data.pop('options', None)
-        for attr, val in validated_data.items():
-            setattr(instance, attr, val)
-        instance.save()
-        if options_data is not None:
-            instance.options.all().delete()
-            for opt in options_data:
-                AnswerOption.objects.create(question=instance, **opt)
-        return instance
+        from django.db import transaction
+        with transaction.atomic():
+            options_data = validated_data.pop('options', None)
+            for attr, val in validated_data.items():
+                setattr(instance, attr, val)
+            instance.save()
+            if options_data is not None:
+                instance.options.all().delete()
+                for opt in options_data:
+                    AnswerOption.objects.create(question=instance, **opt)
+            return instance
 
 class QuestionPublicSerializer(serializers.ModelSerializer):
     options = AnswerOptionPublicSerializer(many=True, read_only=True)
@@ -90,14 +99,34 @@ class TestDetailSerializer(serializers.ModelSerializer):
         read_only_fields = ['id','created_at','updated_at','owner']
 
     def create(self, validated_data):
-        questions_data = validated_data.pop('questions', [])
-        test = Test.objects.create(**validated_data)
-        for q_data in questions_data:
-            opts = q_data.pop('options', [])
-            q = Question.objects.create(test=test, **q_data)
-            for o in opts:
-                AnswerOption.objects.create(question=q, **o)
-        return test
+        from django.db import transaction
+        with transaction.atomic():
+            questions_data = validated_data.pop('questions', [])
+            test = Test.objects.create(**validated_data)
+            for q_data in questions_data:
+                opts = q_data.pop('options', [])
+                q = Question.objects.create(test=test, **q_data)
+                for o in opts:
+                    AnswerOption.objects.create(question=q, **o)
+            return test
+
+    def update(self, instance, validated_data):
+        from django.db import transaction
+        with transaction.atomic():
+            # вложенные вопросы: id в validated_data нет (read-only),
+            # поэтому честно пересоздаём набор (старые попытки хранят свой слепок).
+            questions_data = validated_data.pop('questions', None)
+            for attr, val in validated_data.items():
+                setattr(instance, attr, val)
+            instance.save()
+            if questions_data is not None:
+                instance.questions.all().delete()
+                for q_data in questions_data:
+                    opts = q_data.pop('options', [])
+                    q = Question.objects.create(test=instance, **q_data)
+                    for o in opts:
+                        AnswerOption.objects.create(question=q, **o)
+            return instance
 
 class TestAttemptSerializer(serializers.ModelSerializer):
     class Meta:

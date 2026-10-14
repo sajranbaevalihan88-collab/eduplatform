@@ -851,7 +851,7 @@ export default function WordEditor() {
   const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[c])
 
   const fmtBtn = (isActive: boolean) =>
-    `p-2 rounded-lg border ${isActive ? 'bg-violet-600 text-white border-violet-600' : 'bg-white dark:bg-slate-700 dark:text-white hover:bg-slate-50'}`
+    `p-2 rounded-lg border ${isActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-700 dark:text-white hover:bg-slate-50'}`
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 page-enter">
@@ -863,7 +863,7 @@ export default function WordEditor() {
       <aside className="lg:w-64 shrink-0 bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-3 h-fit" aria-label="Мои документы">
         <button onClick={newDoc} title="Чистый лист: начать новый документ. Текущий не удаляется — несохранённое уедет в черновик."
           aria-label="Создать новый документ"
-          className="w-full px-3 py-2.5 rounded-xl bg-violet-600 text-white font-semibold flex items-center justify-center gap-2">
+          className="w-full px-3 py-2.5 rounded-xl bg-blue-600 text-white font-semibold flex items-center justify-center gap-2">
           <Plus size={16} /> Новый
         </button>
         {hasDraft && (
@@ -874,7 +874,7 @@ export default function WordEditor() {
         <div className="mt-3 space-y-1 max-h-[50vh] overflow-auto">
           {docs.length === 0 && <div className="text-xs text-slate-400 text-center py-4">Пока пусто</div>}
           {docs.map(d => (
-            <div key={d.id} className={`group flex items-center gap-2 px-2 py-2 rounded-xl text-sm ${currentId === d.id ? 'bg-violet-50 dark:bg-violet-900/30 font-semibold' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+            <div key={d.id} className={`group flex items-center gap-2 px-2 py-2 rounded-xl text-sm ${currentId === d.id ? 'bg-blue-50 dark:bg-blue-900/30 font-semibold' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
               <button onClick={() => openDoc(d)} className="flex-1 flex items-center gap-2 min-w-0 text-left dark:text-white" title={d.title}>
                 <FileText size={15} className="shrink-0 text-blue-600" />
                 <span className="truncate">{d.title}{dirty && currentId === d.id ? ' •' : ''}</span>
@@ -939,7 +939,7 @@ export default function WordEditor() {
           </label>
           <button onClick={insertLink} title="Вставить ссылку" aria-label="Вставить ссылку" className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white"><Link2 size={16} /></button>
           <button onClick={() => imgRef.current?.click()} title="Вставить картинку (до 2МБ)" aria-label="Вставить картинку" className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white"><ImagePlus size={16} /></button>
-          <button onClick={() => setShowTblPicker(v => !v)} title="Вставить таблицу: выбрать строки и столбцы" aria-label="Вставить таблицу" aria-expanded={showTblPicker} className={`p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white ${showTblPicker ? 'bg-violet-100 dark:bg-violet-900/40' : ''}`}><TableIcon size={16} /></button>
+          <button onClick={() => setShowTblPicker(v => !v)} title="Вставить таблицу: выбрать строки и столбцы" aria-label="Вставить таблицу" aria-expanded={showTblPicker} className={`p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white ${showTblPicker ? 'bg-blue-100 dark:bg-blue-900/40' : ''}`}><TableIcon size={16} /></button>
           <button onMouseDown={keepFocus} onClick={() => cmd('removeFormat')} title="Очистить форматирование" aria-label="Очистить форматирование" className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white"><Eraser size={16} /></button>
           <button onClick={insertPageBreak} title="Разрыв страницы — начать новый лист" aria-label="Разрыв страницы" className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white"><Scissors size={16} /></button>
           <input ref={imgRef} type="file" accept="image/*" className="hidden" onChange={onImage} />
@@ -947,19 +947,19 @@ export default function WordEditor() {
 
         {/* панель картинки: размер + положение + свободное перемещение */}
         {selImg && (
-          <div className="flex flex-wrap items-center gap-3 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-700 rounded-2xl p-3 text-sm" aria-label="Настройки картинки">
+          <div className="flex flex-wrap items-center gap-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-2xl p-3 text-sm" aria-label="Настройки картинки">
             <span className="font-bold dark:text-white flex items-center gap-1"><MoveHorizontal size={15} /> Картинка</span>
             <div className="flex gap-1" role="group" aria-label="Режим картинки">
               <button onClick={imgFree} title="Открепить от текста — таскай мышью куда хочешь"
-                className={`px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 ${isFree(selImg) ? 'bg-violet-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}>
+                className={`px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 ${isFree(selImg) ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}>
                 <Move size={12} /> Свободно
               </button>
               <button onClick={imgInline} title="Вернуть в текст"
-                className={`px-2 py-1 rounded-lg text-xs font-bold ${!isFree(selImg) ? 'bg-violet-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}>
+                className={`px-2 py-1 rounded-lg text-xs font-bold ${!isFree(selImg) ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}>
                 В текст
               </button>
             </div>
-            {isFree(selImg) && <span className="text-xs text-violet-700 dark:text-violet-300">тяни фото мышью + уголок — размер</span>}
+            {isFree(selImg) && <span className="text-xs text-blue-700 dark:text-blue-300">тяни фото мышью + уголок — размер</span>}
             <label className="flex items-center gap-2 dark:text-slate-200">
               Размер:
               <input type="range" min={isFree(selImg) ? 30 : 10} max={isFree(selImg) ? 1200 : 100} step={isFree(selImg) ? 10 : 5} value={imgW}
@@ -969,7 +969,7 @@ export default function WordEditor() {
             <div className="flex gap-1" role="group" aria-label="Положение картинки">
               {[25, 50, 75, 100].map(p => (
                 <button key={p} onClick={() => imgSetWidth(p)}
-                  className={`px-2 py-1 rounded-lg text-xs font-bold ${imgW === p ? 'bg-violet-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}>{p}%</button>
+                  className={`px-2 py-1 rounded-lg text-xs font-bold ${imgW === p ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}>{p}%</button>
               ))}
             </div>
             <div className="flex gap-1" role="group" aria-label="Выравнивание картинки">
@@ -1017,7 +1017,7 @@ export default function WordEditor() {
           <button onClick={save} disabled={busy} className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold flex items-center gap-2 disabled:opacity-50">
             <Save size={16} /> {busy ? '...' : 'Сохранить'}
           </button>
-          <button onClick={() => fileRef.current?.click()} disabled={busy} title="Импорт .docx до 20МБ" className="px-4 py-2.5 rounded-xl bg-violet-600 text-white font-semibold flex items-center gap-2 disabled:opacity-50">
+          <button onClick={() => fileRef.current?.click()} disabled={busy} title="Импорт .docx до 20МБ" className="px-4 py-2.5 rounded-xl bg-blue-600 text-white font-semibold flex items-center gap-2 disabled:opacity-50">
             <Upload size={16} /> Импорт .docx
           </button>
           <button onClick={onExport} title="Скачать .docx" className="px-4 py-2.5 rounded-xl bg-white border dark:bg-slate-800 dark:text-white dark:border-slate-700 font-semibold flex items-center gap-2">
@@ -1042,7 +1042,7 @@ export default function WordEditor() {
           </label>
           <button onClick={() => setFull(f => !f)} title={full ? 'Выйти из полного экрана (Esc)' : 'Полный экран'}
             aria-label={full ? 'Выйти из полного экрана' : 'Полный экран'}
-            className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white dark:text-slate-900 text-white font-semibold flex items-center gap-2">
+            className="px-4 py-2.5 rounded-xl bg-blue-700 dark:bg-white dark:text-slate-900 text-white font-semibold flex items-center gap-2">
             {full ? <Minimize2 size={16} /> : <Maximize2 size={16} />} {full ? 'Выйти' : 'Во весь экран'}
           </button>
           <span className="px-3 py-2.5 rounded-xl bg-white border dark:bg-slate-800 dark:text-white dark:border-slate-700 text-sm font-semibold" aria-live="polite" title="Какая страница на экране">
@@ -1068,7 +1068,7 @@ export default function WordEditor() {
               onKeyDown={onEditorKeyDown}
               onClick={onEditorClick}
               onMouseDown={onFreeMouseDown}
-              className="word-page min-h-[500px] bg-white text-slate-900 rounded-xl border border-slate-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-400 prose-sm"
+              className="word-page min-h-[500px] bg-white text-slate-900 rounded-xl border border-slate-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 prose-sm"
               style={{ lineHeight: 1.7, minHeight: page.pageH + SHEET_PAD * 2, padding: SHEET_PAD }}
             />
             <div className="absolute inset-0 pointer-events-none" aria-hidden="true">

@@ -73,8 +73,21 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Можно удалять только свои файлы")
         if instance.file:
             try: instance.file.delete(save=False)
-            except: pass
+            except Exception:
+                pass
         instance.delete()
+
+    def perform_update(self, serializer):
+        obj = self.get_object()
+        is_admin = self.request.user.is_staff or getattr(self.request.user, 'role', None) == 'admin'
+        if obj.owner_id is None:
+            if not is_admin:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Можно редактировать только свои файлы")
+        elif obj.owner_id != self.request.user.id and not is_admin:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Можно редактировать только свои файлы")
+        serializer.save()
 
 class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
     queryset = Presentation.objects.prefetch_related('slides').all().order_by('-updated_at')
@@ -1679,8 +1692,15 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
         try:
             from .models import UploadedFile
             file.seek(0)
-            uf = UploadedFile(title=title, owner=request.user if request.user.is_authenticated else None, is_public=True)
-            uf.file.save(file.name, file, save=True)
+            try:
+                _validate_upload(file)
+            except ValueError:
+                pass
+            else:
+                uf = UploadedFile(title=title, owner=request.user if request.user.is_authenticated else None, is_public=is_pub)
+                # сохраняем оригинальное имя без path-traversal
+                safe_name = os.path.basename(file.name)[:100]
+                uf.file.save(safe_name, file, save=True)
         except Exception:
             pass
         return Response(PresentationSerializer(pres, context={'request': request}).data, status=201)
@@ -1691,7 +1711,13 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
         if request.method == 'GET':
             slides = pres.slides.all()
             return Response(SlideSerializer(slides, many=True).data)
-        # POST create slide
+        # POST create slide — только владелец/админ
+        is_admin = request.user.is_authenticated and (request.user.is_staff or getattr(request.user, 'role', None) == 'admin')
+        if pres.owner_id is None:
+            if not is_admin:
+                return Response({'error': 'Нет прав'}, status=403)
+        elif not request.user.is_authenticated or (pres.owner_id != request.user.id and not is_admin):
+            return Response({'error': 'Нет прав'}, status=403)
         data = request.data.copy()
         data['presentation'] = pres.id
         # auto order
@@ -1706,8 +1732,12 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def reorder(self, request, pk=None):
         pres = self.get_object()
-        # проверка владельца
-        if pres.owner and pres.owner != request.user and not (request.user.is_authenticated and (request.user.role == 'admin' or request.user.is_staff)):
+        # проверка владельца (owner=None — только админ)
+        is_admin = request.user.is_authenticated and (getattr(request.user, 'role', None) == 'admin' or request.user.is_staff)
+        if pres.owner_id is None:
+            if not is_admin:
+                return Response({'error':'Нет прав'}, status=403)
+        elif not request.user.is_authenticated or (pres.owner_id != request.user.id and not is_admin):
             return Response({'error':'Нет прав'}, status=403)
         order = request.data.get('order', [])  # list of slide ids
         # валидация: только слайды этой презентации
@@ -1724,20 +1754,38 @@ class SlideViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         pres = serializer.validated_data.get('presentation')
-        if pres and pres.owner and pres.owner != self.request.user and not (self.request.user.is_authenticated and (self.request.user.role == 'admin' or self.request.user.is_staff)):
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied("Нет прав на добавление слайдов")
+        is_admin = self.request.user.is_authenticated and (getattr(self.request.user, 'role', None) == 'admin' or self.request.user.is_staff)
+        if pres is not None:
+            if pres.owner_id is None:
+                if not is_admin:
+                    from rest_framework.exceptions import PermissionDenied
+                    raise PermissionDenied("Нет прав на добавление слайдов")
+            elif not self.request.user.is_authenticated or (pres.owner_id != self.request.user.id and not is_admin):
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Нет прав на добавление слайдов")
         serializer.save()
 
     def perform_update(self, serializer):
         obj = self.get_object()
-        if obj.presentation.owner and obj.presentation.owner != self.request.user and not (self.request.user.is_authenticated and (self.request.user.role == 'admin' or self.request.user.is_staff)):
+        is_admin = self.request.user.is_authenticated and (getattr(self.request.user, 'role', None) == 'admin' or self.request.user.is_staff)
+        owner_id = obj.presentation.owner_id if obj.presentation else None
+        if owner_id is None:
+            if not is_admin:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Нет прав")
+        elif not self.request.user.is_authenticated or (owner_id != self.request.user.id and not is_admin):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Нет прав")
         serializer.save()
 
     def perform_destroy(self, instance):
-        if instance.presentation.owner and instance.presentation.owner != self.request.user and not (self.request.user.is_authenticated and (self.request.user.role == 'admin' or self.request.user.is_staff)):
+        is_admin = self.request.user.is_authenticated and (getattr(self.request.user, 'role', None) == 'admin' or self.request.user.is_staff)
+        owner_id = instance.presentation.owner_id if instance.presentation else None
+        if owner_id is None:
+            if not is_admin:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Нет прав")
+        elif not self.request.user.is_authenticated or (owner_id != self.request.user.id and not is_admin):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Нет прав")
         instance.delete()

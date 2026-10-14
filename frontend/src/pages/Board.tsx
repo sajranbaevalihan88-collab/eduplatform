@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import client from '../api/client'
+import { useLang } from '../context/LangContext'
 import { Save, Trash2, Download, Palette, PenTool, Circle, Square, Triangle, Minus, ArrowRight, Type, Grid3X3, Move, Compass, Orbit, Box, Undo2, Redo2, Plus, Layers, Maximize2 } from 'lucide-react'
 
 type Tool2D = 'pen'|'eraser'|'rect'|'circle'|'ellipse'|'triangle'|'rhombus'|'line'|'arrow'|'text'|'coordinate'|'vector'|'angle'
@@ -7,6 +8,7 @@ type Tool3D = 'cube3d'|'sphere3d'|'cylinder3d'|'cone3d'|'pyramid3d'|'prism3d'|'p
 type Tool = Tool2D | Tool3D
 
 export default function Board(){
+  const {t}=useLang()
   const canvasRef=useRef<HTMLCanvasElement>(null)
   const containerRef=useRef<HTMLDivElement>(null)
   const [mode,setMode]=useState<'2d'|'3d'>('2d')
@@ -19,7 +21,7 @@ export default function Board(){
   const [startPos,setStartPos]=useState<{x:number,y:number}|null>(null)
   const [snapshot,setSnapshot]=useState<ImageData|null>(null)
   const [boards,setBoards]=useState<any[]>([])
-  const [title,setTitle]=useState('Новая доска')
+  const [title,setTitle]=useState(t('board_new'))
   const [isFullscreen,setIsFullscreen]=useState(false)
   const [hideRight,setHideRight]=useState(false)
   const [hideSidebarLocal,setHideSidebarLocal]=useState(false)
@@ -318,7 +320,7 @@ export default function Board(){
     } else if(tool==='pen' || tool==='eraser'){
       ctx.beginPath(); ctx.moveTo(p.x,p.y)
     } else if(tool==='text'){
-      const txt=prompt('Текст:')
+      const txt=prompt(t('board_text_prompt'))
       if(txt){ ctx.fillStyle=color; ctx.font='18px Inter'; ctx.fillText(txt, p.x, p.y); pushHistory() }
       setDrawing(false)
     }
@@ -364,23 +366,23 @@ export default function Board(){
     const c=canvasRef.current!
     // ensure current page saved
     const currentData=c.toDataURL('image/png')
-    if (!currentData.startsWith('data:image/png')) { alert('Только PNG'); return; }
+    if (!currentData.startsWith('data:image/png')) { alert(t('board_png_only')); return; }
     const allPages = [...pages]
     allPages[currentPage]=currentData
     // check total size (approx)
     const totalLen = allPages.join('').length
-    if (totalLen > 4_000_000) { alert('Слишком много листов или большие — удали часть'); return; }
-    if (currentData.length > 800000) { alert('Слишком большая доска, очисти часть'); return; }
+    if (totalLen > 4_000_000) { alert(t('board_too_many')); return; }
+    if (currentData.length > 800000) { alert(t('board_too_big')); return; }
     setPages(allPages)
     try {
       await client.post('/boards/',{title: title.slice(0,100), data:{image: currentData, images: allPages, mode, pages: allPages.length, currentPage}})
       // also update local
       const { toast } = await import('../context/UIContext')
-      toast('Доска сохранена — личная, видна только тебе', 'success')
+      toast(t('board_saved'), 'success')
       client.get('/boards/').then(r=>setBoards(Array.isArray(r.data)?r.data:r.data.results||[]))
     } catch(e:any){ 
       const { toast } = await import('../context/UIContext')
-      toast(e.response?.data?.detail || e.response?.data?.[0] || 'Ошибка сохранения — войди снова', 'error')
+      toast(e.response?.data?.detail || e.response?.data?.[0] || t('board_save_err'), 'error')
     }
   }
   const download=()=>{
@@ -434,10 +436,10 @@ export default function Board(){
 
   const newBoard=()=>{
     // новая пустая доска — текущую лучше сохранить кнопкой Сохранить
-    if(historyIdx>0 && !confirm('Создать новую доску? Текущий рисунок будет очищен. Сначала сохрани его кнопкой «Сохранить», если он нужен.')) return
+    if(historyIdx>0 && !confirm(t('board_new_confirm'))) return
     setPages([null])
     setCurrentPage(0)
-    setTitle('Новая доска')
+    setTitle(t('board_new'))
     setTimeout(()=>initCanvas(),50)
     window.scrollTo({top:0, behavior:'smooth'})
   }
@@ -474,11 +476,11 @@ export default function Board(){
     return (
       <div className="fixed inset-0 z-50 bg-white flex flex-col">
         <div className="h-12 bg-slate-900 text-white flex items-center gap-3 px-4">
-          <span className="font-bold">Доска — полноэкранный режим</span>
-          <span className="text-xs text-white/70 hidden sm:inline">{title} • Лист {currentPage+1}/{pages.length} • {mode==='2d'?'2D':'3D'}</span>
+          <span className="font-bold">{t('board_fullscreen')}</span>
+          <span className="text-xs text-white/70 hidden sm:inline">{title} • {t('board_sheet')} {currentPage+1}/{pages.length} • {mode==='2d'?'2D':'3D'}</span>
           <div className="ml-auto flex gap-2">
-            <button onClick={()=>setIsFullscreen(false)} className="px-4 py-1.5 rounded-lg bg-white text-slate-900 font-bold">✕ Выйти (Esc)</button>
-            <button onClick={save} className="px-4 py-1.5 rounded-lg bg-violet-600 text-white font-bold flex items-center gap-1"><Save size={14}/> Сохранить</button>
+            <button onClick={()=>setIsFullscreen(false)} className="px-4 py-1.5 rounded-lg bg-white text-slate-900 font-bold">{t('board_exit_esc')}</button>
+            <button onClick={save} className="px-4 py-1.5 rounded-lg bg-blue-600 text-white font-bold flex items-center gap-1"><Save size={14}/> {t('save')}</button>
           </div>
         </div>
         <div className="flex-1 overflow-auto bg-[#e9e9e9] p-2 flex flex-col">
@@ -487,16 +489,16 @@ export default function Board(){
           </div>
           <div className="bg-white border-t p-2 flex flex-wrap gap-2 items-center justify-between">
             <div className="flex gap-1 p-1 rounded-xl bg-slate-100">
-              {(mode==='2d' ? [['pen','Перо',PenTool],['eraser','Ластик',Trash2],['rect','Прямоуг',Square],['circle','Круг',Circle],['triangle','Треуг',Triangle],['line','Линия',Minus],['arrow','Стрелка',ArrowRight],['text','Текст',Type]] : [['cube3d','Куб',Box],['sphere3d','Шар',Circle],['cylinder3d','Цилиндр',Box],['cone3d','Конус',Triangle],['pen','Перо',PenTool]]).map(([t,label,Icon]:any)=>(
-                <button key={t} onClick={()=>setTool(t as Tool)} className={`px-3 py-2 rounded-lg text-sm font-medium flex flex-col items-center gap-1 min-w-[56px] ${tool===t?'bg-violet-600 text-white':'hover:bg-white'}`}><Icon size={16}/><span className="text-[10px]">{label}</span></button>
+              {(mode==='2d' ? [['pen',t('board_tool_pen'),PenTool],['eraser',t('board_tool_eraser'),Trash2],['rect',t('board_tool_rect'),Square],['circle',t('board_tool_circle'),Circle],['triangle',t('board_tool_triangle'),Triangle],['line',t('board_tool_line'),Minus],['arrow',t('board_tool_arrow'),ArrowRight],['text',t('board_tool_text'),Type]] : [['cube3d',t('board_tool_cube'),Box],['sphere3d',t('board_tool_sphere'),Circle],['cylinder3d',t('board_tool_cyl'),Box],['cone3d',t('board_tool_cone'),Triangle],['pen',t('board_tool_pen'),PenTool]]).map(([t,label,Icon]:any)=>(
+                <button key={t} onClick={()=>setTool(t as Tool)} className={`px-3 py-2 rounded-lg text-sm font-medium flex flex-col items-center gap-1 min-w-[56px] ${tool===t?'bg-blue-600 text-white':'hover:bg-white'}`}><Icon size={16}/><span className="text-[10px]">{label}</span></button>
               ))}
             </div>
             <div className="flex gap-2">
-              <button onClick={newBoard} className="px-3 py-2 rounded-lg bg-emerald-600 text-white font-bold flex items-center gap-1 text-sm"><Plus size={16}/> Новая доска</button>
-              <button onClick={undo} className="p-2 rounded-lg bg-slate-100"><Undo2 size={16}/></button>
-              <button onClick={redo} className="p-2 rounded-lg bg-slate-100"><Redo2 size={16}/></button>
-              <button onClick={clear} className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700">Очистить</button>
-              <button onClick={()=>setIsFullscreen(false)} className="px-3 py-2 rounded-lg bg-slate-900 text-white">Выйти</button>
+              <button onClick={newBoard} className="px-3 py-2 rounded-lg bg-emerald-600 text-white font-bold flex items-center gap-1 text-sm"><Plus size={16}/> {t('board_new')}</button>
+              <button onClick={undo} aria-label={t('board_undo')} className="p-2 rounded-lg bg-slate-100"><Undo2 size={16}/></button>
+              <button onClick={redo} aria-label={t('board_redo')} className="p-2 rounded-lg bg-slate-100"><Redo2 size={16}/></button>
+              <button onClick={clear} className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700">{t('board_clear')}</button>
+              <button onClick={()=>setIsFullscreen(false)} className="px-3 py-2 rounded-lg bg-slate-900 text-white">{t('board_exit')}</button>
             </div>
           </div>
         </div>
@@ -507,28 +509,28 @@ export default function Board(){
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3 animate-fadeIn">
-        <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white"><PenTool size={20}/></span> Доска 2D/3D <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{boards.length}</span></h1>
+        <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white"><PenTool size={20}/></span> {t('board')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{boards.length}</span></h1>
         <input value={title} onChange={e=>setTitle(e.target.value)} className="px-4 py-2 rounded-xl border bg-white font-medium min-w-[160px]"/>
         <div className="flex p-1 rounded-xl bg-slate-100">
-          <button onClick={()=>setMode('2d')} className={`px-4 py-2 rounded-lg text-sm font-bold ${mode==='2d'?'bg-white shadow':'text-slate-500'}`}>2D Геометрия</button>
-          <button onClick={()=>setMode('3d')} className={`px-4 py-2 rounded-lg text-sm font-bold ${mode==='3d'?'bg-white shadow':'text-slate-500'}`}>3D Стереометрия</button>
+          <button onClick={()=>setMode('2d')} className={`px-4 py-2 rounded-lg text-sm font-bold ${mode==='2d'?'bg-white shadow':'text-slate-500'}`}>{t('board_2d')}</button>
+          <button onClick={()=>setMode('3d')} className={`px-4 py-2 rounded-lg text-sm font-bold ${mode==='3d'?'bg-white shadow':'text-slate-500'}`}>{t('board_3d')}</button>
         </div>
         <div className="flex items-center gap-1 ml-auto flex-wrap">
-          <button onClick={toggleSidebar} className={`px-3 py-2 rounded-xl border text-sm font-medium ${hideSidebarLocal?'bg-amber-100 border-amber-300 text-amber-700':'bg-white hover:bg-slate-50'}`}>{hideSidebarLocal?'Показать меню':'Скрыть вкладки'}</button>
-          <button onClick={()=>setHideRight(v=>!v)} className={`px-3 py-2 rounded-xl border text-sm font-medium ${hideRight?'bg-violet-100 border-violet-300':'bg-white'}`}>{hideRight?'Показать панель':'Скрыть справа'}</button>
-          <span className="text-xs text-slate-500">Стр {currentPage+1}/{pages.length}</span>
-          <button onClick={addPage} className="px-3 py-2 rounded-xl bg-emerald-600 text-white font-bold flex items-center gap-1"><Plus size={16}/> + Лист</button>
-          <button onClick={save} className="px-4 py-2 rounded-xl bg-violet-600 text-white font-semibold flex items-center gap-2"><Save size={16}/> Сохранить</button>
-          <button onClick={()=>setIsFullscreen(true)} className="px-3 py-2 rounded-xl bg-slate-900 text-white flex items-center gap-1 text-sm"><Maximize2 size={16}/> На весь экран</button>
+          <button onClick={toggleSidebar} className={`px-3 py-2 rounded-xl border text-sm font-medium ${hideSidebarLocal?'bg-amber-100 border-amber-300 text-amber-700':'bg-white hover:bg-slate-50'}`}>{hideSidebarLocal?t('board_show_menu'):t('board_hide_tabs')}</button>
+          <button onClick={()=>setHideRight(v=>!v)} className={`px-3 py-2 rounded-xl border text-sm font-medium ${hideRight?'bg-blue-100 border-blue-300':'bg-white'}`}>{hideRight?t('board_show_panel'):t('board_hide_right')}</button>
+          <span className="text-xs text-slate-500">{t('board_page')} {currentPage+1}/{pages.length}</span>
+          <button onClick={addPage} className="px-3 py-2 rounded-xl bg-emerald-600 text-white font-bold flex items-center gap-1"><Plus size={16}/> {t('board_add_sheet')}</button>
+          <button onClick={save} className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold flex items-center gap-2"><Save size={16}/> {t('save')}</button>
+          <button onClick={()=>setIsFullscreen(true)} className="px-3 py-2 rounded-xl bg-slate-900 text-white flex items-center gap-1 text-sm"><Maximize2 size={16}/> {t('board_fullscreen_btn')}</button>
         </div>
       </div>
 
       {/* страниц навигация */}
       <div className="flex gap-2 overflow-auto pb-1">
         {pages.map((_,idx)=>(
-          <button key={idx} onClick={()=>switchPage(idx)} className={`px-4 py-2 rounded-xl border text-sm font-bold whitespace-nowrap ${idx===currentPage?'bg-slate-900 text-white border-slate-900':'bg-white hover:bg-slate-50'}`}>Лист {idx+1}</button>
+          <button key={idx} onClick={()=>switchPage(idx)} className={`px-4 py-2 rounded-xl border text-sm font-bold whitespace-nowrap ${idx===currentPage?'bg-slate-900 text-white border-slate-900':'bg-white hover:bg-slate-50'}`}>{t('board_sheet')} {idx+1}</button>
         ))}
-        <button onClick={addPage} className="px-3 py-2 rounded-xl bg-white border border-dashed flex items-center gap-1 text-sm"><Plus size={14}/> Добавить</button>
+        <button onClick={addPage} className="px-3 py-2 rounded-xl bg-white border border-dashed flex items-center gap-1 text-sm"><Plus size={14}/> {t('add')}</button>
       </div>
 
       {/* холст пошире */}
@@ -543,8 +545,8 @@ export default function Board(){
           />
         </div>
         <div className="text-xs text-slate-500 mt-2 flex gap-4 px-2">
-          <span>💡 Тяни — размер без лимита. Широкая доска 1400×640, скролль горизонтально.</span>
-          <span className="hidden lg:inline">🧊 3D: куб/шар/цилиндр/пирамида — для стереометрии и орбит</span>
+          <span>{t('board_hint_a')}</span>
+          <span className="hidden lg:inline">{t('board_hint_b')}</span>
         </div>
       </div>
 
@@ -554,48 +556,48 @@ export default function Board(){
           <div className="flex flex-wrap gap-2 items-center">
             <div className="flex gap-1 p-1 rounded-xl bg-slate-100 overflow-auto">
               {([
-                ['pen','Перо',PenTool],
-                ['eraser','Ластик',Trash2],
-                ['rect','Прямоуг',Square],
-                ['circle','Круг',Circle],
-                ['ellipse','Эллипс',Orbit],
-                ['triangle','Треуг',Triangle],
-                ['rhombus','Ромб',Square],
-                ['line','Линия',Minus],
-                ['arrow','Стрелка',ArrowRight],
-                ['vector','Вектор',Move],
-                ['text','Текст',Type],
-                ['coordinate','Коорд',Grid3X3],
-                ['angle','Угол',Compass],
+                ['pen',t('board_tool_pen'),PenTool],
+                ['eraser',t('board_tool_eraser'),Trash2],
+                ['rect',t('board_tool_rect'),Square],
+                ['circle',t('board_tool_circle'),Circle],
+                ['ellipse',t('board_tool_ellipse'),Orbit],
+                ['triangle',t('board_tool_triangle'),Triangle],
+                ['rhombus',t('board_tool_rhombus'),Square],
+                ['line',t('board_tool_line'),Minus],
+                ['arrow',t('board_tool_arrow'),ArrowRight],
+                ['vector',t('board_tool_vector'),Move],
+                ['text',t('board_tool_text'),Type],
+                ['coordinate',t('board_tool_coord'),Grid3X3],
+                ['angle',t('board_tool_angle'),Compass],
               ] as const).map(([t,label,Icon])=>(
-                <button key={t} onClick={()=>setTool(t as Tool)} className={`px-3 py-2.5 rounded-xl text-sm font-medium flex flex-col items-center gap-1 min-w-[64px] min-h-[56px] ${tool===t?'bg-white shadow border border-violet-200 text-violet-700':'bg-transparent hover:bg-white'}`} title={label}><Icon size={18}/><span className="text-[11px]">{label}</span></button>
+                <button key={t} onClick={()=>setTool(t as Tool)} className={`px-3 py-2.5 rounded-xl text-sm font-medium flex flex-col items-center gap-1 min-w-[64px] min-h-[56px] ${tool===t?'bg-white shadow border border-blue-200 text-blue-700':'bg-transparent hover:bg-white'}`} title={label}><Icon size={18}/><span className="text-[11px]">{label}</span></button>
               ))}
             </div>
             <div className="flex items-center gap-2 ml-auto flex-wrap">
               <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border">
                 <Palette size={16} className="text-slate-400"/>
-                <input type="color" value={color} onChange={e=>setColor(e.target.value)} className="w-9 h-9 rounded-lg border" title="Контур"/>
-                <input type="color" value={fill} onChange={e=>setFill(e.target.value)} className="w-9 h-9 rounded-lg border" title="Заливка"/>
+                <input type="color" value={color} onChange={e=>setColor(e.target.value)} className="w-9 h-9 rounded-lg border" title={t('board_stroke')}/>
+                <input type="color" value={fill} onChange={e=>setFill(e.target.value)} className="w-9 h-9 rounded-lg border" title={t('board_fill')}/>
                 <input type="range" min={1} max={24} value={width} onChange={e=>setWidth(parseInt(e.target.value))} className="w-24"/>
                 <span className="text-sm w-8">{width}</span>
               </div>
-              <label className="flex items-center gap-1 text-sm px-2 py-2 rounded-xl bg-slate-50 border cursor-pointer"><input type="checkbox" checked={grid} onChange={e=>{setGrid(e.target.checked); setTimeout(()=>initCanvas(),50)}}/> Сетка</label>
+              <label className="flex items-center gap-1 text-sm px-2 py-2 rounded-xl bg-slate-50 border cursor-pointer"><input type="checkbox" checked={grid} onChange={e=>{setGrid(e.target.checked); setTimeout(()=>initCanvas(),50)}}/> {t('board_grid')}</label>
             </div>
           </div>
         ) : (
           <div className="flex flex-wrap gap-2 items-center">
             <div className="flex gap-1 p-1 rounded-xl bg-slate-900 text-white overflow-auto">
               {([
-                ['cube3d','Куб',Box],
-                ['sphere3d','Шар',Circle],
-                ['cylinder3d','Цилиндр',Box],
-                ['cone3d','Конус',Triangle],
-                ['pyramid3d','Пирамида',Triangle],
-                ['prism3d','Призма',Box],
-                ['plane3d','Плоск',Square],
-                ['orbit','Орбита',Orbit],
-                ['axis3d','Оси',Grid3X3],
-                ['pen','Перо',Move],
+                ['cube3d',t('board_tool_cube'),Box],
+                ['sphere3d',t('board_tool_sphere'),Circle],
+                ['cylinder3d',t('board_tool_cyl'),Box],
+                ['cone3d',t('board_tool_cone'),Triangle],
+                ['pyramid3d',t('board_tool_pyramid'),Triangle],
+                ['prism3d',t('board_tool_prism'),Box],
+                ['plane3d',t('board_tool_plane'),Square],
+                ['orbit',t('board_tool_orbit'),Orbit],
+                ['axis3d',t('board_tool_axis'),Grid3X3],
+                ['pen',t('board_tool_pen'),Move],
               ] as const).map(([t,label,Icon])=>(
                 <button key={t} onClick={()=>setTool(t as Tool)} className={`px-3 py-2.5 rounded-xl text-sm font-medium flex flex-col items-center gap-1 min-w-[64px] min-h-[56px] ${tool===t?'bg-white text-slate-900':'hover:bg-white/10'}`}><Icon size={18}/><span className="text-[11px]">{label}</span></button>
               ))}
@@ -609,53 +611,53 @@ export default function Board(){
         )}
         <div className="flex flex-wrap gap-2 items-center justify-between pt-2 border-t">
           <div className="flex gap-2 flex-wrap">
-            <button onClick={newBoard} className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white flex items-center gap-2 text-sm font-bold min-h-[44px] hover:bg-emerald-700" title="Начать пустую доску"><Plus size={18}/> Новая доска</button>
-            <button onClick={undo} disabled={historyIdx<=0} className="px-4 py-2.5 rounded-xl bg-slate-100 flex items-center gap-2 text-sm font-medium disabled:opacity-40 min-h-[44px]"><Undo2 size={18}/> Назад</button>
-            <button onClick={redo} disabled={historyIdx>=history.length-1} className="px-4 py-2.5 rounded-xl bg-slate-100 flex items-center gap-2 text-sm font-medium disabled:opacity-40 min-h-[44px]"><Redo2 size={18}/> Вперед</button>
-            <button onClick={clear} className="px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center gap-2 text-sm font-medium min-h-[44px]"><Trash2 size={18}/> Очистить лист</button>
+            <button onClick={newBoard} className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white flex items-center gap-2 text-sm font-bold min-h-[44px] hover:bg-emerald-700" title={t('board_new_hint')}><Plus size={18}/> {t('board_new')}</button>
+            <button onClick={undo} disabled={historyIdx<=0} className="px-4 py-2.5 rounded-xl bg-slate-100 flex items-center gap-2 text-sm font-medium disabled:opacity-40 min-h-[44px]"><Undo2 size={18}/> {t('back')}</button>
+            <button onClick={redo} disabled={historyIdx>=history.length-1} className="px-4 py-2.5 rounded-xl bg-slate-100 flex items-center gap-2 text-sm font-medium disabled:opacity-40 min-h-[44px]"><Redo2 size={18}/> {t('board_next')}</button>
+            <button onClick={clear} className="px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center gap-2 text-sm font-medium min-h-[44px]"><Trash2 size={18}/> {t('board_clear_sheet')}</button>
           </div>
           <div className="flex gap-2">
-            <button onClick={download} className="px-4 py-2.5 rounded-xl bg-slate-900 text-white flex items-center gap-2 text-sm font-medium min-h-[44px]"><Download size={18}/> Скачать PNG</button>
-            <button onClick={()=>setIsFullscreen(true)} className="px-3 py-2.5 rounded-xl bg-violet-600 text-white border text-sm hidden sm:flex items-center gap-1"><Maximize2 size={16}/> На весь экран</button>
+            <button onClick={download} className="px-4 py-2.5 rounded-xl bg-slate-900 text-white flex items-center gap-2 text-sm font-medium min-h-[44px]"><Download size={18}/> {t('board_download')}</button>
+            <button onClick={()=>setIsFullscreen(true)} className="px-3 py-2.5 rounded-xl bg-blue-600 text-white border text-sm hidden sm:flex items-center gap-1"><Maximize2 size={16}/> {t('board_fullscreen_btn')}</button>
           </div>
         </div>
-        <div className="text-xs text-center text-slate-500">Кнопки внизу — удобно для интерактивной доски (сенсор). Тяни фигуру на весь экран — без лимита.</div>
+        <div className="text-xs text-center text-slate-500">{t('board_bottom_hint')}</div>
       </div>
 
       {!hideRight && (
       <div className="grid lg:grid-cols-[1fr_300px] gap-4">
         <div className="bg-white rounded-2xl border p-4 h-fit">
-          <h3 className="font-bold">Листы внутри доски</h3>
-          <div className="text-xs text-slate-500">Кнопка + добавляет лист, всё сохраняется.</div>
+          <h3 className="font-bold">{t('board_sheets_in')}</h3>
+          <div className="text-xs text-slate-500">{t('board_sheets_hint')}</div>
           <div className="flex gap-2 mt-3">
             {pages.map((_,idx)=>(
-              <button key={idx} onClick={()=>switchPage(idx)} className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center font-bold ${idx===currentPage?'bg-violet-600 text-white border-violet-600':'bg-white'}`}>{idx+1}</button>
+              <button key={idx} onClick={()=>switchPage(idx)} className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center font-bold ${idx===currentPage?'bg-blue-600 text-white border-blue-600':'bg-white'}`}>{idx+1}</button>
             ))}
             <button onClick={addPage} className="w-12 h-12 rounded-xl border-2 border-dashed flex items-center justify-center"><Plus size={16}/></button>
           </div>
         </div>
         <div className="bg-white rounded-2xl border p-4 space-y-3 h-fit">
           <div className="flex items-center justify-between">
-            <h3 className="font-bold">Мои сохранённые доски</h3>
-            <button onClick={()=>setHideRight(true)} className="text-xs px-2 py-1 rounded-lg bg-slate-100">Скрыть →</button>
+            <h3 className="font-bold">{t('board_mine')}</h3>
+            <button onClick={()=>setHideRight(true)} className="text-xs px-2 py-1 rounded-lg bg-slate-100">{t('board_hide')}</button>
           </div>
-          <div className="text-xs text-slate-500">Приватно — только ты. После сохранения появится здесь.</div>
+          <div className="text-xs text-slate-500">{t('board_private_hint')}</div>
           <div className="space-y-2 max-h-[320px] overflow-auto">
             {boards.map(b=>(
               <button key={b.id} onClick={()=>loadBoard(b)} className="w-full text-left p-3 rounded-xl bg-slate-50 border hover:bg-white hover:shadow">
                 <div className="font-medium text-sm line-clamp-1">{b.title}</div>
-                <div className="text-xs text-slate-500">{new Date(b.created_at).toLocaleDateString()} • {b.data?.mode||'2d'} • {b.data?.pages||1} стр</div>
+                <div className="text-xs text-slate-500">{new Date(b.created_at).toLocaleDateString()} • {b.data?.mode||'2d'} • {b.data?.pages||1} {t('board_pages_short')}</div>
                 {b.data?.image && b.data.image.startsWith('data:image/png') && <img src={b.data.image} className="mt-2 rounded-lg border w-full" referrerPolicy="no-referrer"/>}
               </button>
             ))}
-            {boards.length===0 && <div className="text-sm text-slate-400 text-center py-6">Нет сохранённых — нарисуй и нажми Сохранить</div>}
+            {boards.length===0 && <div className="text-sm text-slate-400 text-center py-6">{t('board_empty_a')}{t('save')}</div>}
           </div>
         </div>
       </div>
       )}
       {hideRight && (
         <div className="text-center">
-          <button onClick={()=>setHideRight(false)} className="px-4 py-2 rounded-xl bg-white border text-sm">Показать боковую панель →</button>
+          <button onClick={()=>setHideRight(false)} className="px-4 py-2 rounded-xl bg-white border text-sm">{t('board_show_side')}</button>
         </div>
       )}
     </div>

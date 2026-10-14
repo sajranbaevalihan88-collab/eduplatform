@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useAccessibility } from '../context/UIContext'
+import { useLang } from '../context/LangContext'
 import client from '../api/client'
 import { WORD_PACKS, shuffle, wordsFromText } from '../utils/words'
 import { playGameSound, playTypeSound } from '../utils/sound'
@@ -8,6 +9,7 @@ import { RotateCcw, Trophy, MousePointerClick } from 'lucide-react'
 type Src = 'ru' | 'kg' | 'en' | 'custom' | 'lesson'
 
 export default function Sprint() {
+  const {t}=useLang()
   const { speak } = useAccessibility()
   const [mode, setMode] = useState(60)
   const [src, setSrc] = useState<Src>('ru')
@@ -264,17 +266,17 @@ export default function Sprint() {
           <div><div className="font-display font-bold text-6xl dark:text-white">{wpm}</div><div className="text-slate-400 text-sm">wpm</div></div>
           <div><div className="font-display font-bold text-6xl dark:text-white">{acc}<span className="text-2xl">%</span></div><div className="text-slate-400 text-sm">acc</div></div>
         </div>
-        <div className="text-slate-500 dark:text-slate-400">символы {correctChars}/{totalChars} • {mode}с</div>
-        <div><button onClick={() => speak(`Финиш. Скорость ${wpm} слов в минуту, точность ${acc} процентов.`)} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white text-sm font-bold" aria-label="Озвучить результат">🔊 Озвучить результат</button></div>
-        {isRecord && <div className="font-bold text-amber-600">Новый рекорд режима {mode}с!</div>}
+        <div className="text-slate-500 dark:text-slate-400">{t('sprint_chars')} {correctChars}/{totalChars} • {mode}{t('sprint_sec')}</div>
+        <div><button onClick={() => speak(`${t('sprint_finish_a')} ${wpm} ${t('sprint_finish_b')} ${acc} ${t('sprint_finish_c')}`)} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white text-sm font-bold" aria-label={t('sprint_speak_res_aria')}>{t('sprint_speak_res')}</button></div>
+        {isRecord && <div className="font-bold text-amber-600">{t('sprint_record_a')} {mode}{t('sprint_sec')}!</div>}
         {wpm >= ghostWpm
-          ? <div className="font-bold text-emerald-600">Ты обогнал автора (71)! Легенда ⌨️</div>
-          : <div className="text-slate-500 dark:text-slate-400">До автора (71 WPM) не хватило {ghostWpm - wpm}. Ещё круг?</div>}
+          ? <div className="font-bold text-emerald-600">{t('sprint_beat')}</div>
+          : <div className="text-slate-500 dark:text-slate-400">{t('sprint_miss_a')} {ghostWpm - wpm}{t('sprint_miss_b')}</div>}
         <div className="flex gap-3 justify-center">
-          <button onClick={() => start()} autoFocus className="px-6 py-3 min-h-[56px] rounded-2xl bg-violet-600 text-white font-bold flex items-center gap-2">
-            <RotateCcw size={18} /> Ещё раз (Enter)
+          <button onClick={() => start()} autoFocus className="px-6 py-3 min-h-[56px] rounded-2xl bg-blue-600 text-white font-bold flex items-center gap-2">
+            <RotateCcw size={18} /> {t('sprint_again')}
           </button>
-          <a href="/games" className="px-6 py-3 min-h-[56px] rounded-2xl bg-white border dark:bg-slate-800 dark:text-white dark:border-slate-700 font-bold">К играм</a>
+          <a href="/games" className="px-6 py-3 min-h-[56px] rounded-2xl bg-white border dark:bg-slate-800 dark:text-white dark:border-slate-700 font-bold">{t('sprint_to_games')}</a>
         </div>
       </div>
     )
@@ -282,42 +284,42 @@ export default function Sprint() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">
-      <h1 className="sr-only">Спринт печати — скорость набора</h1>
-      <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-violet-600 dark:text-violet-400">
-        ← К играм
+      <h1 className="sr-only">{t('sprint_sr')}</h1>
+      <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 dark:text-blue-400">
+        {t('sprint_to_games_arrow')}
       </a>
       <div className="flex flex-wrap items-center gap-2">
         {[15, 30, 60].map(m => (
           <button key={m} onClick={() => { setMode(m); start(m) }}
-            className={`px-4 py-2.5 min-h-[48px] rounded-xl font-bold ${mode === m ? 'bg-violet-600 text-white' : 'bg-white dark:bg-slate-800 dark:text-white border dark:border-slate-700'}`}>{m}с</button>
+            className={`px-4 py-2.5 min-h-[48px] rounded-xl font-bold ${mode === m ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-800 dark:text-white border dark:border-slate-700'}`}>{m}{t('sprint_sec')}</button>
         ))}
-        <select value={src} onChange={e => setSrc(e.target.value as Src)} aria-label="Набор слов"
+        <select value={src} onChange={e => setSrc(e.target.value as Src)} aria-label={t('sprint_words_aria')}
           className="px-3 py-2.5 min-h-[48px] rounded-xl border bg-white text-slate-900 dark:bg-slate-800 dark:text-white dark:[color-scheme:dark] font-bold">
-          <option value="ru">Русские</option>
-          <option value="kg">Кыргызча</option>
-          <option value="en">English</option>
-          <option value="custom">Свои слова</option>
-          <option value="lesson">Из моего урока</option>
+          <option value="ru">{t('sprint_ru')}</option>
+          <option value="kg">{t('sprint_kg')}</option>
+          <option value="en">{t('sprint_en')}</option>
+          <option value="custom">{t('sprint_custom')}</option>
+          <option value="lesson">{t('sprint_from_lesson')}</option>
         </select>
         <label className="flex items-center gap-2 text-sm font-bold dark:text-slate-200">
           <button onClick={() => setGhost(g => !g)} aria-pressed={ghost}
-            className={`w-12 h-7 rounded-full transition ${ghost ? 'bg-violet-600' : 'bg-slate-300'} relative`}>
+            className={`w-12 h-7 rounded-full transition ${ghost ? 'bg-blue-600' : 'bg-slate-300'} relative`}>
             <span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${ghost ? 'left-6' : 'left-1'}`} />
           </button>
-          Призрак 71
+          {t('sprint_ghost')}
         </label>
         <span className="ml-auto font-mono font-bold text-3xl dark:text-white" role="timer">{left}</span>
         {best[mode] !== undefined && <span className="text-sm font-bold text-amber-600 flex items-center gap-1"><Trophy size={15} /> {best[mode]}</span>}
       </div>
 
       {src === 'custom' && (
-        <textarea value={custom} onChange={e => setCustom(e.target.value)} placeholder="Свои слова через пробел (мин 10)..."
+        <textarea value={custom} onChange={e => setCustom(e.target.value)} placeholder={t('sprint_custom_ph')}
           className="w-full h-20 px-3 py-2 rounded-xl border bg-white dark:bg-slate-800 dark:text-white text-sm" />
       )}
       {src === 'lesson' && (
-        <select value={lessonId} onChange={e => setLessonId(e.target.value)} aria-label="Урок"
+        <select value={lessonId} onChange={e => setLessonId(e.target.value)} aria-label={t('sprint_lesson_aria')}
           className="w-full px-3 py-2.5 min-h-[48px] rounded-xl border bg-white text-slate-900 dark:bg-slate-800 dark:text-white dark:[color-scheme:dark]">
-          <option value="">Выбери урок…</option>
+          <option value="">{t('sprint_pick_lesson')}</option>
           {lessons.map((l: any) => <option key={l.id} value={l.id}>{l.title}</option>)}
         </select>
       )}
@@ -325,14 +327,14 @@ export default function Sprint() {
       <div className="bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-5 sm:p-8 relative"
         onClick={() => inputRef.current?.focus()}>
         {loading ? (
-          <div className="text-center text-slate-400 py-10">Готовлю слова…</div>
+          <div className="text-center text-slate-400 py-10">{t('sprint_preparing')}</div>
         ) : (
           <>
             <div className="overflow-hidden" style={{ height: 3 * 48 }}>
               <div ref={wrapRef} className="relative text-2xl sm:text-3xl leading-[48px] font-medium select-none transition-transform duration-150"
                 style={{ transform: `translateY(${-shiftY}px)` }}>
                 {words.map((w, i) => renderWord(w, i))}
-                <div className="mt-caret bg-violet-600" style={{
+                <div className="mt-caret bg-blue-600" style={{
                   position: 'absolute', left: caret.left, top: caret.top,
                   width: 3, height: caret.h, borderRadius: 2,
                 }} />
@@ -345,12 +347,12 @@ export default function Sprint() {
               onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
               onKeyDown={e => { if (e.key === 'Tab') { e.preventDefault(); start() } }}
               autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false}
-              aria-label="Печатай слова"
+              aria-label={t('sprint_type_aria')}
               className="absolute opacity-0 pointer-events-none w-px h-px" />
             {!focused && started && (
               <button onClick={() => inputRef.current?.focus()}
                 className="absolute inset-0 rounded-2xl bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm flex items-center justify-center gap-2 font-bold text-lg dark:text-white">
-                <MousePointerClick size={22} /> Кликни чтобы продолжить
+                <MousePointerClick size={22} /> {t('sprint_click_continue')}
               </button>
             )}
           </>
@@ -358,9 +360,9 @@ export default function Sprint() {
       </div>
 
       <div className="flex items-center gap-4 text-lg font-bold dark:text-white" aria-live="polite">
-        <span>WPM: {wpm}</span>
-        <span>Точность: {acc}%</span>
-        <span className="text-sm font-normal text-slate-400">tab — заново</span>
+        <span>{t('sprint_wpm')} {wpm}</span>
+        <span>{t('sprint_acc')} {acc}%</span>
+        <span className="text-sm font-normal text-slate-400">{t('sprint_tab')}</span>
       </div>
     </div>
   )

@@ -25,6 +25,12 @@ export function isStudent(): boolean {
   return getRole() === 'student'
 }
 
+export function isGuest(): boolean {
+  try {
+    return !(localStorage.getItem('token') || localStorage.getItem('access'))
+  } catch { return true }
+}
+
 export function canTeach(): boolean {
   const r = getRole()
   return r === 'teacher' || r === 'admin'

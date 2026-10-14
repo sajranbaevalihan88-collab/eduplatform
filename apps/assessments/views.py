@@ -85,8 +85,12 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny], throttle_classes=[throttling.AnonRateThrottle, throttling.UserRateThrottle])
     def submit(self, request, pk=None):
+        from django.db import transaction
+        import logging
+        logger = logging.getLogger(__name__)
         test = self.get_object()
         # Только одна попытка для авторизованных — как просили "только один раз и всё"
+        # (двойная защита: проверка + транзакция + unique на уровне приложения)
         if request.user.is_authenticated and TestAttempt.objects.filter(test=test, user=request.user).exists():
             return Response({'error':'Вы уже проходили этот тест. Повторное прохождение запрещено — только один раз.', 'already_attempted': True}, status=403)
         answers = request.data.get('answers', {})
@@ -98,48 +102,91 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
         total = 0
         earned = 0
         details = []
-        for q in test.questions.all():
+        # используем prefetched options из queryset (prefetch_related), без N+1
+        questions = list(test.questions.all())
+        # собрать все options одним запросом
+        from .models import AnswerOption
+        q_ids = [q.id for q in questions]
+        opts_by_q = {}
+        if q_ids:
+            for opt in AnswerOption.objects.filter(question_id__in=q_ids).only('id', 'question_id', 'is_correct', 'text'):
+                opts_by_q.setdefault(opt.question_id, []).append(opt)
+        for q in questions:
             total += q.points
-            user_answer = answers.get(str(q.id)) or answers.get(q.id)
+            # явная проверка ключей: ответ 0/""/[] не должен теряться через `or`
+            key_str, key_int = str(q.id), q.id
+            if key_str in answers:
+                user_answer = answers[key_str]
+            elif key_int in answers:
+                user_answer = answers[key_int]
+            else:
+                user_answer = None
             is_correct = False
             try:
+                q_opts = opts_by_q.get(q.id, [])
                 if q.type == 'single':
-                    correct = list(q.options.filter(is_correct=True).values_list('id', flat=True))
-                    if user_answer is not None:
-                        if isinstance(user_answer, list) and len(user_answer)==1:
+                    correct = [o.id for o in q_opts if o.is_correct]
+                    if user_answer is not None and user_answer != '':
+                        if isinstance(user_answer, list) and len(user_answer) == 1:
                             user_answer = user_answer[0]
-                        is_correct = int(user_answer) in correct if user_answer else False
+                        try:
+                            is_correct = int(user_answer) in correct
+                        except (TypeError, ValueError):
+                            is_correct = False
                 elif q.type == 'multiple':
-                    correct = set(q.options.filter(is_correct=True).values_list('id', flat=True))
-                    given = set(map(int, user_answer)) if user_answer else set()
-                    is_correct = given == correct and len(given)>0
+                    correct = {o.id for o in q_opts if o.is_correct}
+                    given = set()
+                    if user_answer:
+                        # нормализация: list | int | str (строку "1,2" парсим, а не разбиваем на символы)
+                        if isinstance(user_answer, (list, tuple)):
+                            raw = list(user_answer)
+                        elif isinstance(user_answer, str):
+                            raw = [p.strip() for p in user_answer.replace(';', ',').split(',') if p.strip() != '']
+                        else:
+                            raw = [user_answer]
+                        try:
+                            given = {int(x) for x in raw}
+                        except (TypeError, ValueError):
+                            given = set()
+                    is_correct = given == correct and len(given) > 0
                 elif q.type == 'true_false':
-                    correct = list(q.options.filter(is_correct=True).values_list('id', flat=True))
-                    is_correct = int(user_answer) in correct if user_answer else False
+                    correct = [o.id for o in q_opts if o.is_correct]
+                    if user_answer is not None and user_answer != '':
+                        try:
+                            is_correct = int(user_answer) in correct
+                        except (TypeError, ValueError):
+                            is_correct = False
                 elif q.type == 'text':
-                    correct_opts = q.options.filter(is_correct=True)
-                    if correct_opts.exists():
+                    # legacy: текстовый тип отключён для новых вопросов,
+                    # ветка оставлена чтобы старые тесты продолжали оцениваться
+                    correct_opts = [o for o in q_opts if o.is_correct]
+                    if correct_opts:
                         correct_texts = [o.text.strip().lower() for o in correct_opts]
-                        given = str(user_answer).strip().lower() if user_answer else ""
+                        given = str(user_answer).strip().lower() if user_answer not in (None, '') else ""
                         is_correct = given in correct_texts
                     else:
                         is_correct = bool(user_answer)
-            except:
-                is_correct=False
+            except Exception:
+                logger.exception("submit scoring failed q=%s", q.id)
+                is_correct = False
             if is_correct:
                 earned += q.points
             details.append({'question_id': q.id, 'correct': is_correct, 'points': q.points if is_correct else 0})
         
         score_pct = (earned/total*100) if total else 0
         passed = score_pct >= test.pass_score
-        attempt = TestAttempt.objects.create(
-            test=test,
-            user=request.user if request.user.is_authenticated else None,
-            score=round(score_pct,1),
-            max_score=total,
-            passed=passed,
-            answers=answers
-        )
+        with transaction.atomic():
+            # повторная проверка внутри транзакции против race двойного сабмита
+            if request.user.is_authenticated and TestAttempt.objects.filter(test=test, user=request.user).exists():
+                return Response({'error':'Вы уже проходили этот тест. Повторное прохождение запрещено — только один раз.', 'already_attempted': True}, status=403)
+            attempt = TestAttempt.objects.create(
+                test=test,
+                user=request.user if request.user.is_authenticated else None,
+                score=round(score_pct,1),
+                max_score=total,
+                passed=passed,
+                answers=answers
+            )
         return Response({
             'attempt_id': attempt.id,
             'score': attempt.score,
@@ -205,8 +252,10 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                 text = '\n'.join(parts)
             except Lesson.DoesNotExist:
                 return Response({'error': 'Урок не найден'}, status=404)
-            except Exception as e:
-                return Response({'error': f"Ошибка: {e}"}, status=400)
+            except Exception:
+                import logging as _lg
+                _lg.getLogger(__name__).exception("generate lesson load failed")
+                return Response({'error': 'Не удалось загрузить урок'}, status=400)
         prompt = request.data.get('prompt', '')
         if not isinstance(prompt, str):
             prompt = ''
@@ -234,8 +283,10 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             if not offline:
                 return Response({'error': 'Из этого текста вопросы не получились — добавь определений вида «Термин — что это»'}, status=400)
             return Response({'questions': offline, 'count': len(offline), 'source': 'offline'})
-        except Exception as e:
-            return Response({'error': f"Ошибка: {e}"}, status=500)
+        except Exception:
+            import logging as _lg2
+            _lg2.getLogger(__name__).exception("generate failed")
+            return Response({'error': 'Не удалось сгенерировать вопросы, попробуй позже'}, status=500)
 
 class AttemptViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = TestAttempt.objects.all().order_by('-created_at')

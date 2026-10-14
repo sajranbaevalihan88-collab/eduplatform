@@ -29,7 +29,11 @@ class LessonViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
         if subject:
             qs = qs.filter(subject__slug=subject)
         if course:
-            qs = qs.filter(course__id=course)
+            try:
+                qs = qs.filter(course__id=int(course))
+            except (TypeError, ValueError):
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({'course': 'Некорректный id курса'})
         if owner == 'me' and user.is_authenticated:
             qs = qs.filter(owner=user)
         return qs
@@ -37,35 +41,38 @@ class LessonViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
     def _link_lesson_content(self, lesson):
         # привязываем СВОИ презентации/тесты из блоков к уроку (чужое не трогаем,
         # уже привязанное к другому уроку не перепривязываем)
+        import logging as _lg
+        from django.db import transaction
         try:
-            blocks = lesson.blocks or []
-            pres_ids, test_ids = set(), set()
-            for b in blocks:
-                if not isinstance(b, dict):
-                    continue
-                data = b.get('data') or {}
-                if b.get('type') == 'presentation' and data.get('presentation_id'):
-                    try:
-                        pres_ids.add(int(data['presentation_id']))
-                    except (TypeError, ValueError):
-                        pass
-                if b.get('type') == 'test' and data.get('test_id'):
-                    try:
-                        test_ids.add(int(data['test_id']))
-                    except (TypeError, ValueError):
-                        pass
-            if pres_ids:
-                from apps.content.models import Presentation
-                Presentation.objects.filter(
-                    id__in=pres_ids, owner=lesson.owner, lesson__isnull=True
-                ).update(lesson=lesson)
-            if test_ids:
-                from apps.assessments.models import Test
-                Test.objects.filter(
-                    id__in=test_ids, owner=lesson.owner, lesson__isnull=True
-                ).update(lesson=lesson)
+            with transaction.atomic():
+                blocks = lesson.blocks or []
+                pres_ids, test_ids = set(), set()
+                for b in blocks:
+                    if not isinstance(b, dict):
+                        continue
+                    data = b.get('data') or {}
+                    if b.get('type') == 'presentation' and data.get('presentation_id'):
+                        try:
+                            pres_ids.add(int(data['presentation_id']))
+                        except (TypeError, ValueError):
+                            pass
+                    if b.get('type') == 'test' and data.get('test_id'):
+                        try:
+                            test_ids.add(int(data['test_id']))
+                        except (TypeError, ValueError):
+                            pass
+                if pres_ids:
+                    from apps.content.models import Presentation
+                    Presentation.objects.filter(
+                        id__in=pres_ids, owner=lesson.owner, lesson__isnull=True
+                    ).update(lesson=lesson)
+                if test_ids:
+                    from apps.assessments.models import Test
+                    Test.objects.filter(
+                        id__in=test_ids, owner=lesson.owner, lesson__isnull=True
+                    ).update(lesson=lesson)
         except Exception:
-            pass
+            _lg.getLogger(__name__).exception("link lesson content failed lesson=%s", getattr(lesson, 'id', '?'))
 
     def perform_create(self, serializer):
         lesson = serializer.save(owner=self.request.user if self.request.user.is_authenticated else None)

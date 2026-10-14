@@ -13,6 +13,26 @@ const client = axios.create({
   withCredentials: false,
 })
 
+// singleflight для refresh: параллельные 401 ждут один запрос
+let _refreshPromise: Promise<any> | null = null
+function doRefresh(api: string, refresh: string) {
+  if (!_refreshPromise) {
+    _refreshPromise = axios.post(`${api}/api/auth/jwt/refresh/`, { refresh }).finally(() => {
+      _refreshPromise = null
+    })
+  }
+  return _refreshPromise
+}
+async function refreshPromiseGuard() {
+  if (_refreshPromise) {
+    try {
+      await _refreshPromise
+    } catch {
+      // игнор — вызывающий сам попробует refresh
+    }
+  }
+}
+
 client.interceptors.request.use(cfg => {
   const token = localStorage.getItem('access') || localStorage.getItem('token')
   if (token) cfg.headers.Authorization = `Bearer ${token}`
@@ -22,7 +42,7 @@ client.interceptors.request.use(cfg => {
 client.interceptors.response.use(
   res => res,
   async err => {
-    const original = err.config
+    const original = err.config as any
     const status = err.response?.status
     const detail = err.response?.data?.detail || err.response?.data?.code || ''
     // Если токен ссылается на несуществующего пользователя (после пересоздания БД) — сразу логаут
@@ -37,17 +57,25 @@ client.interceptors.response.use(
     }
     if (status === 401 && !original._retry) {
       original._retry = true
+      // singleflight: параллельные 401 ждут один refresh
+      try {
+        await refreshPromiseGuard()
+      } catch {
+        // refresh уже упал — разлогиниваем ниже
+      }
       const refresh = localStorage.getItem('refresh')
       if (refresh) {
         try {
-          const r = await axios.post(`${API}/api/auth/jwt/refresh/`, {refresh})
+          const r = await doRefresh(API, refresh)
           localStorage.setItem('access', r.data.access)
           if (r.data.refresh) localStorage.setItem('refresh', r.data.refresh)
           // token для совместимости
           localStorage.setItem('token', r.data.access)
           original.headers.Authorization = `Bearer ${r.data.access}`
           return client(original)
-        } catch {}
+        } catch (e) {
+          console.error('JWT refresh failed', e)
+        }
       }
       // refresh не сработал — сессия истекла, разлогиниваем
       const isAuthPage = window.location.pathname.includes('/login') || window.location.pathname.includes('/register')
