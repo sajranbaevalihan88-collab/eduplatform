@@ -177,6 +177,15 @@ h1,h2,h3 { font-family: Manrope, sans-serif; }
 .projector button, .projector a, .projector input, .projector select, .projector textarea { font-size: 1.1em; }
 .projector .card-hover, .projector .btn-hover { transform: none !important; }
 
+/* Шторка мобильного меню: только transform — дёшево для слабых телефонов */
+@keyframes drawerIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+.animate-drawer { animation: drawerIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; will-change: transform; }
+
+/* На маленьких экранах гасим бесконечные тяжёлые анимации (блюр+float сажают GPU) */
+@media (max-width: 640px) {
+  .animate-floatSubtle, .animate-float { animation: none !important; }
+}
+
 /* Poor vision — база под скринридер (NVDA/JAWS/VoiceOver/TalkBack) + свои кнопки.
    Скринридер читает семантику сам; мы даём контраст, крупный шрифт, видимый фокус
    (Tab-навигация без мыши) и гасим анимации. Esc — стоп озвучки (см. UIContext). */
