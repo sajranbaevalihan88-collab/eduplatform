@@ -57,8 +57,12 @@ export default function Login(){
   }
   return (
     <div className="max-w-md mx-auto">
-      <div className="bg-white rounded-2xl border p-8">
-        <h1 className="text-2xl font-display font-bold text-center">{isReg?t('login_title_reg'):t('login')}</h1>
+      <div className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-2xl border p-8">
+        <div className="flex flex-col items-center gap-1 mb-1">
+          <img src="/logo.svg" alt="EduPlatform AI" className="w-16 h-16 drop-shadow-md" />
+          <div className="font-display font-bold text-lg dark:text-white">EduPlatform <span className="brand-ai">AI</span></div>
+        </div>
+        <h1 className="text-2xl font-display font-bold text-center dark:text-white">{isReg?t('login_title_reg'):t('login')}</h1>
         <p className="text-sm text-slate-500 text-center mt-1">{isReg?t('login_sub_reg'):t('login_to_create')}</p>
         <form onSubmit={submit} className="mt-6 space-y-3">
           <input placeholder={t('login_ph_user')} value={form.username} onChange={e=>setForm({...form,username:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50" required minLength={3}/>
