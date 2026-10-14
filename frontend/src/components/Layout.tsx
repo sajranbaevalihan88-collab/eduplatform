@@ -132,17 +132,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Mobile drawer */}
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={()=>setOpen(false)} />
-          <div className="absolute left-0 top-0 w-[80%] max-w-[300px] h-full bg-white dark:bg-slate-900 flex flex-col">
-            <div className="h-[64px] flex items-center justify-between px-6 border-b dark:border-slate-700">
+          <div className="absolute inset-0 bg-black/60 motion-safe:animate-fadeIn" onClick={()=>setOpen(false)} />
+          <div className="absolute left-0 top-0 w-[80%] max-w-[300px] h-full bg-white dark:bg-slate-900 flex flex-col motion-safe:animate-drawer shadow-2xl">
+            <div className="h-[64px] flex items-center justify-between px-6 border-b dark:border-slate-700 shrink-0">
               <span className="font-bold dark:text-white flex items-center gap-2"><img src="/logo.svg" alt="EduPlatform AI" className="w-8 h-8" />EduPlatform <span className="brand-ai">AI</span></span>
-              <button onClick={()=>setOpen(false)} className="dark:text-white"><X size={20}/></button>
+              <button onClick={()=>setOpen(false)} className="dark:text-white p-2" aria-label="Закрыть меню"><X size={20}/></button>
             </div>
-            <nav className="flex-1 p-3 space-y-1">
+            <nav className="flex-1 p-3 space-y-1 overflow-auto">
               {items.map(it=>(
                 <Link key={it.to} to={it.to} onClick={()=>setOpen(false)} aria-current={isActive(it.to) ? 'page' : undefined} className={`flex items-center gap-3 px-3 py-3 rounded-xl ${isActive(it.to)?'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-600/30':'text-slate-600 dark:text-slate-300'}`}><it.icon size={18}/>{it.label}</Link>
               ))}
             </nav>
+            <div className="p-3 border-t dark:border-slate-700 shrink-0">
+              {me ? (<>
+                <Link to="/profile" onClick={()=>setOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 dark:text-white">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-amber-400 flex items-center justify-center text-white font-bold text-xs">{(me.username||'U')[0].toUpperCase()}</div>
+                  <div className="flex-1 min-w-0"><div className="font-semibold text-sm line-clamp-1">{me.username}</div></div>
+                </Link>
+                <button onClick={()=>{ setOpen(false); logout() }} className="mt-2 w-full flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 px-3 py-2"><LogOut size={16}/> {t('logout')}</button>
+              </>) : (
+                <Link to="/login" onClick={()=>setOpen(false)} className="w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold"><User size={16}/> {t('login')}</Link>
+              )}
+            </div>
           </div>
         </div>
       )}
