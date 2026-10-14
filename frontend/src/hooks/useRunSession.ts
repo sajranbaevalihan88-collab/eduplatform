@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { WS_BASE } from '../api/client'
 
 export type LiveState = 'idle' | 'running' | 'waiting' | 'done' | 'error'
 
@@ -36,11 +37,9 @@ export function useRunSession(){
 
   const start=useCallback((language:string, code:string, onDone?:(passed:boolean)=>void):boolean=>{
     close()
-    let proto=window.location.protocol==='https:'?'wss:':'ws:'
-    // dev: vite 5173 -> api 8001
-    let base=window.location.host
-    if(base.includes(':5173')) base=base.replace(':5173',':8001')
-    const url=`${proto}//${base}/ws/run/`
+    // Хост берём из API-базы (VITE_API_URL): на проде фронт и бэк на разных
+    // доменах, window.location.host вёл бы сокет на статику фронта.
+    const url = `${WS_BASE}/ws/run/`
     let ws:WebSocket
     try{ ws=new WebSocket(url) }catch{ return false }
     wsRef.current=ws

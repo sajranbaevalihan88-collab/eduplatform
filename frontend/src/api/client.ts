@@ -2,6 +2,12 @@ import axios from 'axios'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8001'
 
+// База для WebSocket: из того же API-хоста (на проде фронт и бэк на разных
+// доменах — брать window.location.host нельзя, сокет улетит не туда).
+// http://x -> ws://x, https://x -> wss://x
+export const WS_BASE = API.replace(/^http/, 'ws')
+export const API_BASE = API
+
 // Enforce https in production
 if (API.startsWith('http://') && window.location.protocol === 'https:') {
   console.warn('API URL использует http при https — замени на https')
