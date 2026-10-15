@@ -3,11 +3,70 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.conf import settings
-from .models import UploadedFile, Presentation, Slide
+from .models import UploadedFile, Presentation, Slide, MediaBlob
 from .serializers import UploadedFileSerializer, PresentationSerializer, SlideSerializer
 from apps.accounts.permissions import TeacherWriteMixin
 import os
 import re
+from django.http import HttpResponse, FileResponse, Http404
+
+_MEDIA_MIME = {'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif',
+               '.webp':'image/webp','.svg':'image/svg+xml','.pdf':'application/pdf'}
+
+def store_media_blob(rel_path, data):
+    """Сохранить байты в MediaBlob (upsert). Не роняет вызывающий код."""
+    try:
+        if not data:
+            return
+        ext = os.path.splitext(rel_path)[1].lower()
+        MediaBlob.objects.update_or_create(
+            key=rel_path,
+            defaults={'data': bytes(data),
+                      'mime': _MEDIA_MIME.get(ext, 'application/octet-stream'),
+                      'size': len(data)})
+    except Exception:
+        pass
+
+def media_fallback(request, subpath):
+    """Раздача /media/pptx_images/* и /media/pptx_pdf/*: сначала диск, при промахе — БД.
+    Лечит эфемерный диск Render free: файлы переживают редеплои."""
+    try:
+        safe = (subpath or '').replace('\\', '/').strip('/')
+        if not safe or '..' in safe.split('/') or safe.startswith('/'):
+            raise Http404()
+        if not (safe.startswith('pptx_images/') or safe.startswith('pptx_pdf/')):
+            raise Http404()
+        from django.conf import settings as _s
+        disk = os.path.join(str(getattr(_s, 'MEDIA_ROOT', 'media')), safe)
+        if os.path.isfile(disk):
+            resp = FileResponse(open(disk, 'rb'), content_type=_MEDIA_MIME.get(os.path.splitext(safe)[1].lower(), 'application/octet-stream'))
+            resp['Cache-Control'] = 'public, max-age=86400'
+            return resp
+        try:
+            blob = MediaBlob.objects.filter(key=safe).first()
+        except Exception:
+            blob = None
+        if blob and blob.data:
+            try:
+                os.makedirs(os.path.dirname(disk), exist_ok=True)
+                with open(disk, 'wb') as fh:
+                    fh.write(bytes(blob.data))
+            except Exception:
+                pass
+            resp = HttpResponse(bytes(blob.data), content_type=blob.mime or 'application/octet-stream')
+            resp['Cache-Control'] = 'public, max-age=86400'
+            return resp
+    except Http404:
+        pass
+    except Exception:
+        pass
+    raise Http404()
+
+def media_images(request, name=''):
+    return media_fallback(request, 'pptx_images/' + (name or ''))
+
+def media_pdf(request, name=''):
+    return media_fallback(request, 'pptx_pdf/' + (name or ''))
 
 def _validate_upload(file_obj):
     if not file_obj:
@@ -1428,6 +1487,7 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                                         full = os.path.join(media_root, rel)
                                         with open(full, 'wb') as out:
                                             out.write(conv_blob)
+                                        store_media_blob(rel, conv_blob)
                                         url = s.MEDIA_URL + rel
                                         geom = _geom(shape)
                                         # crop? PowerPoint stretches to box when no crop -> fill, else cover
@@ -1927,6 +1987,10 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                         if _pdf_bytes:
                             from django.core.files.base import ContentFile as _CF
                             pres.pdf_file.save('pres_%d.pdf' % pres.id, _CF(_pdf_bytes))
+                            try:
+                                store_media_blob('pptx_pdf/pres_%d.pdf' % pres.id, _pdf_bytes)
+                            except Exception:
+                                pass
                             if _pdf_pages:
                                 pres.pdf_pages = _pdf_pages
                             pres.save(update_fields=['pdf_file', 'pdf_pages'])
@@ -1958,6 +2022,11 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                         fname = f"{_uuid.uuid4().hex}.png"
                         rel = f"pptx_images/{fname}"
                         pix.save(os.path.join(media_root, rel))
+                        try:
+                            with open(os.path.join(media_root, rel), 'rb') as _fh:
+                                store_media_blob(rel, _fh.read())
+                        except Exception:
+                            pass
                         url = _s2.MEDIA_URL + rel
                         Slide.objects.create(
                             presentation=pres, order=pno, background='#ffffff', background_type='solid',
