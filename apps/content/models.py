@@ -47,6 +47,19 @@ class UploadedFile(models.Model):
     def __str__(self):
         return self.title
 
+class MediaBlob(models.Model):
+    """Бинарные данные загруженных медиа (картинки слайдов, PDF-двойники).
+    Render free = эфемерный диск: файлы пропадают при редеплое.
+    БД переживает редеплои — раздаём с диска, при промахе — из БД (и кэшируем обратно на диск)."""
+    key = models.CharField(max_length=300, unique=True, help_text="Относительный путь, напр. pptx_images/abc123.jpg")
+    data = models.BinaryField()
+    mime = models.CharField(max_length=100, default='application/octet-stream')
+    size = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.key
+
 class Presentation(models.Model):
     title = models.CharField(max_length=300)
     description = models.TextField(blank=True)

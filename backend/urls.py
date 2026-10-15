@@ -15,6 +15,13 @@ urlpatterns = [
     path('api/', include('apps.urls')),
 ]
 
+# DB-backed медиа (переживает редеплои Render free): раньше static(), иначе 404 с диска
+from apps.content.views import media_images, media_pdf
+urlpatterns += [
+    path('media/pptx_images/<path:name>', media_images),
+    path('media/pptx_pdf/<path:name>', media_pdf),
+]
+
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
