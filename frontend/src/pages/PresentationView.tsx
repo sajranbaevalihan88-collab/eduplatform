@@ -14,6 +14,30 @@ const imgMissing = (e: React.SyntheticEvent<HTMLImageElement>) => {
   t.parentElement?.classList.add('img-missing')
 }
 
+// CSS linear-gradient -> SVG fill: парсим "linear-gradient(315deg, rgba(..) 0%, ...)"
+// (SVG не понимает CSS-градиенты: fill="linear-gradient(...)" рисуется ЧЁРНЫМ)
+const parseCssGradient = (css: string) => {
+  const m = /^linear-gradient\(\s*([\d.]+)deg\s*,(.+)\)\s*$/.exec(css||'')
+  if (!m) return null
+  const angle = parseFloat(m[1])
+  const parts = (m[2]||'').split(/,(?![^(]*\))/).map(s=>s.trim()).filter(Boolean)
+  const stops = parts.map(p=>{
+    const cm = /^(rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}|\S+)\s+([\d.]+)%\s*$/.exec(p)
+    if (!cm) return null
+    let col = cm[1], op = 1
+    const rm = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/.exec(col)
+    if (rm) {
+      col = '#'+[rm[1],rm[2],rm[3]].map(v=>Math.max(0,Math.min(255,Math.round(parseFloat(v)))).toString(16).padStart(2,'0')).join('')
+      if (rm[4]!==undefined) op = Math.max(0,Math.min(1,parseFloat(rm[4])))
+    }
+    return {color: col, opacity: op, offset: Math.max(0,Math.min(100,parseFloat(cm[2])))}
+  }).filter(Boolean) as {color:string,opacity:number,offset:number}[]
+  if (!stops.length) return null
+  const rad = angle*Math.PI/180
+  const dx = Math.sin(rad), dy = -Math.cos(rad)
+  return {x1: 0.5-dx/2, y1: 0.5-dy/2, x2: 0.5+dx/2, y2: 0.5+dy/2, stops}
+}
+
 
 export default function PresentationView(){
   const {t}=useLang()
@@ -259,9 +283,13 @@ export default function PresentationView(){
             if(isDecorative) return null
             // freeform из pptx: рисуем настоящий векторный контур, а не бокс
             if(s.svgPath){
-              const fillOk = s.fill && s.fill!=='transparent' ? s.fill : 'none'
+              const rawFill = s.fill && s.fill!=='transparent' ? s.fill : 'none'
+              const grad = typeof rawFill==='string' ? parseCssGradient(rawFill) : null
+              const gid = grad ? `sg-${b.id}` : undefined
+              const fillOk = grad ? `url(#${gid})` : rawFill
               return <div key={b.id} style={{...common, background:'transparent', border:'none', boxShadow:'none', padding:0, alignItems:'stretch', justifyContent:'stretch', overflow:'visible'}} className={animClass}>
                 <svg viewBox={`0 0 ${s.svgW||10000} ${s.svgH||10000}`} preserveAspectRatio={s.icon?"xMidYMid meet":"none"} style={{width:'100%', height:'100%', display:'block', overflow:'visible'}}>
+                  {grad && <defs><linearGradient id={gid} x1={grad.x1} y1={grad.y1} x2={grad.x2} y2={grad.y2}>{grad.stops.map((st:any,i:number)=><stop key={i} offset={`${st.offset}%`} stopColor={st.color} stopOpacity={st.opacity}/>)}</linearGradient></defs>}
                   <path d={s.svgPath} fill={fillOk} stroke={s.stroke||'none'} strokeWidth={s.strokeWidth||0} strokeDasharray={s.dash==='dotted'?'2 3':s.dash==='dashed'?'7 4':undefined} strokeLinecap={s.dash&&s.dash!=='solid'?'round':undefined} vectorEffect="non-scaling-stroke" strokeLinejoin="round"/>
                 </svg>
               </div>
