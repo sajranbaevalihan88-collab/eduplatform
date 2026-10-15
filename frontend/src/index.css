@@ -12,6 +12,9 @@ h1,h2,h3 { font-family: Manrope, sans-serif; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
 * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
+/* FitBox-замер однострочности: перебивает inline pre-wrap внутри слайдов */
+.nowrap-probe, .nowrap-probe * { white-space: nowrap !important; }
+
 /* ——— Professional motion ——— */
 @keyframes enter { 
   from { opacity:0; transform: translateY(6px) scale(0.98); } 

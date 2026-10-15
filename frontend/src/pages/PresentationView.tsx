@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import client, { mediaUrl } from '../api/client'
 import { Eye, Edit, Play, ChevronLeft, ChevronRight, Maximize2, Copy, Trash2 } from 'lucide-react'
@@ -14,6 +14,43 @@ const imgMissing = (e: React.SyntheticEvent<HTMLImageElement>) => {
   t.parentElement?.classList.add('img-missing')
 }
 
+// PowerPoint "shrink text on overflow": если текст не влезает в свой бокс —
+// ужимаем zoom так, чтобы влез (иначе строки наползают на соседние блоки).
+// Однострочным боксам подбираем ширину (whiteSpace:nowrap-замер), многострочным — высоту.
+function FitBox({boxStyle, innerStyle, hasH, paras, className, children}: any){
+  const o = useRef<HTMLDivElement|null>(null)
+  const el = useRef<HTMLDivElement|null>(null)
+  const [,bump] = useState(0)
+  const refont = useRef(false)
+  useLayoutEffect(()=>{
+    const box = o.current, inner = el.current
+    if(!box || !inner || !hasH) return
+    // веб-шрифт (Liter) подменяется позже — пересчитать после его загрузки
+    try{
+      if(!refont.current && (document as any)?.fonts?.ready){
+        refont.current = true
+        ;(document as any).fonts.ready.then(()=>bump(x=>x+1))
+      }
+    }catch{}
+    inner.style.zoom = '1'
+    inner.classList.remove('nowrap-probe')
+    const ch = box.clientHeight
+    const shWrap = inner.scrollHeight
+    if(!ch || shWrap <= ch + 3) return
+    // высота одной строки (nowrap через класс — перебивает inline pre-wrap)
+    inner.classList.add('nowrap-probe')
+    const nw = inner.scrollWidth, cw = inner.clientWidth, lineH = inner.scrollHeight
+    inner.classList.remove('nowrap-probe')
+    let z = ch / shWrap
+    // однострочный бокс (высота ~1 строка), текст вылез вширь: ужимаем по ширине
+    if((paras||1) === 1 && ch <= lineH * 1.6 && nw > cw && cw > 0){
+      z = cw / nw
+    }
+    z = Math.max(0.5, Math.min(1, z))
+    if(z < 0.999) inner.style.zoom = String(z)
+  })
+  return <div ref={o} style={boxStyle} className={className}><div style={innerStyle}><div ref={el} className="w-full" style={{width:'100%'}}>{children}</div></div></div>
+}
 // CSS linear-gradient -> SVG fill: парсим "linear-gradient(315deg, rgba(..) 0%, ...)"
 // (SVG не понимает CSS-градиенты: fill="linear-gradient(...)" рисуется ЧЁРНЫМ)
 const parseCssGradient = (css: string) => {
@@ -271,7 +308,8 @@ export default function PresentationView(){
             const innerAnchor:any = !hasH ? {position:'relative'} : va==='middle' ? {position:'absolute', left:0, right:0, top:'50%', transform:'translateY(-50%)'} : va==='bottom' ? {position:'absolute', left:0, right:0, bottom:0} : {position:'absolute', left:0, right:0, top:0}
             // дефолтные внутренние отступы PowerPoint (~0.1in ≈ 7px), иначе текст липнет к краю бокса/декору
             const defPad = s.paddingPct ? undefined : '1px 7px'
-            return <div key={b.id} style={{...common, height: hasH ? `${s.h}%` : 'auto', overflow:'visible', display:'block', padding: common.padding || defPad, border: s.stroke ? `${s.strokeWidth||1}px ${s.dash||'solid'} ${s.stroke}` : undefined}} className={animClass}><div style={innerAnchor}><div className="w-full" style={{...textStyleWithBg(b,isTitle,isSlideshow,isCardBg && needCard ? '#ffffff' : slideBg), textAlign: s.align||'left', width:'100%'}}>{renderRichText(b,isTitle,isSlideshow,isCardBg && needCard ? '#ffffff' : slideBg)}</div></div></div>
+            const parasCount = (b.paragraphs && b.paragraphs.length) || 1
+            return <FitBox key={b.id} boxStyle={{...common, height: hasH ? `${s.h}%` : 'auto', overflow:'visible', display:'block', padding: common.padding || defPad, border: s.stroke ? `${s.strokeWidth||1}px ${s.dash||'solid'} ${s.stroke}` : undefined}} innerStyle={innerAnchor} hasH={hasH} paras={parasCount} className={animClass}><div className="w-full" style={{...textStyleWithBg(b,isTitle,isSlideshow,isCardBg && needCard ? '#ffffff' : slideBg), textAlign: s.align||'left', width:'100%'}}>{renderRichText(b,isTitle,isSlideshow,isCardBg && needCard ? '#ffffff' : slideBg)}</div></FitBox>
           }
           if(b.type==='image'){
             if(b.unrenderable) return <div key={b.id} style={{...common, padding:0, background:'transparent'}} className={animClass}><div className="w-full h-full rounded flex flex-col items-center justify-center bg-slate-100/80 border border-dashed border-slate-300 text-slate-500 text-xs p-2 text-center">{t('pv_img_na_a')}.{b.origExt||'emf'}{t('pv_img_na_b')}</div></div>
