@@ -177,6 +177,13 @@ h1,h2,h3 { font-family: Manrope, sans-serif; }
 .projector button, .projector a, .projector input, .projector select, .projector textarea { font-size: 1.1em; }
 .projector .card-hover, .projector .btn-hover { transform: none !important; }
 
+/* Потерянный файл картинки (старый импорт): вместо битой иконки — понятный плейсхолдер */
+.img-missing { position: relative; min-height: 64px; background: #f1f5f9 !important; border: 1px dashed #cbd5e1 !important; border-radius: 8px; display: flex !important; align-items: center; justify-content: center; }
+.img-missing::after { content: '🖼 файл картинки потерян — удали и импортируй презентацию заново'; font-size: 12px; color: #64748b; text-align: center; padding: 8px; }
+
+/* Точечная текстура тёмных слайдов (как в PowerPoint) — едва заметная */
+.slide-dots { background-image: radial-gradient(rgba(255,255,255,0.055) 1.1px, transparent 1.1px); background-size: 22px 22px; }
+
 /* Шторка мобильного меню: только transform — дёшево для слабых телефонов */
 @keyframes drawerIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
 .animate-drawer { animation: drawerIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; will-change: transform; }

@@ -396,12 +396,26 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                         pass
                     return out
                 def _read_alpha(cobj):
-                    """Альфа из <a:alpha val> (0-100000) рядом с цветом. None если непрозрачность 100%."""
+                    """Альфа из <a:alpha val> (0-100000) рядом с цветом. None если непрозрачность 100%.
+                    Учитывает прокси (_SRgbColor и т.п.): alpha ищем и как ребёнка
+                    цвета, и как сестру внутри gs (оба варианта из реальных файлов)."""
                     try:
                         el = getattr(cobj, '_color', None)
                         if el is None:
+                            # сам cobj уже lxml-элемент?
+                            el = cobj if hasattr(cobj, 'find') else None
+                        if el is None:
                             return None
                         NS = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
+                        # разворачиваем прокси (_SRgbColor._srgbClr и аналоги)
+                        try:
+                            for _pa in ('_srgbClr', '_schemeClr', '_prstClr', '_sysClr'):
+                                _inner = getattr(el, _pa, None)
+                                if _inner is not None and hasattr(_inner, 'find'):
+                                    el = _inner
+                                    break
+                        except Exception:
+                            pass
                         a = el.find(NS + 'alpha')
                         if a is not None and a.get('val') is not None:
                             return max(0.0, min(1.0, int(a.get('val')) / 100000.0))
@@ -713,8 +727,165 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                 def _emu_to_pct(val, total):
                     try:
                         return round(float(val) / float(total) * 100, 4)
-                    except:
+                    except Exception:
                         return 0
+
+                def _rel_lum(hexcol):
+                    """Относительная яркость 0..1 для авто-контраста."""
+                    try:
+                        h = str(hexcol).strip().lstrip('#').upper()
+                        if len(h) == 3:
+                            h = ''.join([ch * 2 for ch in h])
+                        if len(h) != 6:
+                            return None
+                        def _lin(c):
+                            c = c / 255.0
+                            return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+                        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+                        return 0.2126 * _lin(r) + 0.7152 * _lin(g) + 0.0722 * _lin(b)
+                    except Exception:
+                        return None
+
+                def _contrast_ratio(a, b):
+                    la, lb = _rel_lum(a), _rel_lum(b)
+                    if la is None or lb is None:
+                        return None
+                    hi, lo = (la, lb) if la >= lb else (lb, la)
+                    return (hi + 0.05) / (lo + 0.05)
+
+                def _inside_colored_shape(blocks, geom):
+                    """Центр фигуры внутри уже собранной НЕ-белой фигуры?
+                    Мелкие белые иконки на бейджах/пилюлях надо оставить,
+                    а не дропать как мусор."""
+                    try:
+                        cx = float(geom.get('x') or 0) + float(geom.get('w') or 0) / 2
+                        cy = float(geom.get('y') or 0) + float(geom.get('h') or 0) / 2
+                        for sb in blocks:
+                            if not isinstance(sb, dict) or sb.get('type') != 'shape':
+                                continue
+                            ss = sb.get('style') or {}
+                            f = (ss.get('fill') or '')
+                            if not (isinstance(f, str) and f.startswith('#')):
+                                continue
+                            if f.upper() == '#FFFFFF':
+                                continue
+                            try:
+                                x = float(ss.get('x') or 0); y = float(ss.get('y') or 0)
+                                w = float(ss.get('w') or 0); h = float(ss.get('h') or 0)
+                            except Exception:
+                                continue
+                            if x <= cx <= x + w and y <= cy <= y + h:
+                                return True
+                    except Exception:
+                        pass
+                    return False
+
+                def _autocontrast_blocks(blocks):
+                    """Золото-на-золоте и т.п.: текст без своего фона, лежащий на
+                    фигуре-заливке. Если контраст рана с подложкой < 2.2 —
+                    перекрашиваем в тёмный/светлый (что контрастнее)."""
+                    try:
+                        shapes = []
+                        for sb in blocks:
+                            if not isinstance(sb, dict) or sb.get('type') != 'shape':
+                                continue
+                            ss = sb.get('style') or {}
+                            f = ss.get('fill')
+                            if isinstance(f, str) and f.startswith('#') and len(f.strip('#')) in (3, 6):
+                                try:
+                                    x, y = float(ss.get('x') or 0), float(ss.get('y') or 0)
+                                    w, h = float(ss.get('w') or 0), float(ss.get('h') or 0)
+                                    shapes.append((x, y, w, h, f))
+                                except Exception:
+                                    continue
+                        if not shapes:
+                            return
+                        for b in blocks:
+                            if not isinstance(b, dict) or b.get('type') != 'text':
+                                continue
+                            st = b.get('style') or {}
+                            if st.get('background'):
+                                continue
+                            try:
+                                cx = float(st.get('x') or 0) + float(st.get('w') or 0) / 2
+                                cy = float(st.get('y') or 0) + float(st.get('h') or 0) / 2
+                            except Exception:
+                                continue
+                            best, best_area = None, None
+                            for (x, y, w, h, f) in shapes:
+                                if x <= cx <= x + w and y <= cy <= y + h:
+                                    area = w * h
+                                    if best_area is None or area < best_area:
+                                        best_area, best = area, f
+                            if not best:
+                                continue
+                            for p in (b.get('paragraphs') or []):
+                                for r in (p.get('runs') or []):
+                                    rs = r.get('style') or {}
+                                    c = rs.get('color')
+                                    if not (isinstance(c, str) and c.startswith('#')):
+                                        continue
+                                    cr = _contrast_ratio(c, best)
+                                    if cr is None or cr >= 2.2:
+                                        continue
+                                    dark_c = _contrast_ratio('#1A202C', best) or 0
+                                    lite_c = _contrast_ratio('#F8FAFC', best) or 0
+                                    rs['color'] = '#1A202C' if dark_c >= lite_c else '#F8FAFC'
+                                    rs['autoContrast'] = True
+                    except Exception:
+                        pass
+
+                def _extract_text_shadow(run_el):
+                    """Тень текста (effectLst/outerShdw) → CSS text-shadow. Иначе None."""
+                    try:
+                        NSA = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
+                        if run_el is None:
+                            return None
+                        rPr = run_el.find(NSA + 'rPr')
+                        if rPr is None:
+                            return None
+                        eff = rPr.find(NSA + 'effectLst')
+                        if eff is None:
+                            return None
+                        sh = eff.find(NSA + 'outerShdw')
+                        if sh is None:
+                            return None
+                        try:
+                            blur = round(int(sh.get('blurRad') or 0) / 12700, 1)
+                        except Exception:
+                            blur = 3.0
+                        try:
+                            dist = round(int(sh.get('dist') or 0) / 12700, 1)
+                        except Exception:
+                            dist = 2.0
+                        try:
+                            import math
+                            ang = int(sh.get('dir') or 0) / 60000.0
+                            rad = math.radians(ang)
+                            dx = round(dist * math.cos(rad), 1)
+                            dy = round(dist * math.sin(rad), 1)
+                        except Exception:
+                            dx, dy = 2.0, 2.0
+                        col = '#000000'
+                        try:
+                            for tag in ('srgbClr', 'schemeClr', 'prstClr'):
+                                ce = sh.find(NSA + tag)
+                                if ce is not None and ce.get('val'):
+                                    v = ce.get('val').upper()
+                                    if tag == 'srgbClr' and len(v) == 6:
+                                        col = '#' + v
+                                    break
+                            al = sh.find(NSA + 'alpha')
+                            if al is not None and al.get('val'):
+                                av = max(0.0, min(1.0, int(al.get('val')) / 100000.0))
+                                if col.startswith('#') and len(col) == 7:
+                                    col = 'rgba(%d,%d,%d,%.2f)' % (
+                                        int(col[1:3], 16), int(col[3:5], 16), int(col[5:7], 16), av)
+                        except Exception:
+                            pass
+                        return '%spx %spx %spx %s' % (dx, dy, blur, col)
+                    except Exception:
+                        return None
 
                 def _convert_image_blob(blob, ext):
                     """EMF/WMF/TIFF/BMP → PNG через LibreOffice (есть в Dockerfile и на сервере).
@@ -998,6 +1169,13 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                                 elif run.font.color and getattr(run.font.color, 'theme_color', None) is not None:
                                     # theme — оставим без цвета, фронт использует наследование
                                     pass
+                                # тень текста (effectLst) — читаемость как в PowerPoint
+                                try:
+                                    _sh = _extract_text_shadow(_rel2)
+                                    if _sh:
+                                        rs['textShadow'] = _sh
+                                except Exception:
+                                    pass
                             except:
                                 pass
                             # если первый run без fontSize — запомним
@@ -1220,7 +1398,21 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                                         blocks.append(img_block)
                                         continue
                                     except Exception:
-                                        pass
+                                        # картинка с битой связью (rId) — оставляем честный
+                                        # плейсхолдер с геометрией, а не дыру
+                                        try:
+                                            _gg = _geom(shape)
+                                            blocks.append({
+                                                'id': uuid.uuid4().hex[:8], 'type': 'image',
+                                                'src': '', 'unrenderable': True, 'brokenLink': True,
+                                                'style': {'borderRadius': 4, 'objectFit': 'contain',
+                                                          'x': _gg['x'], 'y': _gg['y'],
+                                                          'w': _gg['w'], 'h': _gg['h'],
+                                                          'rotation': _gg.get('rotation', 0),
+                                                          'z': z, 'unit': '%'},
+                                            })
+                                        except Exception:
+                                            pass
                                 # TABLE — извлекаем ячейки
                                 try:
                                     if getattr(shape, 'has_table', False) and shape.has_table:
@@ -1523,7 +1715,39 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                                     is_white2 = up2 == '#FFFFFF'
                                     if fill_bg2 and geom2['w'] >= 1.5 and geom2['h'] >= 0.35:
                                         if is_white2 and not (5 < geom2['w'] < 98 and 3 < geom2['h'] < 95):
-                                            pass
+                                            # мелкая белая иконка поверх цветной фигуры (бейдж) — оставить
+                                            if not (geom2['w'] >= 0.8 and geom2['h'] >= 0.35
+                                                    and _inside_colored_shape(blocks, geom2)):
+                                                pass
+                                            else:
+                                                _shape_name = 'rect'
+                                                try:
+                                                    _pmap = {'ellipse': 'ellipse', 'diamond': 'diamond', 'triangle': 'triangle',
+                                                             'rightTriangle': 'rightTriangle', 'pentagon': 'pentagon', 'hexagon': 'hexagon',
+                                                             'star5': 'star', 'star': 'star', 'roundRect': 'rounded', 'round1Rect': 'rounded',
+                                                             'round2SameRect': 'rounded', 'arrow': 'arrow', 'leftArrow': 'arrow',
+                                                             'rightArrow': 'arrow', 'trapezoid': 'trapezoid', 'parallelogram': 'parallelogram',
+                                                             'circle': 'circle', 'oval': 'ellipse'}
+                                                    if _prst2 and _prst2 in _pmap:
+                                                        _shape_name = _pmap[_prst2]
+                                                except Exception:
+                                                    pass
+                                                style2 = {'fill': fill_bg2, 'x': geom2['x'], 'y': geom2['y'], 'w': geom2['w'], 'h': geom2['h'], 'rotation': geom2.get('rotation', 0), 'z': z - 0.5, 'unit': '%', 'borderRadius': 8}
+                                                if _radius_pct is not None:
+                                                    style2['radiusPct'] = _radius_pct
+                                                style2['icon'] = True
+                                                if _svgd:
+                                                    style2['svgPath'] = _svgd
+                                                    style2['svgW'] = _svw
+                                                    style2['svgH'] = _svh
+                                                if _prst2:
+                                                    style2['preset'] = _prst2
+                                                if line_col2:
+                                                    style2['stroke'] = line_col2
+                                                    style2['strokeWidth'] = line_w2
+                                                    style2['dash'] = line_dash2 or 'solid'
+                                                blocks.append({'id': uuid.uuid4().hex[:8], 'type': 'shape', 'shape': _shape_name, 'style': style2})
+                                                continue
                                         else:
                                             is_deco2 = (not is_white2) and up2 in ('#FF8C69', '#7EDBD5', '#FFE66D', '#FF6B35') and (geom2['x'] < 15 or geom2['x'] > 75) and geom2['y'] < 20
                                             if not is_deco2:
@@ -1606,6 +1830,11 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                             pass
                         # ограничиваем до 200 (плотные слайды с подложками)
                         blocks = blocks[:200]
+                        # авто-контраст: золото-на-золоте и т.п. чиним до сохранения
+                        try:
+                            _autocontrast_blocks(blocks)
+                        except Exception:
+                            pass
                         # notes
                         notes_text = ''
                         try:
