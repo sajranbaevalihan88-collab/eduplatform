@@ -7,6 +7,14 @@ import { useLang } from '../context/LangContext'
 
 const resolveSrc = (src?:string)=> src?.startsWith('/media') ? mediaUrl(src) : (src||'')
 
+// Потерянный файл картинки: прячем битую иконку, показываем плейсхолдер (CSS .img-missing)
+const imgMissing = (e: React.SyntheticEvent<HTMLImageElement>) => {
+  const t = e.currentTarget
+  t.style.display = 'none'
+  t.parentElement?.classList.add('img-missing')
+}
+
+
 export default function PresentationView(){
   const {t}=useLang()
   const {id}=useParams()
@@ -47,6 +55,14 @@ export default function PresentationView(){
     const bg = s.background||'#ffffff'
     if(bg.startsWith('linear-gradient')||bg.startsWith('radial-gradient')||bg.startsWith('url(')) return {background:bg}
     return {background: bg}
+  }
+  // точечная текстура тёмных слайдов как в PowerPoint
+  const slideDotsCls = (s:any)=>{
+    try{
+      const bg = s?.background
+      if(typeof bg==='string' && bg.startsWith('#') && !isLight(bg)) return 'slide-dots'
+    }catch{}
+    return ''
   }
   // aspect слайда из реальных размеров (EMU): 4:3 слайды не тянутся на 16:9
   const slideAspectStyle=(s:any)=>{ const w=s?.width, h=s?.height; if(w&&h&&w>0&&h>0) return {aspectRatio:`${w} / ${h}`} as any; return {aspectRatio:'16 / 9'} as any }
@@ -114,6 +130,7 @@ export default function PresentationView(){
                     background: rs.highlight ? (rs.highlightColor||'#fef08a') : undefined,
                     padding: rs.highlight? '1px 4px': undefined,
                     borderRadius: rs.highlight? '3px': undefined,
+                    textShadow: rs.textShadow || undefined,
                   }}>{r.text}</span>
                 }) : <span style={textStyleWithBg(b,isTitle,isSlideshow,slideBg)}>{p.runs?.map((r:any)=>r.text).join('')||''}</span>}
               </div>
@@ -185,7 +202,7 @@ export default function PresentationView(){
       return blocks.map((b:any)=>(
         <div key={b.id} className="w-full flex justify-center">
           {b.type==='text' && <div className="max-w-[90%] text-center w-full">{renderRichText(b,false,isSlideshow,slideBg)}</div>}
-          {b.type==='image' && <img src={resolveSrc(b.src)} className={`${isSlideshow?'max-h-[360px]':'max-h-[300px]'} max-w-[80%] object-contain rounded-xl mx-auto`} alt=""/>}
+          {b.type==='image' && <img onError={imgMissing} src={resolveSrc(b.src)} className={`${isSlideshow?'max-h-[360px]':'max-h-[300px]'} max-w-[80%] object-contain rounded-xl mx-auto`} alt=""/>}
           {b.type==='shape' && null}
           {b.type==='table' && <div className="border rounded-lg overflow-hidden w-full max-w-[90%] mx-auto"><div className="grid gap-px bg-slate-200" style={{gridTemplateColumns:`repeat(${b.table?.cols||3},1fr)`}}>{Array.from({length:(b.table?.rows||3)*(b.table?.cols||3)}).map((_,k)=><div key={k} className="bg-white p-2 text-sm">{t('pv_cell')}</div>)}</div></div>}
         </div>
@@ -234,7 +251,7 @@ export default function PresentationView(){
           }
           if(b.type==='image'){
             if(b.unrenderable) return <div key={b.id} style={{...common, padding:0, background:'transparent'}} className={animClass}><div className="w-full h-full rounded flex flex-col items-center justify-center bg-slate-100/80 border border-dashed border-slate-300 text-slate-500 text-xs p-2 text-center">{t('pv_img_na_a')}.{b.origExt||'emf'}{t('pv_img_na_b')}</div></div>
-            return <div key={b.id} style={{...common, padding:0, background:'transparent'}} className={animClass}><img src={resolveSrc(b.src)} style={{width:'100%', height:'100%', objectFit: s.objectFit||'contain', borderRadius: s.borderRadius||4, opacity: s.opacity||1, boxShadow: s.shadow? '0 4px 16px rgba(0,0,0,0.15)':'none'}} alt=""/></div>
+            return <div key={b.id} style={{...common, padding:0, background:'transparent'}} className={animClass}><img onError={imgMissing} src={resolveSrc(b.src)} style={{width:'100%', height:'100%', objectFit: s.objectFit||'contain', borderRadius: s.borderRadius||4, opacity: s.opacity||1, boxShadow: s.shadow? '0 4px 16px rgba(0,0,0,0.15)':'none'}} alt=""/></div>
           }
           if(b.type==='shape'){
             // скрываем декоративные прямоугольники импорта (угловые #FF8C69/#7EDBD5) — новые фигуры показываем
@@ -283,7 +300,7 @@ export default function PresentationView(){
     return (
       <div className="fixed inset-0 z-50 bg-black flex flex-col">
         <div className="flex-1 flex items-center justify-center p-4 md:p-8">
-          <div key={`${idx}-${cur.transition}`} className={`w-[960px] max-w-[95vw] aspect-video shrink-0 rounded-xl overflow-hidden shadow-2xl relative ${getTransitionClass(cur.transition||'fade')} ${curIsAbsolute?'':'bg-white p-6 md:p-10 flex flex-col items-center justify-center gap-3 overflow-auto'}`} style={{...bgStyle(cur), ...slideAspectStyle(cur)}}>
+          <div key={`${idx}-${cur.transition}`} className={`w-[960px] max-w-[95vw] aspect-video shrink-0 rounded-xl overflow-hidden shadow-2xl relative ${getTransitionClass(cur.transition||'fade')} ${slideDotsCls(cur)} ${curIsAbsolute?'':'bg-white p-6 md:p-10 flex flex-col items-center justify-center gap-3 overflow-auto'}`} style={{...bgStyle(cur), ...slideAspectStyle(cur)}}>
             {curIsAbsolute ? <div className="absolute inset-0">{renderBlocks(cur.content?.blocks||[], true, cur)}</div> : renderBlocks(cur.content?.blocks||[], true, cur)}
           </div>
         </div>
