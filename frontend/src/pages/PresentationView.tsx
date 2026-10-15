@@ -96,7 +96,7 @@ export default function PresentationView(){
       textDecoration: b.style?.underline?'underline':'none',
       textAlign: (b.style?.align|| (b.paragraphs?.[0]?.align||'left')),
       color: col,
-      lineHeight: b.style?.lineHeight||1.35,
+      lineHeight: b.style?.lineHeight||1.2,
       wordBreak: 'break-word' as any,
     }
     if (b.style?.background) return {...s, background: b.style.background, padding:'5px 10px', borderRadius:'6px', display:'inline-block', color: raw||col}
@@ -113,7 +113,7 @@ export default function PresentationView(){
             const level = p.level||0
             const isBullet = level>0 || b.style?.bullet
             return (
-              <div key={pi} style={{textAlign: align, marginBottom: '0.35em', marginLeft: isBullet? '1.1em' : 0, position:'relative', whiteSpace:'pre-wrap'}} className={isBullet? 'bullet-para':''}>
+              <div key={pi} style={{textAlign: align, marginBottom: '0.1em', marginLeft: isBullet? '1.1em' : 0, position:'relative', whiteSpace:'pre-wrap'}} className={isBullet? 'bullet-para':''}>
                 {isBullet && <span style={{position:'absolute', left:'-1em', color:'#e11d48', fontWeight:700}}>•</span>}
                 {p.runs ? p.runs.map((r:any, ri:number)=>{
                   const rs:any = r.style||{}
