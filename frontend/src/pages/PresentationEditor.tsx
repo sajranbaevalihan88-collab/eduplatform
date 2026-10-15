@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import client, { mediaUrl } from '../api/client'
 const resolveSrc = (src?:string)=> src?.startsWith('/media') ? mediaUrl(src) : (src||'')
 import { Plus, Trash2, Save, Eye, Play, Type, Image as ImgIcon, Square, Circle, Triangle, Star, Table, BarChart3, Video, Palette, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Copy, Layers, Maximize2, ZoomIn, ZoomOut, List, ListOrdered, Highlighter, WrapText, RotateCw, Move, Sparkles, Layout, Paintbrush, Wand2, Film, FileImage, Shapes, Hexagon, Diamond, Pentagon, BookOpen } from 'lucide-react'
+import { SvgShape, PdfPage, FitBox } from '../components/pptxView'
 
 // Потерянный файл картинки: прячем битую иконку, показываем плейсхолдер (CSS .img-missing)
 const imgMissing = (e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -84,6 +85,8 @@ export default function PresentationEditor(){
   const [selectedBlock,setSelectedBlock]=useState<string|null>(null)
   const [showPreview,setShowPreview]=useState(false)
   const [slideshow,setSlideshow]=useState(false)
+  const [pdfUrl,setPdfUrl]=useState('')
+  const [pvMode,setPvMode]=useState<'orig'|'blocks'>('orig')
   const [zoom,setZoom]=useState(100)
   const [ribbonTab,setRibbonTab]=useState<'home'|'insert'|'design'|'transitions'|'animations'>('home')
   const [history,setHistory]=useState<Slide[][]>([])
@@ -108,6 +111,7 @@ export default function PresentationEditor(){
       client.get(`/presentations/${id}/`).then(r=>{
         setTitle(r.data.title); setDesc(r.data.description||'')
         setSubject(r.data.subject?? r.data.subject_id ?? null)
+        if(r.data.pdf_url) setPdfUrl(resolveSrc(r.data.pdf_url))
         if(r.data.slides?.length){
           const s=r.data.slides.sort((a:any,b:any)=>a.order-b.order).map((s:any,idx:number)=>({
             id:s.id, order:idx, background:s.background||'#ffffff', backgroundType:s.backgroundType||s.background_type||'solid', gradient:s.gradient, bgImage:s.bgImage||s.bg_image, layout:s.layout||'blank', transition:s.transition||'fade', width:s.width, height:s.height,
@@ -421,10 +425,25 @@ export default function PresentationEditor(){
       <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col">
         <div className="h-12 bg-slate-800 flex items-center justify-between px-4 text-white">
           <span className="font-bold">{title} — предпросмотр • {slides.length} слайдов</span>
+          <div className="flex items-center gap-2">
+          {pdfUrl && (
+            <div className="flex rounded-lg overflow-hidden text-sm">
+              <button onClick={()=>setPvMode('orig')} className={`px-3 py-1.5 ${pvMode==='orig'?'bg-white text-slate-900':'bg-slate-700 text-slate-200'}`}>📄 Оригинал</button>
+              <button onClick={()=>setPvMode('blocks')} className={`px-3 py-1.5 ${pvMode==='blocks'?'bg-white text-slate-900':'bg-slate-700 text-slate-200'}`}>🧩 Конструктор</button>
+            </div>
+          )}
           <button onClick={()=>setShowPreview(false)} className="px-4 py-1.5 rounded-lg bg-white text-slate-900 font-semibold">✕ Закрыть</button>
+          </div>
         </div>
         <div className="flex-1 overflow-auto p-8 bg-slate-800 flex flex-col items-center gap-6">
           {slides.map((s,i)=>{
+            if(pvMode==='orig' && pdfUrl){
+              return (
+              <div key={`${i}-${s.transition}`} className="w-[900px] max-w-[90vw] aspect-video shrink-0 rounded-xl border-4 border-white shadow-2xl overflow-hidden relative flex items-center justify-center bg-black">
+                <PdfPage url={pdfUrl} page={i+1} scale={1.5} className="w-full h-full object-contain" onError={()=>setPvMode('blocks')}/>
+              </div>
+              )
+            }
             const hasG = (s.content.blocks||[]).some((b:any)=>b.style?.x!==undefined)
             return (
               <div key={`${i}-${s.transition}`} className={`w-[900px] max-w-[90vw] aspect-video shrink-0 rounded-xl border-4 border-white shadow-2xl overflow-hidden relative ${getTransitionClass(s.transition||'нет')} ${slideDotsCls((s as any).background)} ${hasG?'':'p-10 flex flex-col gap-4'}`} style={{...getSlideBgStyle(s), ...slideAspectStyle(s)}}>
@@ -437,7 +456,7 @@ export default function PresentationEditor(){
                         return <div key={b.id} className={anim} style={{position:'absolute', left: st.x!=null?`${st.x}%`:'0%', top: st.y!=null?`${st.y}%`:'0%', width: st.w!=null?`${st.w}%`:'90%', height: st.h!=null?`${st.h}%`:'auto', zIndex: st.z||0, transform: st.rotation?`rotate(${st.rotation}deg)`:undefined, overflow:'visible', display:'block', padding: st.background?'4px 6px':'1px 7px', background: st.background||'transparent', border: st.stroke?`${st.strokeWidth||1}px ${st.dash||'solid'} ${st.stroke}`:undefined}}><div style={anchoredInner(st)}><div style={{fontSize:st.fontSize||16, fontFamily:fontStack(st.fontFamily), lineHeight:textLineHeight(st), color:st.color||'#1e293b', textAlign:st.align||'left'}}>{b.paragraphs? b.paragraphs.map((p:any,pi:number)=><div key={pi} style={{textAlign:p.align||st.align||'left', marginBottom:'0.2em', lineHeight:p.lineHeight||textLineHeight(st)}}>{p.runs? p.runs.map((r:any,ri:number)=><span key={ri} style={{fontFamily:fontStack(r.style?.fontFamily), fontSize:r.style?.fontSize, fontWeight:r.style?.bold?'700':undefined, fontStyle:r.style?.italic?'italic':undefined, textDecoration:r.style?.underline?'underline':undefined, color:r.style?.color, background:r.style?.highlight?'#fef08a':undefined, textShadow:r.style?.textShadow||undefined}}>{r.text}</span>): p.text}</div>): b.content}</div></div></div>
                       }
                        if(b.type==='image') return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||30}%`, height:`${st.h||30}%`, zIndex:st.z||0, transform: st.rotation?`rotate(${st.rotation}deg)`:undefined}}>{b.unrenderable ? <div className="w-full h-full rounded flex flex-col items-center justify-center bg-slate-100 border border-dashed border-slate-300 text-slate-500 text-xs p-1 text-center">{b.brokenLink ? '🖼 Картинка повреждена в исходном файле' : <>🖼 Картинка .{b.origExt||'emf'} не поддерживается браузером</>}</div> : <img onError={imgMissing} src={resolveSrc(b.src)} style={{width:'100%', height:'100%', objectFit: st.objectFit||'contain'}} alt=""/>}</div>
-                      if(b.type==='shape' && st.svgPath) return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||20}%`, height:`${st.h||15}%`, zIndex:st.z||0}}><svg viewBox={`0 0 ${st.svgW||10000} ${st.svgH||10000}`} preserveAspectRatio={st.icon?"xMidYMid meet":"none"} style={{width:'100%', height:'100%', display:'block'}}><path d={st.svgPath} fill={st.fill && st.fill!=='transparent' ? st.fill : 'none'} stroke={st.stroke||'none'} strokeWidth={st.strokeWidth||0} strokeDasharray={st.dash==='dotted'?'2 3':st.dash==='dashed'?'7 4':undefined} vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></svg></div>
+                      if(b.type==='shape' && st.svgPath) return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||20}%`, height:`${st.h||15}%`, zIndex:st.z||0}}><SvgShape st={st} gid={`ed-pv-${b.id}`}/></div>
                       if(b.type==='shape') return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||20}%`, height:`${st.h||15}%`, zIndex:st.z||0, transform: st.rotation?`rotate(${st.rotation}deg)`:undefined, background: st.fill||'#3B82F6', border: st.stroke?`${st.strokeWidth||1}px ${st.dash||'solid'} ${st.stroke}`:undefined, borderRadius: st.shape==='circle'||st.shape==='ellipse'?'50%':(st.radiusPct!=null?(st.radiusPct<=0?0:'12px'):6)}}></div>
                       if(b.type==='table') return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||40}%`, height:`${st.h||25}%`, zIndex:st.z||0}}><div className={`grid gap-px w-full h-full ${((b.table?.cells||[]).some((row:any)=>row.some((c:any)=>c?.style?.background)))?'bg-slate-200':'bg-transparent'}`} style={{gridTemplateColumns:`repeat(${b.table?.cols||3},1fr)`}}>{(b.table?.cells||[]).flatMap((row:any)=>row.filter((c:any)=>!c?.merged).map((c:any,k:number)=><div key={k} className="p-1 text-xs flex items-center justify-center overflow-hidden" style={{gridColumn:`span ${c?.colspan||1}`, gridRow:`span ${c?.rowspan||1}`}}>{c?.text||'—'}</div>))}</div></div>
                       if(b.type==='chart') return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||40}%`, height:`${st.h||30}%`, zIndex:st.z||0}}><div className="w-full h-full bg-white rounded-lg border flex flex-col items-center justify-center p-1"><BarChart3 size={14}/><span className="text-xs">{b.style?.chartType||'bar'}</span></div></div>
@@ -479,7 +498,7 @@ export default function PresentationEditor(){
                     return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||80}%`, height: st.h!=null?`${st.h}%`:'auto', zIndex:st.z||0, transform: st.rotation?`rotate(${st.rotation}deg)`:undefined, display:'block', overflow:'visible', padding: st.background?'4px 6px':'1px 7px', background: st.background||'transparent', border: st.stroke?`${st.strokeWidth||1}px ${st.dash||'solid'} ${st.stroke}`:undefined}}><div style={anchoredInner(st)}><div style={{fontSize:(st.fontSize||20)*1.08, fontFamily:fontStack(st.fontFamily), lineHeight:textLineHeight(st), color:st.color||'#1e293b', textAlign:st.align||'left'}}>{b.paragraphs? b.paragraphs.map((p:any,pi:number)=><div key={pi} style={{textAlign:p.align||st.align||'left', lineHeight:p.lineHeight||textLineHeight(st)}}>{p.runs? p.runs.map((r:any,ri:number)=><span key={ri} style={{fontFamily:fontStack(r.style?.fontFamily), fontSize:r.style?.fontSize, fontWeight:r.style?.bold?'700':undefined, fontStyle:r.style?.italic?'italic':undefined, textDecoration:r.style?.underline?'underline':undefined, color:r.style?.color, background:r.style?.highlight?'#fef08a':undefined, textShadow:r.style?.textShadow||undefined}}>{r.text}</span>): p.text}</div>): b.content}</div></div></div>
                   }
                   if(b.type==='image') return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||30}%`, height:`${st.h||30}%`, zIndex:st.z||0, transform: st.rotation?`rotate(${st.rotation}deg)`:undefined}}>{b.unrenderable ? <div className="w-full h-full rounded flex flex-col items-center justify-center bg-white/10 border border-dashed border-white/40 text-white/80 text-xs p-1 text-center">{b.brokenLink ? '🖼 Картинка повреждена в исходном файле' : <>🖼 Картинка .{b.origExt||'emf'} не поддерживается браузером</>}</div> : <img onError={imgMissing} src={resolveSrc(b.src)} style={{width:'100%', height:'100%', objectFit: st.objectFit||'contain'}} alt=""/>}</div>
-                  if(b.type==='shape' && st.svgPath) return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||20}%`, height:`${st.h||15}%`, zIndex:st.z||0}}><svg viewBox={`0 0 ${st.svgW||10000} ${st.svgH||10000}`} preserveAspectRatio={st.icon?"xMidYMid meet":"none"} style={{width:'100%', height:'100%', display:'block'}}><path d={st.svgPath} fill={st.fill && st.fill!=='transparent' ? st.fill : 'none'} stroke={st.stroke||'none'} strokeWidth={st.strokeWidth||0} strokeDasharray={st.dash==='dotted'?'2 3':st.dash==='dashed'?'7 4':undefined} vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></svg></div>
+                  if(b.type==='shape' && st.svgPath) return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||20}%`, height:`${st.h||15}%`, zIndex:st.z||0}}><SvgShape st={st} gid={`ed-show-${b.id}`}/></div>
                   if(b.type==='shape') return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||20}%`, height:`${st.h||15}%`, zIndex:st.z||0, transform: st.rotation?`rotate(${st.rotation}deg)`:undefined, background: st.fill||'#3B82F6', border: st.stroke?`${st.strokeWidth||1}px ${st.dash||'solid'} ${st.stroke}`:undefined, borderRadius: b.shape==='circle'||b.shape==='ellipse'?'50%':(st.radiusPct!=null?(st.radiusPct<=0?0:'12px'):6)}}></div>
                   if(b.type==='table') return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||40}%`, height:`${st.h||25}%`, zIndex:st.z||0}}><div className={`grid gap-px w-full h-full ${((b.table?.cells||[]).some((row:any)=>row.some((c:any)=>c?.style?.background)))?'bg-slate-200':'bg-transparent'}`} style={{gridTemplateColumns:`repeat(${b.table?.cols||3},1fr)`}}>{(b.table?.cells||[]).flatMap((row:any)=>row.filter((c:any)=>!c?.merged).map((c:any,k:number)=><div key={k} className="p-1 text-xs flex items-center justify-center overflow-hidden" style={{gridColumn:`span ${c?.colspan||1}`, gridRow:`span ${c?.rowspan||1}`}}>{c?.text||'—'}</div>))}</div></div>
                   return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, zIndex:st.z||0}}>{b.content}</div>
@@ -753,13 +772,10 @@ export default function PresentationEditor(){
                     const animCls = getAnimationClass(b.animation||'нет')
                     const selCls = isSelected ? 'border-[#d24726] bg-orange-50/20 shadow-[0_0_0_2px_rgba(211,71,38,0.15)]' : 'border-transparent hover:border-white/40'
                     if(b.type==='text'){
+                      const edParas = (b.paragraphs && b.paragraphs.length) || 1
                       return (
-                        <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} style={{...common, height: s.h!=null? `${s.h}%`:'auto', overflow:'visible', display:'block', padding: needCard ? '8px 10px' : s.background?'6px 8px': '2px 7px', background: needCard ? '#ffffff' : s.background&& !['#FFE66D','#FF8C69','#FFE600'].includes(s.background) ? s.background : 'transparent', borderRadius: needCard ? '8px' : s.background?'6px':0, boxShadow: needCard ? '0 2px 10px rgba(0,0,0,0.06)' as any : undefined, border: needCard ? '1px solid #f1f5f9' as any : (s.stroke ? `${s.strokeWidth||1}px ${s.dash||'solid'} ${s.stroke}` as any : undefined), cursor:'move'}} className={`group p-1 border-2 ${selCls} rounded-lg ${animCls}`}>
-                          <div style={anchoredInner(s)}><div contentEditable suppressContentEditableWarning onBlur={e=>{
-                            const val=(e.target as HTMLElement).innerText
-                            setSlides(sl=>sl.map((si,i)=>i!==active?si:{...si, content:{...si.content, blocks:si.content.blocks.map(x=>x.id===b.id? {...x, content:val}:x)}}))
-                          }} onFocus={()=>setSelectedBlock(b.id)} className="w-full bg-transparent focus:outline-none min-h-[1em] whitespace-pre-wrap outline-none">
-                            {b.paragraphs ? b.paragraphs.map((p:any,pi:number)=><div key={pi} style={{textAlign:p.align||s.align||'left', marginBottom:'0.2em', paddingLeft: p.level? '1em':0, position:'relative', fontSize: s.fontSize||16, fontFamily:fontStack(s.fontFamily), lineHeight:p.lineHeight||textLineHeight(s), color: s.color||'#1e293b'}}>{(p.level||s.bullet)&&<span style={{position:'absolute', left:0, color:'#e11d48'}}>•</span>}{p.runs? p.runs.map((r:any,ri:number)=><span key={ri} style={{fontSize:r.style?.fontSize, fontFamily:fontStack(r.style?.fontFamily), fontWeight:r.style?.bold?'700':undefined, fontStyle:r.style?.italic?'italic':undefined, textDecoration:r.style?.underline?'underline':undefined, color:r.style?.color, background:r.style?.highlight?'#fef08a':undefined, textShadow:r.style?.textShadow||undefined}}>{r.text}</span>): p.text}</div>) : <div style={{fontSize:s.fontSize||18, fontFamily:fontStack(s.fontFamily), lineHeight:textLineHeight(s), fontWeight:s.bold?'700':'400', color:s.color||'#1e293b', textAlign:s.align||'left'}}>{b.content}</div>}</div></div>
+                        <FitBox key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e:any)=>handleDragStart(e,b.id)} boxStyle={{...common, height: s.h!=null? `${s.h}%`:'auto', overflow:'visible', display:'block', padding: needCard ? '8px 10px' : s.background?'6px 8px': '2px 7px', background: needCard ? '#ffffff' : s.background&& !['#FFE66D','#FF8C69','#FFE600'].includes(s.background) ? s.background : 'transparent', borderRadius: needCard ? '8px' : s.background?'6px':0, boxShadow: needCard ? '0 2px 10px rgba(0,0,0,0.06)' as any : undefined, border: needCard ? '1px solid #f1f5f9' as any : (s.stroke ? `${s.strokeWidth||1}px ${s.dash||'solid'} ${s.stroke}` as any : undefined), cursor:'move'}} innerStyle={anchoredInner(s)} hasH={s.h!=null} paras={edParas} className={`group p-1 border-2 ${selCls} rounded-lg ${animCls}`}
+                          overlay={<>
                           <button onClick={(e)=>{e.stopPropagation(); setSelectedBlock(b.id); deleteSelected()}} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100"><Trash2 size={9}/></button>
                           {isSelected && ['nw','n','ne','e','se','s','sw','w'].map((h:any)=>(
                             <div key={h} onMouseDown={(e)=>handleResizeStart(e,b.id,h)} className="absolute w-2.5 h-2.5 bg-white border border-[#d24726] rounded-sm" style={{
@@ -771,7 +787,13 @@ export default function PresentationEditor(){
                               marginTop: h==='s' ? -5 : h==='n' ? 0 : undefined,
                             }}/>
                           ))}
-                        </div>
+                          </>}>
+                          <div contentEditable suppressContentEditableWarning onBlur={e=>{
+                            const val=(e.target as HTMLElement).innerText
+                            setSlides(sl=>sl.map((si,i)=>i!==active?si:{...si, content:{...si.content, blocks:si.content.blocks.map(x=>x.id===b.id? {...x, content:val}:x)}}))
+                          }} onFocus={()=>setSelectedBlock(b.id)} className="w-full bg-transparent focus:outline-none min-h-[1em] whitespace-pre-wrap outline-none">
+                            {b.paragraphs ? b.paragraphs.map((p:any,pi:number)=><div key={pi} style={{textAlign:p.align||s.align||'left', marginBottom:'0.2em', paddingLeft: p.level? '1em':0, position:'relative', fontSize: s.fontSize||16, fontFamily:fontStack(s.fontFamily), lineHeight:p.lineHeight||textLineHeight(s), color: s.color||'#1e293b'}}>{(p.level||s.bullet)&&<span style={{position:'absolute', left:0, color:'#e11d48'}}>•</span>}{p.runs? p.runs.map((r:any,ri:number)=><span key={ri} style={{fontSize:r.style?.fontSize, fontFamily:fontStack(r.style?.fontFamily), fontWeight:r.style?.bold?'700':undefined, fontStyle:r.style?.italic?'italic':undefined, textDecoration:r.style?.underline?'underline':undefined, color:r.style?.color, background:r.style?.highlight?'#fef08a':undefined, textShadow:r.style?.textShadow||undefined}}>{r.text}</span>): p.text}</div>) : <div style={{fontSize:s.fontSize||18, fontFamily:fontStack(s.fontFamily), lineHeight:textLineHeight(s), fontWeight:s.bold?'700':'400', color:s.color||'#1e293b', textAlign:s.align||'left'}}>{b.content}</div>}</div>
+                        </FitBox>
                       )
                     }
                     if(b.type==='image'){
@@ -806,7 +828,7 @@ export default function PresentationEditor(){
                       else if(b.shape==='trapezoid') shapeStyle.clipPath='polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)'
                       else if(b.shape==='rounded') shapeStyle.borderRadius='12px'
                       return <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} style={{...common, ...shapeStyle}} className={`group flex items-center justify-center border-2 ${selCls} ${animCls}`}>
-                        {s.svgPath ? (<svg viewBox={`0 0 ${s.svgW||10000} ${s.svgH||10000}`} preserveAspectRatio={s.icon?"xMidYMid meet":"none"} style={{width:'100%', height:'100%', display:'block', pointerEvents:'none'}}><path d={s.svgPath} fill={s.fill && s.fill!=='transparent' ? s.fill : 'none'} stroke={s.stroke||'none'} strokeWidth={s.strokeWidth||0} strokeDasharray={s.dash==='dotted'?'2 3':s.dash==='dashed'?'7 4':undefined} vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></svg>) : null}
+                        {s.svgPath ? (<SvgShape st={s} gid={`ed-canvas-${b.id}`} svgStyle={{pointerEvents:'none'}}/>) : null}
                         {isSelected && ['nw','n','ne','e','se','s','sw','w'].map((h:any)=>(
                           <div key={h} onMouseDown={(e)=>handleResizeStart(e,b.id,h)} className="absolute w-2.5 h-2.5 bg-white border border-[#d24726] rounded-sm" style={{
                             cursor: h==='nw'||h==='se' ? 'nwse-resize' : h==='ne'||h==='sw' ? 'nesw-resize' : h==='n'||h==='s' ? 'ns-resize' : 'ew-resize',
