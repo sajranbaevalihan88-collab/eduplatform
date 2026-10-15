@@ -893,7 +893,12 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                     try:
                         import shutil
                         import subprocess
-                        soffice = shutil.which('soffice') or shutil.which('libreoffice')
+                        _cands0 = [shutil.which('soffice'), shutil.which('libreoffice'),
+                                   os.environ.get('SOFFICE_PATH'),
+                                   r'C:\Program Files\LibreOffice\program\soffice.exe',
+                                   r'C:\Program Files (x86)\LibreOffice\program\soffice.exe',
+                                   '/usr/bin/soffice', '/usr/bin/libreoffice']
+                        soffice = next((c for c in _cands0 if c and os.path.exists(c)), None)
                         if not soffice:
                             return None, ext
                         with tempfile.NamedTemporaryFile(delete=False, suffix=ext.lower()) as f:
@@ -1301,6 +1306,48 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                     for chunk in file.chunks():
                         tmp.write(chunk)
                     tmp_path = tmp.name
+
+                def _convert_pptx_to_pdf(pptx_path, fallback_pages=0):
+                    """PDF-двойник оригинала через LibreOffice (попиксельно как в PowerPoint).
+                    Возвращает (bytes, pages) или (None, 0). Импорт не роняем при ошибке."""
+                    try:
+                        import shutil
+                        import subprocess
+                        _cands = [shutil.which('soffice'), shutil.which('libreoffice'),
+                                  os.environ.get('SOFFICE_PATH'),
+                                  r'C:\Program Files\LibreOffice\program\soffice.exe',
+                                  r'C:\Program Files (x86)\LibreOffice\program\soffice.exe',
+                                  '/usr/bin/soffice', '/usr/bin/libreoffice',
+                                  '/opt/libreoffice/program/soffice']
+                        soffice = next((c for c in _cands if c and os.path.exists(c)), None)
+                        if not soffice:
+                            return None, 0
+                        outdir = tempfile.mkdtemp(prefix='pptx_pdf_')
+                        try:
+                            subprocess.run([soffice, '--headless', '--convert-to', 'pdf', '--outdir', outdir, pptx_path],
+                                           capture_output=True, timeout=180)
+                            cands = [os.path.join(outdir, f) for f in os.listdir(outdir) if f.lower().endswith('.pdf')]
+                            if not cands:
+                                return None, 0
+                            with open(cands[0], 'rb') as fh:
+                                data = fh.read()
+                            if len(data) < 1024:
+                                return None, 0
+                            pages = fallback_pages or 0
+                            try:
+                                import fitz
+                                pages = len(fitz.open(stream=data, filetype='pdf'))
+                            except Exception:
+                                pass
+                            return data, pages
+                        finally:
+                            try:
+                                import shutil as _sh
+                                _sh.rmtree(outdir, ignore_errors=True)
+                            except Exception:
+                                pass
+                    except Exception:
+                        return None, 0
                 try:
                     pptx = PptxPres(tmp_path)
                     scheme = _parse_scheme_colors(tmp_path)
@@ -1874,6 +1921,17 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                             notes=notes_text[:2000]
                         )
                         created_slides += 1
+                    # PDF-двойник оригинала (не роняет импорт при ошибке конверта)
+                    try:
+                        _pdf_bytes, _pdf_pages = _convert_pptx_to_pdf(tmp_path, created_slides)
+                        if _pdf_bytes:
+                            from django.core.files.base import ContentFile as _CF
+                            pres.pdf_file.save('pres_%d.pdf' % pres.id, _CF(_pdf_bytes))
+                            if _pdf_pages:
+                                pres.pdf_pages = _pdf_pages
+                            pres.save(update_fields=['pdf_file', 'pdf_pages'])
+                    except Exception:
+                        pass
                 finally:
                     try: os.unlink(tmp_path)
                     except: pass

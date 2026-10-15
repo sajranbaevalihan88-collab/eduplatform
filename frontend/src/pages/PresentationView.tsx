@@ -51,6 +51,70 @@ function FitBox({boxStyle, innerStyle, hasH, paras, className, children}: any){
   })
   return <div ref={o} style={boxStyle} className={className}><div style={innerStyle}><div ref={el} className="w-full" style={{width:'100%'}}>{children}</div></div></div>
 }
+// PDF-двойник оригинала: попиксельный рендер страницы через pdf.js (ленивый импорт,
+// воркер локальный — работает офлайн; документ кэшируем на URL)
+const _pdfDocs = new Map<string, Promise<any>>()
+const getPdfDoc = (url:string) => {
+  let p = _pdfDocs.get(url)
+  if(!p){
+    p = (async()=>{
+      const pdfjs:any = await import('pdfjs-dist')
+      try{
+        const w:any = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+        pdfjs.GlobalWorkerOptions.workerSrc = w.default || w
+      }catch{}
+      return pdfjs.getDocument({url, withCredentials:false}).promise
+    })()
+    _pdfDocs.set(url, p)
+    p.catch(()=>{ _pdfDocs.delete(url) })
+  }
+  return p
+}
+
+function PdfPage({url, page, scale=2, className, style, imgStyle, onError}: any){
+  const ref = useRef<HTMLCanvasElement|null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(()=>{
+    let dead=false; let task:any=null
+    setFailed(false)
+    getPdfDoc(url).then(async (doc:any)=>{
+      if(dead) return
+      try{
+        const pg = await doc.getPage(page)
+        if(dead) return
+        const vp = pg.getViewport({scale})
+        const cv = ref.current
+        if(!cv) return
+        cv.width = Math.floor(vp.width); cv.height = Math.floor(vp.height)
+        const ctx = cv.getContext('2d')
+        if(!ctx) return
+        task = pg.render({canvasContext: ctx, viewport: vp})
+        await task.promise
+      }catch(e:any){
+        if(dead) return
+        if(e?.name==='RenderingCancelledException') return
+        setFailed(true); onError && onError()
+      }
+    }).catch(()=>{ if(!dead){ setFailed(true); onError && onError() } })
+    return ()=>{ dead=true; try{ task?.cancel() }catch{} }
+  },[url, page, scale])
+  if(failed) return null
+  return <canvas ref={ref} className={className} style={{...style, ...(imgStyle||{})}}/>
+}
+
+// ленивая миниатюра PDF: рендерим только когда видна
+function PdfThumb({url, page, active}: any){
+  const wrap = useRef<HTMLDivElement|null>(null)
+  const [vis, setVis] = useState(false)
+  useEffect(()=>{
+    const el = wrap.current
+    if(!el) return
+    const io = new IntersectionObserver((es)=>{ if(es.some(e=>e.isIntersecting)){ setVis(true); io.disconnect() } }, {rootMargin:'200px'})
+    io.observe(el)
+    return ()=>io.disconnect()
+  },[])
+  return <div ref={wrap} className="h-full w-full relative overflow-hidden">{vis ? <PdfPage url={url} page={page} scale={0.4} className="w-full h-full object-contain"/> : null}</div>
+}
 // CSS linear-gradient -> SVG fill: парсим "linear-gradient(315deg, rgba(..) 0%, ...)"
 // (SVG не понимает CSS-градиенты: fill="linear-gradient(...)" рисуется ЧЁРНЫМ)
 const parseCssGradient = (css: string) => {
@@ -88,6 +152,7 @@ export default function PresentationView(){
   const [idx,setIdx]=useState(startSlide)
   const [me,setMe]=useState<any>(null)
   const [slideshow,setSlideshow]=useState(false)
+  const [modeOv,setModeOv]=useState<any>(null) // 'orig' | 'blocks' | null(auto)
 
   useEffect(()=>{
     const raw=localStorage.getItem('user')
@@ -102,6 +167,10 @@ export default function PresentationView(){
   if(!pres) return <div className="p-8 text-center"><div className="skeleton h-32 rounded-2xl max-w-2xl mx-auto"/></div>
 
   const cur=slides[idx]
+  const pdfUrl = pres.pdf_url ? resolveSrc(pres.pdf_url) : ''
+  const hasPdf = !!pdfUrl
+  const mode = modeOv ?? (hasPdf ? 'orig' : 'blocks')
+  const pdfFail = ()=> setModeOv('blocks')
   const isOwner = me && (String(pres.owner)===String(me.id) || String(pres.owner_id)===String(me.id) || me.role==='admin' || me.is_staff)
   const handleDelete=async()=>{
     if(!confirm(t('pv_del_confirm'))) return
@@ -367,7 +436,11 @@ export default function PresentationView(){
       <div className="fixed inset-0 z-50 bg-black flex flex-col">
         <div className="flex-1 flex items-center justify-center p-4 md:p-8">
           <div key={`${idx}-${cur.transition}`} className={`w-[960px] max-w-[95vw] aspect-video shrink-0 rounded-xl overflow-hidden shadow-2xl relative ${getTransitionClass(cur.transition||'fade')} ${slideDotsCls(cur)} ${curIsAbsolute?'':'bg-white p-6 md:p-10 flex flex-col items-center justify-center gap-3 overflow-auto'}`} style={{...bgStyle(cur), ...slideAspectStyle(cur)}}>
-            {curIsAbsolute ? <div className="absolute inset-0">{renderBlocks(cur.content?.blocks||[], true, cur)}</div> : renderBlocks(cur.content?.blocks||[], true, cur)}
+            {mode==='orig' && hasPdf ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <PdfPage url={pdfUrl} page={idx+1} scale={2} className="w-full h-full object-contain" onError={pdfFail}/>
+              </div>
+            ) : curIsAbsolute ? <div className="absolute inset-0">{renderBlocks(cur.content?.blocks||[], true, cur)}</div> : renderBlocks(cur.content?.blocks||[], true, cur)}
           </div>
         </div>
         <div className="h-14 bg-white/10 backdrop-blur flex items-center justify-center gap-3 text-white">
@@ -421,6 +494,12 @@ export default function PresentationView(){
             <button onClick={()=>setIdx(i=>Math.min(slides.length-1,i+1))} disabled={idx===slides.length-1} className="p-2 rounded-xl bg-slate-100 disabled:opacity-40"><ChevronRight size={18}/></button>
           </div>
           <div className="flex gap-2">
+            {hasPdf && (
+              <div className="flex rounded-xl border overflow-hidden text-sm">
+                <button onClick={()=>setModeOv('orig')} className={`px-3 py-1.5 flex items-center gap-1.5 ${mode==='orig'?'bg-slate-900 text-white':'bg-white text-slate-600'}`}>{t('pv_original')}</button>
+                <button onClick={()=>setModeOv('blocks')} className={`px-3 py-1.5 flex items-center gap-1.5 ${mode==='blocks'?'bg-slate-900 text-white':'bg-white text-slate-600'}`}>{t('pv_blocks')}</button>
+              </div>
+            )}
             <button onClick={()=>setSlideshow(true)} className="px-3 py-1.5 rounded-xl bg-white border flex items-center gap-1.5 text-sm"><Maximize2 size={14}/> {t('pv_fullscreen')}</button>
             {isOwner && <Link to={`/presentations/${id}/edit`} className="px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm flex items-center gap-1"><Edit size={14}/> {t('edit')}</Link>}
           </div>
@@ -428,7 +507,11 @@ export default function PresentationView(){
 
         {cur ? (
           <div key={`${idx}-${cur.transition}`} className={`aspect-video shrink-0 rounded-xl border shadow-lg overflow-hidden relative ${getTransitionClass(cur.transition||'fade')} ${curIsAbsolute?'':'flex flex-col'}`} style={{...bgStyle(cur), ...slideAspectStyle(cur)}}>
-            {curIsAbsolute ? (
+            {mode==='orig' && hasPdf ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <PdfPage url={pdfUrl} page={idx+1} scale={2} className="w-full h-full object-contain" onError={pdfFail}/>
+              </div>
+            ) : curIsAbsolute ? (
               <>
                 <div className="absolute inset-0">
                   {renderBlocks(cur.content?.blocks||[], false, cur)}
@@ -458,7 +541,9 @@ export default function PresentationView(){
             return (
             <button key={i} onClick={()=>setIdx(i)} className={`shrink-0 w-32 aspect-video rounded-lg border-2 overflow-hidden text-left relative ${i===idx?'border-blue-600 ring-2 ring-blue-100':'border-slate-200 hover:border-slate-300'}`}>
               <div className="h-full w-full relative overflow-hidden" style={bgStyle(s)}>
-                {thumbHasGeom ? (
+                {mode==='orig' && hasPdf ? (
+                  <PdfThumb url={pdfUrl} page={i+1} active={i===idx}/>
+                ) : thumbHasGeom ? (
                   <div className="absolute inset-0 scale-[0.18] origin-top-left w-[555%] h-[555%]">
                     {s.content?.blocks?.slice(0,6).map((b:any)=>(
                       <div key={b.id} style={{

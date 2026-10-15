@@ -57,6 +57,9 @@ class Presentation(models.Model):
     is_public = models.BooleanField(default=True)
     is_lesson_private = models.BooleanField(default=False, help_text="Создана внутри урока — не показывать в общей ленте, видна только в уроке")
     lesson = models.ForeignKey('lessons.Lesson', on_delete=models.SET_NULL, null=True, blank=True, related_name='presentations', help_text="Урок, внутри которого создан контент. Пока урок не опубликован — видит только владелец")
+    # PDF-двойник оригинала (LibreOffice-конверт): просмотр «как в PowerPoint» попиксельно
+    pdf_file = models.FileField(upload_to='pptx_pdf/', blank=True, null=True)
+    pdf_pages = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return self.title

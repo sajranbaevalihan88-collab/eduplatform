@@ -108,13 +108,21 @@ class PresentationSerializer(serializers.ModelSerializer):
     slides = SlideSerializer(many=True, read_only=True)
     slides_count = serializers.IntegerField(source='slides.count', read_only=True)
     owner = serializers.ReadOnlyField(source='owner.id')
+    pdf_url = serializers.SerializerMethodField()
+    def get_pdf_url(self, obj):
+        try:
+            if obj.pdf_file:
+                return obj.pdf_file.url
+        except Exception:
+            pass
+        return ''
     subject = serializers.PrimaryKeyRelatedField(queryset=__import__('apps.catalog.models', fromlist=['Subject']).Subject.objects.all(), required=True, allow_null=False)
     subject_name = serializers.CharField(source='subject.name', read_only=True, default='')
     subject_slug = serializers.CharField(source='subject.slug', read_only=True, default='')
     lesson = serializers.PrimaryKeyRelatedField(queryset=__import__('apps.lessons.models', fromlist=['Lesson']).Lesson.objects.all(), required=False, allow_null=True, default=None)
     class Meta:
         model = Presentation
-        fields = ['id','title','description','subject','subject_name','subject_slug','is_public','is_lesson_private','lesson','owner','created_at','updated_at','slides','slides_count']
+        fields = ['id','title','description','subject','subject_name','subject_slug','is_public','is_lesson_private','lesson','owner','created_at','updated_at','slides','slides_count','pdf_url','pdf_pages']
         read_only_fields = ['id','created_at','updated_at','owner']
 
     def validate_subject(self, value):
