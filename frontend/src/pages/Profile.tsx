@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import client from '../api/client'
 import { User, Mail, Shield, BookOpen, Layers, Presentation, FlaskConical, LogOut, Trash2, Eye, Edit, Search, Filter, Gamepad2, Play, StickyNote } from 'lucide-react'
 import { useNavigate, Link } from 'react-router-dom'
@@ -24,6 +24,11 @@ export default function Profile(){
   const [sort,setSort]=useState<'new'|'old'|'title'>('new')
   const [search,setSearch]=useState('')
   const [draft,setDraft]=useState<any>(null)
+  const tabsRef=useRef<HTMLDivElement|null>(null)
+  const showAndScroll=(t:'lessons'|'presentations'|'tests')=>{
+    setTab(t)
+    requestAnimationFrame(()=>{ tabsRef.current?.scrollIntoView({behavior:'smooth', block:'start'}) })
+  }
 
   const load=()=>{
     client.get('/auth/me/').then(r=>{
@@ -184,19 +189,19 @@ export default function Profile(){
           <Layers className="mx-auto text-blue-600" size={24}/>
           <div className="text-2xl font-bold mt-2">{stats.lessons}</div>
           <div className="text-sm text-slate-500">{t('prof_my_lessons')}</div>
-          <button onClick={()=>setTab('lessons')} className="text-xs text-blue-600 font-semibold mt-2 inline-block">{t('prof_show')}</button>
+          <button onClick={()=>showAndScroll('lessons')} className="text-xs text-blue-600 font-semibold mt-2 inline-block">{t('prof_show')}</button>
         </div>
         <div className="bg-white rounded-2xl border p-5 text-center">
           <Presentation className="mx-auto text-orange-600" size={24}/>
           <div className="text-2xl font-bold mt-2">{stats.pres}</div>
           <div className="text-sm text-slate-500">{t('prof_my_pres')}</div>
-          <button onClick={()=>setTab('presentations')} className="text-xs text-blue-600 font-semibold mt-2 inline-block">{t('prof_show')}</button>
+          <button onClick={()=>showAndScroll('presentations')} className="text-xs text-blue-600 font-semibold mt-2 inline-block">{t('prof_show')}</button>
         </div>
         <div className="bg-white rounded-2xl border p-5 text-center">
           <FlaskConical className="mx-auto text-rose-600" size={24}/>
           <div className="text-2xl font-bold mt-2">{stats.tests}</div>
           <div className="text-sm text-slate-500">{t('prof_my_tests')}</div>
-          <button onClick={()=>setTab('tests')} className="text-xs text-blue-600 font-semibold mt-2 inline-block">{t('prof_show')}</button>
+          <button onClick={()=>showAndScroll('tests')} className="text-xs text-blue-600 font-semibold mt-2 inline-block">{t('prof_show')}</button>
         </div>
       </div>
       )}
@@ -228,7 +233,7 @@ export default function Profile(){
         )}
       </div>
 
-      <div className="bg-white rounded-2xl border overflow-hidden">
+      <div ref={tabsRef} className="bg-white rounded-2xl border overflow-hidden scroll-mt-4">
         <div className="flex border-b">
           {!student && (<>
           <button onClick={()=>setTab('lessons')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='lessons'?'bg-blue-50 text-blue-700 border-b-2 border-blue-600':'text-slate-500 hover:bg-slate-50'}`}><BookOpen size={16}/> {t('prof_tab_lessons')} ({myLessons.length})</button>
