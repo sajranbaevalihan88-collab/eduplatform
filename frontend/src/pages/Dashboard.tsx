@@ -19,13 +19,14 @@ function CountUp({ value }: { value: number }) {
 }
 import client from '../api/client'
 import { Link } from 'react-router-dom'
-import { BookOpen, Layers, PenTool, Presentation as PresIcon, FlaskConical, ArrowRight, Cuboid } from 'lucide-react'
+import { BookOpen, Layers, PenTool, Presentation as PresIcon, FlaskConical, ArrowRight, Cuboid, GraduationCap, Clock } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 
 export default function Dashboard(){
   const {t}=useLang()
-  const [stats,setStats]=useState({subjects:0,lessons:0,presentations:0,tests:0,boards:0})
+  const [stats,setStats]=useState({subjects:0,lessons:0,presentations:0,tests:0,boards:0,classes:0})
   const [me,setMe]=useState<any>(null)
+  const [due,setDue]=useState(0)
   useEffect(()=>{
     Promise.all([
       client.get('/subjects/').then(r=>r.data.length||r.data.count||r.data.results?.length||0).catch(()=>0),
@@ -33,7 +34,19 @@ export default function Dashboard(){
       client.get('/presentations/').then(r=>r.data.length||r.data.count||r.data.results?.length||0).catch(()=>0),
       client.get('/tests/').then(r=>r.data.length||r.data.count||r.data.results?.length||0).catch(()=>0),
       client.get('/boards/').then(r=>r.data.length||r.data.count||r.data.results?.length||0).catch(()=>0),
-    ]).then(([s,l,p,t,b])=>setStats({subjects:s,lessons:l,presentations:p,tests:t,boards:b}))
+      client.get('/classrooms/').then(r=>r.data.results||r.data||[]).catch(()=>[]),
+    ]).then(async ([s,l,p,t,b,rooms])=>{
+      setStats({subjects:s,lessons:l,presentations:p,tests:t,boards:b,classes:(rooms as any[]).length||0})
+      // ученику: сколько заданий ждёт сдачи (pending+overdue по всем классам)
+      try{
+        const raw=localStorage.getItem('user'); const u=raw?JSON.parse(raw):null
+        if(u && u.role==='student' && Array.isArray(rooms)){
+          const lists=await Promise.all((rooms as any[]).map(rm=>
+            client.get(`/classrooms/${rm.id}/my_tasks/`).then(r=>r.data.results||r.data||[]).catch(()=>[])))
+          setDue(lists.flat().filter((x:any)=>x.status==='pending'||x.status==='overdue').length)
+        }
+      }catch{}
+    })
     const token=localStorage.getItem('token')
     if(token){
       client.get('/auth/me/').then(r=>setMe(r.data)).catch(()=>{
@@ -47,6 +60,7 @@ export default function Dashboard(){
     {label:t('lessons'),value:stats.lessons,icon:Layers,color:'from-blue-600 to-cyan-600',to:'/lessons'},
     {label:t('presentations'),value:stats.presentations,icon:PresIcon,color:'from-orange-600 to-pink-600',to:'/presentations'},
     {label:t('tests'),value:stats.tests,icon:FlaskConical,color:'from-rose-600 to-orange-600',to:'/tests'},
+    {label:t('classes'),value:stats.classes,icon:GraduationCap,color:'from-violet-600 to-purple-600',to:'/classes'},
     {label:t('dash_boards'),value:stats.boards,icon:Cuboid,color:'from-emerald-600 to-teal-600',to:'/board'},
   ]
   return (
@@ -80,6 +94,11 @@ export default function Dashboard(){
         ))}
       </div>
       <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-100 rounded-2xl p-3 text-xs text-emerald-700 text-center flex items-center justify-center gap-2 animate-fadeIn"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulseSoft"/>{t('dash_db')}</div>
+      {due>0 && (
+        <Link to="/classes" className="flex items-center justify-center gap-2 rounded-2xl p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 text-amber-800 font-semibold card-hover">
+          <Clock size={18}/> {t('cls_due')}: {due} → {t('classes')}
+        </Link>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 p-6 card-hover">

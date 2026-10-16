@@ -1,0 +1,257 @@
+import { useEffect, useState } from 'react'
+import { Link, useParams, useNavigate } from 'react-router-dom'
+import client from '../api/client'
+import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink } from 'lucide-react'
+import { useLang } from '../context/LangContext'
+import { toast } from '../context/UIContext'
+
+function fmtDl(s?: string){
+  if(!s) return '—'
+  try{ return new Date(s).toLocaleString() }catch{ return s }
+}
+function countdown(s?: string){
+  if(!s) return ''
+  const ms = new Date(s).getTime() - Date.now()
+  if(ms <= 0) return null
+  const d = Math.floor(ms/86400000), h = Math.floor(ms%86400000/3600000)
+  return d>0 ? `⏳ ${d}д ${h}ч` : `⏳ ${h}ч ${Math.floor(ms%3600000/60000)}мин`
+}
+
+const ST_CLS:any = {
+  submitted:'bg-emerald-50 text-emerald-700 border-emerald-200',
+  late:'bg-amber-50 text-amber-700 border-amber-200',
+  overdue:'bg-red-50 text-red-700 border-red-200',
+  pending:'bg-slate-100 text-slate-600 border-slate-200',
+}
+const ST_TXT:any = {submitted:'✓', late:'⏰', overdue:'⏰!', pending:'···'}
+
+export default function ClassroomDetail(){
+  const {t} = useLang()
+  const {id} = useParams()
+  const nav = useNavigate()
+  const [room,setRoom]=useState<any>(null)
+  const [tab,setTab]=useState<'stream'|'tasks'|'people'|'grades'>('stream')
+  const [members,setMembers]=useState<any[]>([])
+  const [tasks,setTasks]=useState<any[]>([])
+  const [myTasks,setMyTasks]=useState<any>({})
+  const [notes,setNotes]=useState<any[]>([])
+  const [gb,setGb]=useState<any>(null)
+  const [meId,setMeId]=useState<any>(null)
+  const [text,setText]=useState('')
+  const [addUser,setAddUser]=useState('')
+  const [copied,setCopied]=useState(false)
+  // assignment form
+  const [akind,setAkind]=useState<'lesson'|'test'>('test')
+  const [objs,setObjs]=useState<any[]>([])
+  const [aobj,setAobj]=useState('')
+  const [adl,setAdl]=useState('')
+  const [ainstr,setAinstr]=useState('')
+  const [creating,setCreating]=useState(false)
+
+  const load=()=>{
+    client.get(`/classrooms/${id}/`).then(r=>setRoom(r.data)).catch(()=>nav('/classes'))
+    client.get(`/classrooms/${id}/members/`).then(r=>setMembers(r.data.results||r.data||[])).catch(()=>{})
+    client.get(`/assignments/?classroom=${id}`).then(r=>setTasks(r.data.results||r.data||[])).catch(()=>{})
+    client.get(`/classrooms/${id}/my_tasks/`).then(r=>{
+      const m:any={}; (r.data.results||r.data||[]).forEach((x:any)=>m[x.id]=x); setMyTasks(m)
+    }).catch(()=>{})
+    client.get(`/announcements/?classroom=${id}`).then(r=>setNotes(r.data.results||r.data||[])).catch(()=>{})
+    client.get(`/classrooms/${id}/gradebook/`).then(r=>setGb(r.data)).catch(()=>setGb(null))
+    try{ setMeId(JSON.parse(localStorage.getItem('user')||'{}').id) }catch{}
+  }
+  useEffect(()=>{load()},[id])
+  useEffect(()=>{
+    if(akind==='lesson') client.get('/lessons/?owner=me').then(r=>setObjs(r.data.results||r.data||[])).catch(()=>{})
+    else client.get('/tests/?owner=me').then(r=>setObjs(r.data.results||r.data||[])).catch(()=>{})
+  },[akind])
+
+  if(!room) return <div className="p-8 text-center"><div className="skeleton h-32 rounded-2xl max-w-2xl mx-auto"/></div>
+  const isOwner = String(room.owner)===String(meId)
+
+  const post=async()=>{
+    if(!text.trim()) return
+    try{ await client.post('/announcements/', {classroom:id, text:text.trim()}); setText(''); load() }
+    catch(e:any){ toast(e?.response?.data?.detail||'err','error') }
+  }
+  const mkTask=async()=>{
+    if(!aobj){ toast(t('cls_pick_obj'),'error'); return }
+    try{
+      await client.post('/assignments/', {classroom:id, kind:akind, [akind]:Number(aobj),
+        deadline: adl? new Date(adl).toISOString(): null, instructions: ainstr})
+      setAobj(''); setAdl(''); setAinstr(''); setCreating(false); load()
+      toast(t('cls_task_created'),'success')
+    }catch(e:any){ toast(e?.response?.data?.detail||JSON.stringify(e?.response?.data)||'err','error') }
+  }
+  const submit=async(aid:number)=>{
+    try{ await client.post(`/assignments/${aid}/submit/`, {}); load(); toast(t('cls_submitted'),'success') }
+    catch(e:any){ toast(e?.response?.data?.detail||'err','error') }
+  }
+  const addMember=async()=>{
+    if(!addUser.trim()) return
+    try{ await client.post(`/classrooms/${id}/add_member/`, {username:addUser.trim()}); setAddUser(''); load(); toast(t('cls_added'),'success') }
+    catch(e:any){ toast(e?.response?.data?.detail||e?.response?.data?.username||'err','error') }
+  }
+  const copy=()=>{ try{ navigator.clipboard.writeText(room.invite_code); setCopied(true); setTimeout(()=>setCopied(false),1500) }catch{} }
+
+  const tabs:any[] = [
+    {k:'stream', label:t('cls_tab_stream'), icon:Megaphone},
+    {k:'tasks', label:t('cls_tab_tasks'), icon:ClipboardList},
+    {k:'people', label:t('cls_tab_people'), icon:Users},
+  ]
+  if(isOwner) tabs.push({k:'grades', label:t('cls_tab_grades'), icon:BarChart3})
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-5">
+      <div className="rounded-2xl p-6 text-white flex flex-wrap items-end justify-between gap-3" style={{background:`linear-gradient(135deg, ${room.color}, ${room.color}99)`}}>
+        <div>
+          <div className="flex items-center gap-2 text-white/80 text-sm"><GraduationCap size={16}/>{room.owner_name} • {room.subject_name||t('cls_no_subject')}</div>
+          <h1 className="text-2xl font-bold mt-1">{room.title}</h1>
+          {room.description && <p className="text-white/85 text-sm mt-1">{room.description}</p>}
+        </div>
+        <button onClick={copy} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 border border-white/30 font-mono tracking-[0.2em] font-bold" title={t('cls_copy_code')}>
+          {room.invite_code} {copied? <Check size={16}/> : <Copy size={16}/>}
+        </button>
+      </div>
+
+      <div className="bg-white rounded-2xl border overflow-hidden">
+        <div className="flex border-b overflow-auto">
+          {tabs.map(tb=>(
+            <button key={tb.k} onClick={()=>setTab(tb.k)} className={`flex-1 min-w-[130px] py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab===tb.k?'bg-blue-50 text-blue-700 border-b-2 border-blue-600':'text-slate-500 hover:bg-slate-50'}`}>
+              <tb.icon size={16}/> {tb.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="p-5">
+          {tab==='stream' && (
+            <div className="space-y-4">
+              {isOwner && (
+                <div className="flex gap-2">
+                  <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&post()} placeholder={t('cls_announce_ph')} className="flex-1 px-4 py-2.5 rounded-xl border outline-none focus:border-blue-400"/>
+                  <button onClick={post} className="px-5 py-2.5 rounded-xl bg-blue-700 text-white font-semibold">{t('cls_publish')}</button>
+                </div>
+              )}
+              {notes.map(n=>(
+                <div key={n.id} className="p-4 rounded-xl bg-slate-50 border">
+                  <div className="text-sm whitespace-pre-wrap">{n.text}</div>
+                  <div className="text-xs text-slate-400 mt-2">{n.author_name} • {new Date(n.created_at).toLocaleString()}</div>
+                </div>
+              ))}
+              {notes.length===0 && <div className="text-center text-slate-400 py-8">{t('cls_no_news')}</div>}
+            </div>
+          )}
+
+          {tab==='tasks' && (
+            <div className="space-y-3">
+              {isOwner && !creating && <button onClick={()=>setCreating(true)} className="px-4 py-2 rounded-xl bg-blue-700 text-white text-sm font-semibold flex items-center gap-1"><Plus size={15}/>{t('cls_new_task')}</button>}
+              {isOwner && creating && (
+                <div className="p-4 rounded-xl border bg-slate-50 space-y-3">
+                  <div className="flex rounded-xl border overflow-hidden w-fit">
+                    <button onClick={()=>setAkind('test')} className={`px-4 py-2 text-sm font-semibold ${akind==='test'?'bg-blue-700 text-white':'bg-white'}`}>{t('tests')}</button>
+                    <button onClick={()=>setAkind('lesson')} className={`px-4 py-2 text-sm font-semibold ${akind==='lesson'?'bg-blue-700 text-white':'bg-white'}`}>{t('lessons')}</button>
+                  </div>
+                  <select value={aobj} onChange={e=>setAobj(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border outline-none">
+                    <option value="">{t('cls_pick_obj')}</option>
+                    {objs.map((o:any)=><option key={o.id} value={o.id}>{o.title}</option>)}
+                  </select>
+                  <div className="flex flex-wrap gap-2">
+                    <label className="flex items-center gap-2 text-sm text-slate-600"><Clock size={15}/>{t('cls_deadline')}
+                      <input type="datetime-local" value={adl} onChange={e=>setAdl(e.target.value)} className="px-3 py-2 rounded-xl border outline-none"/>
+                    </label>
+                  </div>
+                  <textarea value={ainstr} onChange={e=>setAinstr(e.target.value)} placeholder={t('cls_instr_ph')} rows={2} className="w-full px-3 py-2.5 rounded-xl border outline-none"/>
+                  <div className="flex gap-2">
+                    <button onClick={mkTask} className="px-5 py-2 rounded-xl bg-blue-700 text-white font-semibold">{t('cls_assign')}</button>
+                    <button onClick={()=>setCreating(false)} className="px-5 py-2 rounded-xl bg-slate-200 font-semibold">{t('cancel')}</button>
+                  </div>
+                </div>
+              )}
+              {tasks.map(a=>{
+                const my = myTasks[a.id]
+                const st = my?.status || 'pending'
+                const openTo = a.kind==='lesson' ? `/lessons/${a.lesson}` : `/tests/${a.test}/take`
+                const cd = countdown(a.deadline)
+                return (
+                  <div key={a.id} className="p-4 rounded-xl border flex flex-wrap items-center gap-3">
+                    <div className="flex-1 min-w-[200px]">
+                      <div className="font-bold flex items-center gap-2">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${a.kind==='test'?'bg-rose-100 text-rose-700':'bg-blue-100 text-blue-700'}`}>{a.kind==='test'?t('tests'):t('lessons')}</span>
+                        {a.title}
+                      </div>
+                      {a.instructions && <div className="text-sm text-slate-500 mt-1">{a.instructions}</div>}
+                      <div className="text-xs text-slate-400 mt-1 flex items-center gap-2">
+                        <span className="flex items-center gap-1"><Clock size={12}/>{fmtDl(a.deadline)}</span>
+                        {cd && <span className="font-semibold text-blue-600">{cd}</span>}
+                        {st==='overdue' && <span className="font-semibold text-red-600">{t('cls_overdue')}</span>}
+                      </div>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded-full border ${ST_CLS[st]}`}>{ST_TXT[st]} {my?.score!=null? `${my.score}`:''}</span>
+                    {!isOwner && (a.lesson||a.test) && <Link to={openTo} className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14}/></Link>}
+                    {!isOwner && st!=='submitted' && st!=='late' && <button onClick={()=>submit(a.id)} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold">{t('cls_submit')}</button>}
+                  </div>
+                )
+              })}
+              {tasks.length===0 && <div className="text-center text-slate-400 py-8">{t('cls_no_tasks')}</div>}
+            </div>
+          )}
+
+          {tab==='people' && (
+            <div className="space-y-4">
+              {isOwner && (
+                <div className="flex gap-2">
+                  <input value={addUser} onChange={e=>setAddUser(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addMember()} placeholder={t('cls_add_ph')} className="flex-1 px-4 py-2.5 rounded-xl border outline-none focus:border-blue-400"/>
+                  <button onClick={addMember} className="px-5 py-2.5 rounded-xl bg-blue-700 text-white font-semibold flex items-center gap-1"><Plus size={15}/>{t('add')}</button>
+                </div>
+              )}
+              <div className="divide-y">
+                <div className="py-2.5 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-blue-700 text-white flex items-center justify-center font-bold">{room.owner_name?.[0]?.toUpperCase()}</div>
+                  <div><div className="font-semibold">{room.owner_name}</div><div className="text-xs text-slate-400">{t('cls_owner')}</div></div>
+                </div>
+                {members.map((m:any)=>(
+                  <div key={m.id} className="py-2.5 flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center font-bold">{m.student_name?.[0]?.toUpperCase()}</div>
+                    <div className="font-semibold">{m.student_name}</div>
+                    {isOwner && <button onClick={async()=>{ await client.post(`/classrooms/${id}/remove_member/`, {username:m.student_name}).catch(()=>{}); load() }} className="ml-auto text-xs text-red-500 hover:text-red-700">✕</button>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tab==='grades' && isOwner && (
+            <div className="overflow-auto">
+              {!gb || gb.assignments.length===0 ? <div className="text-center text-slate-400 py-8">{t('cls_no_tasks')}</div> : (
+              <table className="w-full text-sm min-w-[500px]">
+                <thead>
+                  <tr>
+                    <th className="text-left p-2 border-b">{t('cls_student')}</th>
+                    {gb.assignments.map((a:any)=>(
+                      <th key={a.id} className="p-2 border-b text-center" title={a.title}>{a.title.slice(0,18)}{a.title.length>18?'…':''}<div className="font-normal text-xs text-slate-400">max {a.max_score}</div></th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {gb.students.map((s:any)=>(
+                    <tr key={s.id} className="hover:bg-slate-50">
+                      <td className="p-2 border-b font-semibold">{s.username}</td>
+                      {gb.assignments.map((a:any)=>{
+                        const c = gb.cells.find((x:any)=>x.assignment===a.id && x.student===s.id)
+                        return <td key={a.id} className="p-2 border-b text-center">
+                          <span className={`inline-block min-w-[64px] px-2 py-1 rounded-lg border text-xs font-bold ${ST_CLS[c?.status||'pending']}`}>
+                            {c?.score!=null? Math.round(c.score*10)/10 : ST_TXT[c?.status||'pending']}
+                          </span>
+                        </td>
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
