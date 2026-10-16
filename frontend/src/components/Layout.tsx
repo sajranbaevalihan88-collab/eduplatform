@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility } from 'lucide-react'
+import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap } from 'lucide-react'
 import A11yPanel from './A11yPanel'
 import { useState, useEffect } from 'react'
 import client from '../api/client'
@@ -26,6 +26,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { to: '/lessons', label: t('lessons'), icon: Layers },
     { to: '/presentations', label: t('presentations'), icon: Presentation },
     { to: '/tests', label: t('tests'), icon: FlaskConical },
+    { to: '/classes', label: t('classes'), icon: GraduationCap },
     // доска — только учителям (у ученика её нет)
     ...(!student ? [{ to: '/board', label: t('board'), icon: PenTool }] : []),
     { to: '/word', label: 'Word', icon: FileText },

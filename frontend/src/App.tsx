@@ -55,6 +55,8 @@ const Board = lazy(()=>import('./pages/Board'))
 const VSCodeEditor = lazy(()=>import('./pages/VSCodeEditor'))
 const WordEditor = lazy(()=>import('./pages/WordEditor'))
 import Tests from './pages/Tests'
+import Classes from './pages/Classes'
+import ClassroomDetail from './pages/ClassroomDetail'
 import TestBuilder from './pages/TestBuilder'
 import TestTake from './pages/TestTake'
 import Notes from './pages/Notes'
@@ -93,6 +95,8 @@ export default function App() {
                 <Route path="/tests/:id" element={<TeacherRoute><TestBuilder /></TeacherRoute>} />
                 <Route path="/tests/:id/edit" element={<TeacherRoute><TestBuilder /></TeacherRoute>} />
                 <Route path="/tests/:id/take" element={<TestTake />} />
+                <Route path="/classes" element={<PrivateRoute><Classes /></PrivateRoute>} />
+                <Route path="/classes/:id" element={<PrivateRoute><ClassroomDetail /></PrivateRoute>} />
                 <Route path="/code" element={<CodeLab />} />
                 <Route path="/notes" element={<PrivateRoute><Notes /></PrivateRoute>} />
                 <Route path="/word" element={<PrivateRoute><WordEditor /></PrivateRoute>} />

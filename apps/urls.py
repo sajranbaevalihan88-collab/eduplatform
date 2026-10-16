@@ -8,6 +8,7 @@ from apps.assessments.views import TestViewSet, AttemptViewSet
 from apps.lessons.views import LessonViewSet
 from apps.code.views import CodeTaskViewSet, CodeSubmissionViewSet, SharedCodeView
 from apps.board.views import BoardViewSet
+from apps.classroom.views import ClassroomViewSet, AssignmentViewSet, SubmissionViewSet, AnnouncementViewSet
 from apps.notes.views import NoteViewSet
 from apps.word.views import WordDocumentViewSet
 
@@ -23,6 +24,10 @@ router.register(r'lessons', LessonViewSet)
 router.register(r'code-tasks', CodeTaskViewSet)
 router.register(r'code-submissions', CodeSubmissionViewSet)
 router.register(r'boards', BoardViewSet)
+router.register(r'classrooms', ClassroomViewSet, basename='classroom')
+router.register(r'assignments', AssignmentViewSet, basename='assignment')
+router.register(r'submissions', SubmissionViewSet, basename='submission')
+router.register(r'announcements', AnnouncementViewSet, basename='announcement')
 router.register(r'notes', NoteViewSet)
 router.register(r'word-docs', WordDocumentViewSet)
 
