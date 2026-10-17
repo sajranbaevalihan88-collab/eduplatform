@@ -14,16 +14,15 @@ export default function TestTake(){
   const [blockedMsg,setBlockedMsg]=useState<string|null>(null)
   const [qi,setQi]=useState(0)
   const [leftMap,setLeftMap]=useState<Record<string,number>>({})
-  const [autoRead,setAutoRead]=useState(()=>{ try{ return localStorage.getItem('edu-auto-read')==='1' }catch{ return false } })
   const [searchParams]=useSearchParams()
   const fromPath=searchParams.get('from') && searchParams.get('from')!.startsWith('/') ? searchParams.get('from')! : null
-  const {speech,speak}=useAccessibility()
+  const {speech,autoRead,toggleAutoRead,speak}=useAccessibility()
   useEffect(()=>{
-    if(speech && test?.questions?.length){
+    if(speech && autoRead && test?.questions?.length){
       speak(`${t('tt_speak_test')} ${test.title}. ${t('tt_speak_qs')}: ${test.questions.length}. ${t('tt_speak_hint')}`)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[speech, test?.id])
+  },[speech, autoRead, test?.id])
   useEffect(()=>{
     setAnswers({}); setResult(null); setAlreadyAttempted(false); setBlockedMsg(null); setQi(0); setLeftMap({})
     client.get(`/tests/${id}/`).then(r=>{
@@ -104,12 +103,12 @@ export default function TestTake(){
 
   // авто-чтение текущего вопроса для незрячих
   useEffect(()=>{
-    if(!test || result || alreadyAttempted || !autoRead) return
+    if(!test || result || alreadyAttempted || !speech || !autoRead) return
     const q = test.questions?.[qi]
     if(!q) return
     speak(`${t('tt_q')} ${qi+1}. ${q.text}. ${t('tt_variants')}: ${(q.options||[]).map((o:any)=>o.text).join(', ')}`)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[test?.id, qi, autoRead])
+  },[test?.id, qi, autoRead, speech])
 
   if(!test) return <div>{t('loading')}</div>
   if(alreadyAttempted || result){
@@ -163,9 +162,7 @@ export default function TestTake(){
       <div key={q.id} className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-2xl border p-4 sm:p-5 motion-safe:animate-slide">
         <div className="flex items-start gap-2">
           <div className="font-semibold flex-1 text-base sm:text-lg dark:text-white">#{qi+1} {q.text} <span className="text-xs px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-700 dark:text-slate-300 ml-2">{q.points} {t('points')}</span> <button onClick={()=>speak(`${t('tt_q')} ${qi+1}. ${q.text}. ${t('tt_variants')}: ${(q.options||[]).map((o:any)=>o.text).join(', ')}`)} className="ml-1 px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-blue-100 dark:bg-slate-700 dark:text-white text-xs" title={t('tt_read_aloud')}>🔊</button>
-            <button onClick={()=>{
-              setAutoRead(v=>{ try{ localStorage.setItem('edu-auto-read', v?'0':'1') }catch{}; return !v })
-            }} aria-pressed={autoRead} title={t('tt_autoread_title')} className={`ml-1 px-2 py-0.5 rounded-lg text-xs font-bold ${autoRead ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 dark:text-white'}`}>{autoRead ? '🔊 Авто' : '🔇 Авто'}</button>
+            <button onClick={toggleAutoRead} aria-pressed={autoRead} title={t('tt_autoread_title')} className={`ml-1 px-2 py-0.5 rounded-lg text-xs font-bold ${autoRead ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 dark:text-white'}`}>{autoRead ? '🔊 Авто' : '🔇 Авто'}</button>
           </div>
           {perQ>0 && (
             <span className={`shrink-0 font-mono font-bold text-lg sm:text-xl px-2.5 sm:px-3 py-1 rounded-xl ${left<=5 ? 'bg-red-100 text-red-600 motion-safe:animate-pulse dark:bg-red-900/40 dark:text-red-300' : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-white'}`} role="timer" title={t('tt_left_title')}>0:{String(Math.max(0,left)).padStart(2,'0')}</span>

@@ -15,13 +15,13 @@ export default function LessonView(){
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState<string|null>(null)
   const [me,setMe]=useState<any>(null)
-  const {speech,speak}=useAccessibility()
+  const {speech,autoRead,speak}=useAccessibility()
   useEffect(()=>{
-    if(speech && lesson){
+    if(speech && autoRead && lesson){
       speak(`${lesson.title}. ${lesson.description||''}`)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[speech, lesson?.id])
+  },[speech, autoRead, lesson?.id])
   useEffect(()=>{
     const raw=localStorage.getItem('user')
     if(raw) try{ setMe(JSON.parse(raw)) }catch{}

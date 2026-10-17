@@ -16,11 +16,11 @@ export default function CodeLab(){
   const [explanation,setExplanation]=useState<any>(null)
   const [explaining,setExplaining]=useState(false)
   const [stdinInput,setStdinInput]=useState('')
-  const {speech,speak}=useAccessibility()
+  const {speech,autoRead,speak}=useAccessibility()
   useEffect(()=>{
-    if(speech && output) speak(t('codelab_speak_out')+output)
+    if(speech && autoRead && output) speak(t('codelab_speak_out')+output)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[speech, output])
+  },[speech, autoRead, output])
   const [showNew,setShowNew]=useState(false)
   const [newTask,setNewTask]=useState({title:'',language:'python',description:'',starter_code:'print("Hello")'})
 

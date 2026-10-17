@@ -179,7 +179,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               )}
             </div>
             <button onClick={()=>setShowA11y(true)} className={`p-2 rounded-xl border flex items-center gap-1 text-xs font-bold ${(poor||speech)?'bg-amber-400 border-amber-500 text-slate-900':'bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border-transparent hover:border-slate-200 dark:border-slate-600'}`} title={t('a11y_settings')}><Accessibility size={16}/><span className="hidden lg:inline">{t('a11y')}{(poor||speech)?' •':' '}</span></button>
-            <A11yPanel open={showA11y} onClose={()=>setShowA11y(false)} />
             <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"/>
             {!student && (
             <Link to="/lessons/new" className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white text-sm font-semibold shadow-md hover:shadow-lg btn-hover hidden sm:flex items-center gap-1.5">✨ {t('create_lesson')}</Link>
@@ -196,6 +195,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </header>
         <main id="main-content" tabIndex={-1} key={loc.pathname} className="p-4 lg:p-8 max-w-[1400px] mx-auto page-enter">{children}</main>
       </div>
+      {/* Панель доступности — вне шапки: родитель с backdrop-blur создаёт containing block
+          для position:fixed и overflow-hidden режет панель до 64px (казалось «не нажимается») */}
+      <A11yPanel open={showA11y} onClose={()=>setShowA11y(false)} />
     </div>
   )
 }
