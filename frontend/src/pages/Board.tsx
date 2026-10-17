@@ -20,6 +20,12 @@ export default function Board(){
   const [drawing,setDrawing]=useState(false)
   const [startPos,setStartPos]=useState<{x:number,y:number}|null>(null)
   const [snapshot,setSnapshot]=useState<ImageData|null>(null)
+  // текст прямо на доске — без prompt (на интерактивной доске prompt не нажать)
+  const [textEdit,setTextEdit]=useState<{x:number,y:number}|null>(null)
+  const [textVal,setTextVal]=useState('')
+  // защита от ладони: рисует только один активный указатель
+  const activePtr=useRef<number|null>(null)
+  const ringRef=useRef<HTMLDivElement>(null)
   const [boards,setBoards]=useState<any[]>([])
   const [title,setTitle]=useState(t('board_new'))
   const [isFullscreen,setIsFullscreen]=useState(false)
@@ -171,11 +177,18 @@ export default function Board(){
     ctx.restore()
   }
 
-  const getPos=(e:any)=>{
-    const rect=canvasRef.current!.getBoundingClientRect()
-    const t=e.touches?.[0]||e
-    // учитываем что canvas может быть шире контейнера и скроллится
-    return {x:t.clientX-rect.left, y:t.clientY-rect.top}
+  const getPos=undefined as unknown as never // pointer-события дают offsetX/offsetY напрямую
+  const erSize=()=> (tool==='eraser' ? Math.max(28, width*5) : (tool==='pen' ? width : 10))
+
+  // курсор-кольцо: видно, где ластик/перо на интерактивной доске
+  const updateRing=(x:number,y:number)=>{
+    const ring=ringRef.current
+    if(!ring) return
+    const s=erSize()
+    ring.style.width=s+'px'
+    ring.style.height=s+'px'
+    ring.style.left=(x-s/2)+'px'
+    ring.style.top=(y-s/2)+'px'
   }
 
   const pushHistory=()=>{
@@ -365,7 +378,15 @@ export default function Board(){
   }
 
   const start=(e:any)=>{
-    const p=getPos(e)
+    // ладонь/второй палец игнорим — на интерактивной доске рука всегда лежит на полотне
+    if(activePtr.current!==null) return
+    const p={x:e.offsetX, y:e.offsetY}
+    if(tool==='text'){
+      setTextEdit(p); setTextVal(''); setDrawing(false)
+      return
+    }
+    activePtr.current=e.pointerId
+    try{ e.currentTarget.setPointerCapture(e.pointerId) }catch{}
     setStartPos(p)
     setDrawing(true)
     const c=canvasRef.current!, ctx=c.getContext('2d')!
@@ -373,19 +394,17 @@ export default function Board(){
       setSnapshot(ctx.getImageData(0,0,c.width,c.height))
     } else if(tool==='pen' || tool==='eraser'){
       ctx.beginPath(); ctx.moveTo(p.x,p.y)
-    } else if(tool==='text'){
-      const txt=prompt(t('board_text_prompt'))
-      if(txt){ ctx.fillStyle=color; ctx.font='18px Inter'; ctx.fillText(txt, p.x, p.y); pushHistory() }
-      setDrawing(false)
     }
   }
   const move=(e:any)=>{
+    updateRing(e.offsetX, e.offsetY)
     if(!drawing || !startPos) return
+    if(activePtr.current!==e.pointerId) return
     const c=canvasRef.current!, ctx=c.getContext('2d')!
-    const p=getPos(e)
+    const p={x:e.offsetX, y:e.offsetY}
     if(tool==='pen' || tool==='eraser'){
       ctx.strokeStyle= tool==='eraser'?'#ffffff':color
-      ctx.lineWidth= tool==='eraser'?28:width
+      ctx.lineWidth= tool==='eraser'? Math.max(28, width*5) : width
       ctx.lineCap='round'; ctx.lineJoin='round'
       ctx.lineTo(p.x,p.y); ctx.stroke()
     } else {
@@ -396,15 +415,30 @@ export default function Board(){
     }
   }
   const end=(e:any)=>{
+    if(activePtr.current!==null && activePtr.current!==e.pointerId) return
+    activePtr.current=null
     if(!drawing || !startPos) { setDrawing(false); return }
-    const p=getPos(e)
+    const p={x:e.offsetX, y:e.offsetY}
     const c=canvasRef.current!, ctx=c.getContext('2d')!
-    if(snapshot && !['pen','eraser','text'].includes(tool)){
+    if(snapshot && !['pen','eraser'].includes(tool)){
       ctx.putImageData(snapshot,0,0)
       drawShape(ctx, tool, startPos.x, startPos.y, p.x, p.y)
     }
     setDrawing(false); setStartPos(null); setSnapshot(null)
     pushHistory()
+  }
+
+  const commitText=(cancel:boolean)=>{
+    if(!textEdit) return
+    const c=canvasRef.current!, ctx=c.getContext('2d')!
+    const v=textVal.trim()
+    if(!cancel && v){
+      ctx.fillStyle=color
+      ctx.font=`${Math.max(18, Math.min(64, width*4))}px Inter, sans-serif`
+      ctx.fillText(v, textEdit.x, textEdit.y)
+      pushHistory()
+    }
+    setTextEdit(null); setTextVal('')
   }
 
   // логический размер холста (с учётом fullscreen) вместо хардкода 640
@@ -549,18 +583,35 @@ export default function Board(){
         </div>
         <div className="flex-1 overflow-auto bg-[#e9e9e9] p-2 flex flex-col">
           <div className="flex-1 overflow-auto bg-white rounded-xl border flex items-center justify-center p-2" ref={containerRef}>
-            <canvas ref={canvasRef} className="w-[1920px] h-[900px] rounded-xl border bg-white touch-none cursor-crosshair block" style={{width:'1920px', height:'900px'}} onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end} onTouchStart={start} onTouchMove={move} onTouchEnd={end} />
+            <div className="relative group">
+              <canvas ref={canvasRef} className="w-[1920px] h-[900px] rounded-xl border bg-white touch-none cursor-crosshair block select-none" style={{width:'1920px', height:'900px'}} onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onContextMenu={e=>e.preventDefault()} />
+              <div ref={ringRef} className="absolute rounded-full border-2 border-slate-400/80 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity" style={{width:10,height:10}} />
+              {textEdit && (
+                <input autoFocus value={textVal} onChange={ev=>setTextVal(ev.target.value)}
+                  onKeyDown={ev=>{ if(ev.key==='Enter'){ commitText(false) } else if(ev.key==='Escape'){ commitText(true) } }}
+                  onBlur={()=>commitText(false)}
+                  placeholder={t('board_text_ph')}
+                  className="absolute z-20 px-3 py-2 rounded-xl border-2 border-blue-500 bg-white shadow-xl text-base"
+                  style={{left:Math.max(0,textEdit.x-8)+'px', top:Math.max(0,textEdit.y-18)+'px'}} />
+              )}
+            </div>
           </div>
           <div className="bg-white border-t p-2 flex flex-wrap gap-2 items-center justify-between">
-            <div className="flex gap-1 p-1 rounded-xl bg-slate-100">
-              {(mode==='2d' ? [['pen',t('board_tool_pen'),PenTool],['eraser',t('board_tool_eraser'),Trash2],['rect',t('board_tool_rect'),Square],['circle',t('board_tool_circle'),Circle],['triangle',t('board_tool_triangle'),Triangle],['line',t('board_tool_line'),Minus],['arrow',t('board_tool_arrow'),ArrowRight],['text',t('board_tool_text'),Type]] : [['cube3d',t('board_tool_cube'),Box],['sphere3d',t('board_tool_sphere'),Circle],['cylinder3d',t('board_tool_cyl'),Box],['cone3d',t('board_tool_cone'),Triangle],['pen',t('board_tool_pen'),PenTool]]).map(([t,label,Icon]:any)=>(
-                <button key={t} onClick={()=>setTool(t as Tool)} className={`px-3 py-2 rounded-lg text-sm font-medium flex flex-col items-center gap-1 min-w-[56px] ${tool===t?'bg-blue-600 text-white':'hover:bg-white'}`}><Icon size={16}/><span className="text-[10px]">{label}</span></button>
+            <div className="flex gap-1 p-1 rounded-xl bg-slate-100 overflow-auto">
+              {((mode==='2d' ? [['pen',t('board_tool_pen'),PenTool],['eraser',t('board_tool_eraser'),Trash2],['rect',t('board_tool_rect'),Square],['circle',t('board_tool_circle'),Circle],['ellipse',t('board_tool_ellipse'),Orbit],['triangle',t('board_tool_triangle'),Triangle],['rhombus',t('board_tool_rhombus'),Square],['line',t('board_tool_line'),Minus],['arrow',t('board_tool_arrow'),ArrowRight],['vector',t('board_tool_vector'),Move],['text',t('board_tool_text'),Type],['coordinate',t('board_tool_coord'),Grid3X3],['angle',t('board_tool_angle'),Compass]] : [['cube3d',t('board_tool_cube'),Box],['sphere3d',t('board_tool_sphere'),Circle],['cylinder3d',t('board_tool_cyl'),Box],['cone3d',t('board_tool_cone'),Triangle],['pyramid3d',t('board_tool_pyramid'),Triangle],['prism3d',t('board_tool_prism'),Box],['plane3d',t('board_tool_plane'),Square],['orbit',t('board_tool_orbit'),Orbit],['axis3d',t('board_tool_axis'),Grid3X3],['pen',t('board_tool_pen'),PenTool]]) as any[]).map(([tl,label,Icon]:any)=>(
+                <button key={tl} onClick={()=>setTool(tl as Tool)} onPointerDown={ev=>ev.stopPropagation()} className={`px-3 py-2.5 rounded-xl text-sm font-medium flex flex-col items-center gap-1 min-w-[64px] min-h-[60px] ${tool===tl?'bg-blue-600 text-white':'hover:bg-white'}`}><Icon size={18}/><span className="text-[10px]">{label}</span></button>
               ))}
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              <div className="flex items-center gap-1 p-2 rounded-xl bg-white border">
+                {(['#0f172a','#ef4444','#3B82F6','#22c55e','#f59e0b'] as const).map(cc=>(
+                  <button key={cc} onClick={()=>setColor(cc)} className={`w-8 h-8 rounded-full border ${color===cc?'ring-2 ring-blue-500':''}`} style={{background:cc}} title={cc} />
+                ))}
+                <input type="range" min={1} max={24} value={width} onChange={e=>setWidth(parseInt(e.target.value))} className="w-20"/>
+              </div>
               <button onClick={newBoard} className="px-3 py-2 rounded-lg bg-emerald-600 text-white font-bold flex items-center gap-1 text-sm"><Plus size={16}/> {t('board_new')}</button>
-              <button onClick={undo} aria-label={t('board_undo')} className="p-2 rounded-lg bg-slate-100"><Undo2 size={16}/></button>
-              <button onClick={redo} aria-label={t('board_redo')} className="p-2 rounded-lg bg-slate-100"><Redo2 size={16}/></button>
+              <button onClick={undo} disabled={historyIdx<=0} aria-label={t('board_undo')} className="px-3 py-2 rounded-lg bg-slate-100 disabled:opacity-40 flex items-center gap-1"><Undo2 size={16}/></button>
+              <button onClick={redo} disabled={historyIdx>=history.length-1} aria-label={t('board_redo')} className="px-3 py-2 rounded-lg bg-slate-100 disabled:opacity-40"><Redo2 size={16}/></button>
               <button onClick={clear} className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700">{t('board_clear')}</button>
               <button onClick={()=>setIsFullscreen(false)} className="px-3 py-2 rounded-lg bg-slate-900 text-white">{t('board_exit')}</button>
             </div>
@@ -602,14 +653,28 @@ export default function Board(){
 
       {/* холст пошире */}
       <div ref={containerRef} className="bg-white rounded-2xl border p-2 overflow-auto">
-        <div className="min-w-[1200px]">
+        <div className="relative min-w-[1200px] group">
           <canvas
             ref={canvasRef}
-            className="w-[1400px] h-[640px] rounded-xl border bg-white touch-none cursor-crosshair block"
+            className="w-[1400px] h-[640px] rounded-xl border bg-white touch-none cursor-crosshair block select-none"
             style={{width:'1400px', height:'640px'}}
-            onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
-            onTouchStart={start} onTouchMove={move} onTouchEnd={end}
+            onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
+            onContextMenu={e=>e.preventDefault()}
           />
+          {/* курсор-кольцо: перо/ластик виден на скаринтейфе */}
+          <div ref={ringRef} className="absolute rounded-full border-2 border-slate-400/80 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity" style={{width:10,height:10}} />
+          {textEdit && (
+            <input
+              autoFocus
+              value={textVal}
+              onChange={ev=>setTextVal(ev.target.value)}
+              onKeyDown={ev=>{ if(ev.key==='Enter'){ commitText(false) } else if(ev.key==='Escape'){ commitText(true) } }}
+              onBlur={()=>commitText(false)}
+              placeholder={t('board_text_ph')}
+              className="absolute z-20 px-3 py-2 rounded-xl border-2 border-blue-500 bg-white shadow-xl text-base"
+              style={{left:Math.max(0,textEdit.x-8)+'px', top:Math.max(0,textEdit.y-18)+'px'}}
+            />
+          )}
         </div>
         <div className="text-xs text-slate-500 mt-2 flex gap-4 px-2">
           <span>{t('board_hint_a')}</span>
@@ -643,10 +708,17 @@ export default function Board(){
             <div className="flex items-center gap-2 ml-auto flex-wrap">
               <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border">
                 <Palette size={16} className="text-slate-400"/>
+                {/* быстрые цвета — на скаринтейфе быстрее, чем Auswahl в мелком пикере */}
+                {(['#0f172a','#ffffff','#ef4444','#3B82F6','#22c55e','#f59e0b','#a855f7'] as const).map(cc=>(
+                  <button key={cc} onClick={()=>setColor(cc)} className={`w-8 h-8 rounded-full border ${color===cc?'ring-2 ring-blue-500 ring-offset-1':''}`} style={{background:cc}} title={cc} />
+                ))}
                 <input type="color" value={color} onChange={e=>setColor(e.target.value)} className="w-9 h-9 rounded-lg border" title={t('board_stroke')}/>
                 <input type="color" value={fill} onChange={e=>setFill(e.target.value)} className="w-9 h-9 rounded-lg border" title={t('board_fill')}/>
                 <input type="range" min={1} max={24} value={width} onChange={e=>setWidth(parseInt(e.target.value))} className="w-24"/>
-                <span className="text-sm w-8">{width}</span>
+                {/* быстрые толщины */}
+                {[2,4,8,16].map(wd=>(
+                  <button key={wd} onClick={()=>setWidth(wd)} className={`w-9 h-9 rounded-xl border text-xs font-bold ${width===wd?'bg-slate-900 text-white':'bg-white'}`}>{wd}</button>
+                ))}
               </div>
               <label className="flex items-center gap-1 text-sm px-2 py-2 rounded-xl bg-slate-50 border cursor-pointer"><input type="checkbox" checked={grid} onChange={e=>{setGrid(e.target.checked); setTimeout(()=>initCanvas(),50)}}/> {t('board_grid')}</label>
             </div>
@@ -670,9 +742,16 @@ export default function Board(){
               ))}
             </div>
             <div className="flex items-center gap-2 ml-auto">
+              {/* быстрые цвета и в 3D режиме */}
+              {(['#0f172a','#ffffff','#ef4444','#3B82F6','#22c55e','#f59e0b'] as const).map(cc=>(
+                <button key={cc} onClick={()=>setColor(cc)} className={`w-8 h-8 rounded-full border ${color===cc?'ring-2 ring-blue-500':''}`} style={{background:cc}} title={cc} />
+              ))}
               <input type="color" value={color} onChange={e=>setColor(e.target.value)} className="w-9 h-9 rounded-lg border"/>
               <input type="color" value={fill} onChange={e=>setFill(e.target.value)} className="w-9 h-9 rounded-lg border"/>
               <input type="range" min={1} max={24} value={width} onChange={e=>setWidth(parseInt(e.target.value))} className="w-24"/>
+              {[2,4,8,16].map(wd=>(
+                <button key={wd} onClick={()=>setWidth(wd)} className={`w-9 h-9 rounded-xl border text-xs font-bold ${width===wd?'bg-white text-slate-900':'bg-transparent text-white'}`}>{wd}</button>
+              ))}
             </div>
           </div>
         )}
