@@ -33,6 +33,9 @@ export default function Games() {
   const arkanBest = best('edu-arkan-best')
   const sprintBest = best('edu-sprint-best-60') || best('edu-sprint-best-30') || best('edu-sprint-best-15')
   const pairsBest = best('edu-pairs-best')
+  const memoryBest = best('edu-memory-best')
+  const colorBest = best('edu-colormatch-best')
+  const hangBest = best('edu-hangman-best')
 
   const cards = [
     {
@@ -49,6 +52,21 @@ export default function Games() {
       to: '/games/pairs', icon: '🃏', title: t('games_pairs'),
       desc: t('games_pairs_desc'),
       best: pairsBest ? `🏆 ${pairsBest}` : null, ready: true,
+    },
+    {
+      to: '/games/memory', icon: '🐒', title: t('games_memory'),
+      desc: t('games_memory_desc'),
+      best: memoryBest ? `🏆 ${t('mem_level')} ${memoryBest}` : null, ready: true,
+    },
+    {
+      to: '/games/colormatch', icon: '🎨', title: t('games_colormatch'),
+      desc: t('games_colormatch_desc'),
+      best: colorBest ? `🏆 ${t('cm_best')}: ${colorBest}` : null, ready: true,
+    },
+    {
+      to: '/games/hangman', icon: '🎯', title: t('games_hangman'),
+      desc: t('games_hangman_desc'),
+      best: hangBest ? `🏆 ${t('hm_solved_n')}: ${hangBest}` : null, ready: true,
     },
   ]
 
@@ -73,7 +91,7 @@ export default function Games() {
         {t('games_intro')}
       </p>
 
-      <div className="grid sm:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {cards.map(c => (
           <Link key={c.to} to={c.to}
             className="group bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-5 card-hover flex flex-col gap-2 min-h-[220px]">
