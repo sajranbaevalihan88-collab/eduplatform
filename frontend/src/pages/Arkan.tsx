@@ -58,7 +58,7 @@ const DEMO_QS: Q[] = [
 ]
 
 export default function Arkan() {
-  const { speak } = useAccessibility()
+  const { speak, speech, autoRead, toggleAutoRead } = useAccessibility()
 const tr = useLang().t
   const [searchParams] = useSearchParams()
   const [phase, setPhase] = useState<'lobby' | 'battle' | 'result'>('lobby')
@@ -114,15 +114,7 @@ const tr = useLang().t
     client.get('/tests/?is_public=true').then(r => setPub(Array.isArray(r.data) ? r.data : r.data.results || [])).catch(() => {})
   }, [])
 
-  const [autoRead, setAutoRead] = useState(() => {
-    try { return localStorage.getItem('edu-auto-read') === '1' } catch { return false }
-  })
-  const toggleAutoRead = () => {
-    setAutoRead(v => {
-      try { localStorage.setItem('edu-auto-read', v ? '0' : '1') } catch {}
-      return !v
-    })
-  }
+  // авто-чтение управляется из контекста доступности (тумблер «Доступность» и кнопка 🔊 Авто в тестах)
 
   // вход по прямой ссылке: /games/arkan?test=<id> (учитель поделился — играет любой)
   useEffect(() => {
@@ -239,7 +231,7 @@ const tr = useLang().t
   }
 
   useEffect(() => {
-    if (phase !== 'result') return
+    if (phase !== 'result' || !speech) return
     const timeout = setTimeout(() => playArkanSound('win'), 400)
     try {
       const msg = winner === 'Ничья' ? tr('arkan_draw') : `${tr('arkan_winner_a')}${winner}!`
@@ -261,12 +253,12 @@ const tr = useLang().t
 
   // авто-чтение вопроса для незрячих: каждый новый вопрос — вслух
   useEffect(() => {
-    if (phase !== 'battle' || !autoRead || countdown !== null || lock) return
+    if (phase !== 'battle' || !speech || !autoRead || countdown !== null || lock) return
     const q = qs[qi]
     if (!q) return
     speak(`${q.text}. Варианты: ${q.options.map(o => o.text).join(', ')}`)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, qi, countdown, autoRead])
+  }, [phase, qi, countdown, autoRead, speech])
 
   const applyResult = (ok: boolean) => {
     const elapsed = qStartRef.current ? (Date.now() - qStartRef.current) / 1000 : 999

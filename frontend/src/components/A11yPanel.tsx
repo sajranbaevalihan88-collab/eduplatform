@@ -1,13 +1,24 @@
-import { useEffect, useState } from 'react'
-import { X, Eye, EyeOff, Volume2, VolumeX, Check } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { X, Eye, EyeOff, Volume2, VolumeX, Check, Ear } from 'lucide-react'
 import { useAccessibility } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
 
 /** Панель доступности: голос, шрифт, контраст — открывается из шапки. */
 export default function A11yPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { poor, toggle, fontScale, setFont, speech, toggleSpeech, rate, setRate, volume, setVolume, voiceLang, setLang, speak } = useAccessibility()
+  const { poor, toggle, fontScale, setFont, speech, toggleSpeech, rate, setRate, volume, setVolume, voiceLang, setLang, speak, autoRead, toggleAutoRead } = useAccessibility()
   const { t, lang } = useLang()
   const [voices, setVoices] = useState(0)
+  const boxRef = useRef<HTMLDivElement>(null)
+  // Esc — закрыть панель (трижды повторить не нужно)
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onClose() }
+    }
+    window.addEventListener('keydown', onKey)
+    try { boxRef.current?.focus() } catch {}
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
   useEffect(() => {
     if (!open) return
     const upd = () => {
@@ -22,8 +33,8 @@ export default function A11yPanel({ open, onClose }: { open: boolean; onClose: (
   }, [open ])
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-16 p-4" onClick={onClose} role="dialog" aria-label={t('a11y_settings')}>
-      <div onClick={e => e.stopPropagation()} className="w-[480px] max-w-full bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-5 space-y-4 max-h-[85vh] overflow-auto animate-scaleIn">
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-16 p-4" onClick={onClose} role="dialog" aria-modal="true" aria-label={t('a11y_settings')}>
+      <div ref={boxRef} tabIndex={-1} onClick={e => e.stopPropagation()} className="w-[480px] max-w-full bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-5 space-y-4 max-h-[85vh] overflow-auto animate-scaleIn outline-none">
         <div className="flex items-center justify-between">
           <div className="font-bold text-lg dark:text-white">{t('a11y')}</div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white" aria-label={t('a11y_close')}><X size={18} /></button>
@@ -49,6 +60,17 @@ export default function A11yPanel({ open, onClose }: { open: boolean; onClose: (
           <button onClick={toggleSpeech} aria-pressed={speech} className={`w-12 h-7 rounded-full transition shrink-0 ${speech ? 'bg-blue-600' : 'bg-slate-300'} relative`}>
             <span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${speech ? 'left-6' : 'left-1'}`} />
           </button>
+        </div>
+
+        {/* Авто-озвучка страницы: Дефолт выключено — сам не говорит */}
+        <div className={`p-3 rounded-xl space-y-1.5 bg-slate-50 dark:bg-slate-700/50 ${(speech ? '' : 'opacity-60')}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 font-semibold text-sm dark:text-white"><Ear size={17} /> <span className={autoRead&&speech ? 'text-blue-700 dark:text-blue-300' : ''}>{t('a11y_auto')}</span>{autoRead && speech ? ' •' : ''}</div>
+            <button onClick={toggleAutoRead} disabled={!speech} aria-pressed={autoRead} className={`w-12 h-7 rounded-full transition shrink-0 ${autoRead && speech ? 'bg-emerald-500' : 'bg-slate-300'} relative ${!speech ? 'opacity-50' : ''}`}>
+              <span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${autoRead && speech ? 'left-6' : 'left-1'}`} />
+            </button>
+          </div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">{t('a11y_auto_hint')}</div>
         </div>
         {speech && (
           <div className="space-y-3 text-sm dark:text-white">

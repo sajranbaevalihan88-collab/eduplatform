@@ -46,7 +46,7 @@ export function ThemeProvider({children}:{children:React.ReactNode}){
 export const useTheme=()=> useContext(ThemeCtx)
 
 // Accessibility
-const AccCtx=createContext<{poor:boolean, toggle:()=>void, fontScale:number, setFont:(n:number)=>void, speech:boolean, toggleSpeech:()=>void, speak:(t:string)=>void, stopSpeak:()=>void, rate:number, setRate:(n:number)=>void, volume:number, setVolume:(n:number)=>void, voiceLang:string, setLang:(l:string)=>void}>({poor:false, toggle:()=>{}, fontScale:100, setFont:()=>{}, speech:false, toggleSpeech:()=>{}, speak:()=>{}, stopSpeak:()=>{}, rate:1, setRate:()=>{}, volume:1, setVolume:()=>{}, voiceLang:'ru', setLang:()=>{}})
+const AccCtx=createContext<{poor:boolean, toggle:()=>void, fontScale:number, setFont:(n:number)=>void, speech:boolean, toggleSpeech:()=>void, speak:(t:string)=>void, stopSpeak:()=>void, rate:number, setRate:(n:number)=>void, volume:number, setVolume:(n:number)=>void, voiceLang:string, setLang:(l:string)=>void, autoRead:boolean, toggleAutoRead:()=>void}>({poor:false, toggle:()=>{}, fontScale:100, setFont:()=>{}, speech:false, toggleSpeech:()=>{}, speak:()=>{}, stopSpeak:()=>{}, rate:1, setRate:()=>{}, volume:1, setVolume:()=>{}, voiceLang:'ru', setLang:()=>{}, autoRead:false, toggleAutoRead:()=>{}})
 export function AccessibilityProvider({children}:{children:React.ReactNode}){
   const [poor,setPoor]=useState(()=> localStorage.getItem('poor-mode')==='1')
   const [fontScale,setFontScale]=useState(()=> parseInt(localStorage.getItem('font-scale')||'100'))
@@ -60,6 +60,14 @@ export function AccessibilityProvider({children}:{children:React.ReactNode}){
     return isNaN(v)?1:Math.max(0,Math.min(1,v))
   })
   const [voiceLang,setVoiceLang]=useState(()=> localStorage.getItem('speech-lang')||'ru')
+  // авто-озвучка страниц: пока выключена — платформа не говорит сама, только по кнопкам 🔊
+  const [autoRead,setAutoReadState]=useState(()=> localStorage.getItem('edu-auto-read')==='1')
+  const toggleAutoRead=()=>{
+    setAutoReadState(v=>{
+      try{ localStorage.setItem('edu-auto-read', v?'0':'1') }catch{}
+      return !v
+    })
+  }
   useEffect(()=>{
     document.documentElement.classList.toggle('poor-vision', poor)
     localStorage.setItem('poor-mode', poor?'1':'0')
@@ -104,12 +112,25 @@ export function AccessibilityProvider({children}:{children:React.ReactNode}){
     try{
       const vs=window.speechSynthesis?.getVoices()||[]
       if(!vs.length) return null
+      // рейт по качеству: Neural/Natural > Enhanced > Cloud/Google > Online > Server > базовые
+      const rank=(v:SpeechSynthesisVoice)=>{
+        const n=(v.name||'').toLowerCase()
+        let s=0
+        if(n.includes('neural')||n.includes('natural')||n.includes('нейро')) s+=50
+        else if(n.includes('enhanced')||n.includes('усовершенст')) s+=40
+        else if(n.includes('cloud')||n.includes('google')) s+=30
+        else if(n.includes('online')) s+=20
+        else if(n.includes('server')) s+=15
+        else if(n.includes('desktop')) s-=5
+        if(n.includes('compact')) s-=10
+        return s
+      }
       const pref=[voiceLang,'ru','ky','kg','en']
       for(const p of pref){
-        const f=vs.find(v=>v.lang&&v.lang.toLowerCase().startsWith(p))
-        if(f) return f
+        const cand=vs.filter(v=>v.lang&&v.lang.toLowerCase().startsWith(p))
+        if(cand.length) return cand.sort((a,b)=>rank(b)-rank(a))[0]
       }
-      return vs[0]||null
+      return vs.slice().sort((a,b)=>rank(b)-rank(a))[0]||null
     }catch{ return null }
   }
   const speakQueue=(parts:string[])=>{
@@ -179,6 +200,6 @@ export function AccessibilityProvider({children}:{children:React.ReactNode}){
     document.addEventListener('visibilitychange',onVis)
     return ()=>{ window.removeEventListener('keydown',onKey); document.removeEventListener('visibilitychange',onVis); clearInterval(keepAlive) }
   },[])
-  return <AccCtx.Provider value={{poor,toggle,fontScale,setFont,speech,toggleSpeech,speak,stopSpeak,rate,setRate,volume,setVolume,voiceLang,setLang}}>{children}</AccCtx.Provider>
+  return <AccCtx.Provider value={{poor,toggle,fontScale,setFont,speech,toggleSpeech,speak,stopSpeak,rate,setRate,volume,setVolume,voiceLang,setLang,autoRead,toggleAutoRead}}>{children}</AccCtx.Provider>
 }
 export const useAccessibility=()=> useContext(AccCtx)
