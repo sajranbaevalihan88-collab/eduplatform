@@ -31,6 +31,20 @@ export default function Board(){
   // history for undo/redo per page
   const [history,setHistory]=useState<ImageData[]>([])
   const [historyIdx,setHistoryIdx]=useState(-1)
+  // черновик: автосохранение на устройство — работа не пропадает до кнопки «Сохранить»
+  const [draft,setDraft]=useState(false)
+  const stRef=useRef({pages,currentPage,title,mode})
+  stRef.current={pages,currentPage,title,mode}
+
+  const flushDraft=()=>{
+    try{
+      const st=stRef.current
+      const c=canvasRef.current
+      const np=[...st.pages]
+      if(c) np[st.currentPage]=c.toDataURL('image/png')
+      localStorage.setItem('board-draft-v1', JSON.stringify({pages:np,currentPage:st.currentPage,title:st.title,mode:st.mode}))
+    }catch{}
+  }
 
   useEffect(()=>{
     client.get('/boards/').then(r=>setBoards(Array.isArray(r.data)?r.data:r.data.results||[])).catch(()=>{})
@@ -39,6 +53,46 @@ export default function Board(){
     window.addEventListener('keydown', onKey)
     return ()=> window.removeEventListener('keydown', onKey)
   },[isFullscreen])
+
+  // восстановление черновика (только в обычном режиме, один раз при монтировании)
+  useEffect(()=>{
+    try{
+      const raw=localStorage.getItem('board-draft-v1'); if(!raw) return
+      const d=JSON.parse(raw)
+      if(!d||!Array.isArray(d.pages)||!d.pages.length) return
+      const idx=Math.min(d.currentPage||0, d.pages.length-1)
+      setPages(d.pages)
+      setCurrentPage(idx)
+      if(d.title) setTitle(String(d.title).slice(0,100))
+      if(d.mode==='3d'||d.mode==='2d') setMode(d.mode)
+      setTimeout(()=>{
+        try{
+          const cc=canvasRef.current; if(!cc) return
+          const ctx=cc.getContext('2d')!
+          const W=parseInt(cc.style.width)||1400, H=parseInt(cc.style.height)||640
+          ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H)
+          const src=d.pages[idx]
+          if(src){
+            const img=new Image()
+            img.onload=()=>{
+              ctx.drawImage(img,0,0,W,H)
+              try{ setHistory([ctx.getImageData(0,0,cc.width,cc.height)]); setHistoryIdx(0) }catch{}
+            }
+            img.src=src
+          }
+        }catch{}
+      },260)
+      setDraft(true)
+    }catch{}
+  },[])
+
+  // автосброс черновика: каждые 30 с и при закрытии/обновлении страницы
+  useEffect(()=>{
+    const iv=setInterval(flushDraft, 30000)
+    const onUnload=()=>flushDraft()
+    window.addEventListener('beforeunload', onUnload)
+    return ()=>{ clearInterval(iv); window.removeEventListener('beforeunload', onUnload) }
+  },[])
 
   useEffect(()=>{ if(mode==='3d' && !tool.endsWith('3d') && tool!=='axis3d' && tool!=='orbit') setTool('cube3d'); if(mode==='2d' && (tool.endsWith('3d')||tool==='orbit'||tool==='axis3d')) setTool('pen') },[mode])
 
@@ -353,12 +407,19 @@ export default function Board(){
     pushHistory()
   }
 
+  // логический размер холста (с учётом fullscreen) вместо хардкода 640
+  const canvasLogical=()=>{
+    const c=canvasRef.current!
+    const W=parseInt(c.style.width)||c.getBoundingClientRect().width||1400
+    const H=parseInt(c.style.height)||640
+    return {W,H}
+  }
+
   const clear=()=>{
     const c=canvasRef.current!; const ctx=c.getContext('2d')!
-    const rect=c.getBoundingClientRect()
-    const logicalW = parseInt(c.style.width) || rect.width
-    ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,logicalW,640)
-    if(grid) drawGrid(ctx, logicalW, 640)
+    const {W,H}=canvasLogical()
+    ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H)
+    if(grid) drawGrid(ctx, W, H)
     pushHistory()
   }
 
@@ -376,6 +437,9 @@ export default function Board(){
     setPages(allPages)
     try {
       await client.post('/boards/',{title: title.slice(0,100), data:{image: currentData, images: allPages, mode, pages: allPages.length, currentPage}})
+      // доска стала настоящей — черновик больше не нужен
+      try{ localStorage.removeItem('board-draft-v1') }catch{}
+      setDraft(false)
       // also update local
       const { toast } = await import('../context/UIContext')
       toast(t('board_saved'), 'success')
@@ -426,10 +490,9 @@ export default function Board(){
     setCurrentPage(prev=> prev+1)
     setTimeout(()=>{
       const cc=canvasRef.current!, ctx=cc.getContext('2d')!
-      const rect=cc.getBoundingClientRect()
-      const logicalW = parseInt(cc.style.width) || rect.width
-      ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,logicalW,640)
-      if(grid) drawGrid(ctx, logicalW, 640)
+      const {W,H}=canvasLogical()
+      ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H)
+      if(grid) drawGrid(ctx, W, H)
       pushHistory()
     },50)
   }
@@ -437,6 +500,8 @@ export default function Board(){
   const newBoard=()=>{
     // новая пустая доска — текущую лучше сохранить кнопкой Сохранить
     if(historyIdx>0 && !confirm(t('board_new_confirm'))) return
+    try{ localStorage.removeItem('board-draft-v1') }catch{}
+    setDraft(false)
     setPages([null])
     setCurrentPage(0)
     setTitle(t('board_new'))
@@ -457,16 +522,15 @@ export default function Board(){
     setCurrentPage(idx)
     setTimeout(()=>{
       const cc=canvasRef.current!, ctx=cc.getContext('2d')!
-      const rect=cc.getBoundingClientRect()
-      const logicalW = parseInt(cc.style.width) || rect.width
+      const {W,H}=canvasLogical()
       const saved=pages[idx]
-      ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,logicalW,640)
+      ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H)
       if(saved){
         const img=new Image()
-        img.onload=()=>{ ctx.drawImage(img,0,0,logicalW,640); pushHistory() }
+        img.onload=()=>{ ctx.drawImage(img,0,0,W,H); pushHistory() }
         img.src=saved
       } else {
-        if(grid) drawGrid(ctx, logicalW, 640)
+        if(grid) drawGrid(ctx, W, H)
         pushHistory()
       }
     },50)
@@ -510,6 +574,7 @@ export default function Board(){
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3 animate-fadeIn">
         <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white"><PenTool size={20}/></span> {t('board')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{boards.length}</span></h1>
+        {draft && <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-bold" title={t('board_draft_hint')}>{t('board_draft_chip')}</span>}
         <input value={title} onChange={e=>setTitle(e.target.value)} className="px-4 py-2 rounded-xl border bg-white font-medium min-w-[160px]"/>
         <div className="flex p-1 rounded-xl bg-slate-100">
           <button onClick={()=>setMode('2d')} className={`px-4 py-2 rounded-lg text-sm font-bold ${mode==='2d'?'bg-white shadow':'text-slate-500'}`}>{t('board_2d')}</button>
@@ -524,6 +589,8 @@ export default function Board(){
           <button onClick={()=>setIsFullscreen(true)} className="px-3 py-2 rounded-xl bg-slate-900 text-white flex items-center gap-1 text-sm"><Maximize2 size={16}/> {t('board_fullscreen_btn')}</button>
         </div>
       </div>
+
+      {draft && <div className="text-xs px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700">{t('board_draft_hint')}</div>}
 
       {/* страниц навигация */}
       <div className="flex gap-2 overflow-auto pb-1">
