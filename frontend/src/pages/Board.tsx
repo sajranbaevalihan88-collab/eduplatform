@@ -177,7 +177,18 @@ export default function Board(){
     ctx.restore()
   }
 
-  const getPos=undefined as unknown as never // pointer-события дают offsetX/offsetY напрямую
+  const getPos=undefined as unknown as never // не используется: координаты всегда через relPos (clientX-rect.left)
+  // КРИТИЧНО: React не пробрасывает offsetX/offsetY из PointerEvent (на реальном вводе там undefined!) —
+  // считаем из clientX относительно canvas границ: работает для мыши, пера и пальца одинаково.
+  const relPos=(e:any)=>{
+    const t=(e&&e.nativeEvent)?e.nativeEvent:e
+    const c=canvasRef.current
+    if(!c) return {x:0,y:0}
+    const rect=c.getBoundingClientRect()
+    const x=(t.clientX!==undefined&&t.clientX!==null)?(t.clientX-rect.left):(t.offsetX||0)
+    const y=(t.clientY!==undefined&&t.clientY!==null)?(t.clientY-rect.top):(t.offsetY||0)
+    return {x,y}
+  }
   const erSize=()=> (tool==='eraser' ? Math.max(28, width*5) : (tool==='pen' ? width : 10))
 
   // курсор-кольцо: видно, где ластик/перо на интерактивной доске
@@ -380,7 +391,7 @@ export default function Board(){
   const start=(e:any)=>{
     // ладонь/второй палец игнорим — на интерактивной доске рука всегда лежит на полотне
     if(activePtr.current!==null) return
-    const p={x:e.offsetX, y:e.offsetY}
+    const p=relPos(e)
     if(tool==='text'){
       setTextEdit(p); setTextVal(''); setDrawing(false)
       return
@@ -397,11 +408,12 @@ export default function Board(){
     }
   }
   const move=(e:any)=>{
-    updateRing(e.offsetX, e.offsetY)
+    const rp=relPos(e)
+    updateRing(rp.x, rp.y)
     if(!drawing || !startPos) return
     if(activePtr.current!==e.pointerId) return
     const c=canvasRef.current!, ctx=c.getContext('2d')!
-    const p={x:e.offsetX, y:e.offsetY}
+    const p=rp
     if(tool==='pen' || tool==='eraser'){
       ctx.strokeStyle= tool==='eraser'?'#ffffff':color
       ctx.lineWidth= tool==='eraser'? Math.max(28, width*5) : width
@@ -418,7 +430,7 @@ export default function Board(){
     if(activePtr.current!==null && activePtr.current!==e.pointerId) return
     activePtr.current=null
     if(!drawing || !startPos) { setDrawing(false); return }
-    const p={x:e.offsetX, y:e.offsetY}
+    const p=relPos(e)
     const c=canvasRef.current!, ctx=c.getContext('2d')!
     if(snapshot && !['pen','eraser'].includes(tool)){
       ctx.putImageData(snapshot,0,0)
