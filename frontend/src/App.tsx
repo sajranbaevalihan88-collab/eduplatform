@@ -65,6 +65,9 @@ import Guide from './pages/Guide'
 import Arkan from './pages/Arkan'
 import Sprint from './pages/Sprint'
 import Pairs from './pages/Pairs'
+import Memory from './pages/Memory'
+import ColorMatch from './pages/ColorMatch'
+import Hangman from './pages/Hangman'
 import Login from './pages/Login'
 import Profile from './pages/Profile'
 
@@ -105,6 +108,9 @@ export default function App() {
                 <Route path="/games/arkan" element={<Arkan />} />
                 <Route path="/games/sprint" element={<Sprint />} />
                 <Route path="/games/pairs" element={<Pairs />} />
+                <Route path="/games/memory" element={<Memory />} />
+                <Route path="/games/colormatch" element={<ColorMatch />} />
+                <Route path="/games/hangman" element={<Hangman />} />
                 <Route path="/s/:token" element={<SharedView />} />
                 <Route path="/editor" element={<VSCodeEditor />} />
                 <Route path="/board" element={<TeacherRoute><Board /></TeacherRoute>} />
