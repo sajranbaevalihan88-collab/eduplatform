@@ -3,6 +3,7 @@ import client from '../api/client'
 import { Link } from 'react-router-dom'
 import { Plus, FlaskConical, Clock, Target, Search } from 'lucide-react'
 import { isStudent } from '../utils/role'
+import { requestGuardFullscreen } from '../utils/shotGuard'
 import { useLang } from '../context/LangContext'
 
 export default function Tests(){
@@ -43,7 +44,7 @@ export default function Tests(){
             <p className="text-sm text-slate-500 line-clamp-2">{item.description||t('tests_no_desc')}</p>
             <div className="flex gap-2 text-xs mt-3 text-slate-500"><span className="flex items-center gap-1"><Target size={12}/> {t('tests_pass')} {item.pass_score}%</span><span className="flex items-center gap-1"><Clock size={12}/> {item.time_limit||t('tests_no_limit')} {t('tests_min')}</span></div>
             <div className="flex gap-2 mt-4">
-              <Link to={`/tests/${item.id}/take`} className="flex-1 px-3 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold text-center">{t('tests_take')}</Link>
+              <Link to={`/tests/${item.id}/take`} onClick={()=>requestGuardFullscreen()} className="flex-1 px-3 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold text-center">{t('tests_take')}</Link>
               {canEdit(item) ? <Link to={`/tests/${item.id}`} className="px-3 py-2 rounded-xl bg-slate-100 text-sm font-medium">{t('edit')}</Link> : <span className="px-3 py-2 rounded-xl bg-slate-50 text-slate-400 text-sm" title={t('tests_lock')}>🔒</span>}
             </div>
           </div>

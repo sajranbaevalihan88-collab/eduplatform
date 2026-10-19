@@ -3,6 +3,7 @@ import { useParams, Link, useSearchParams } from 'react-router-dom'
 import client from '../api/client'
 import { useAccessibility } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
+import { enableShotGuard, requestGuardFullscreen, disableShotGuard } from '../utils/shotGuard'
 
 export default function TestTake(){
   const {id}=useParams()
@@ -17,6 +18,25 @@ export default function TestTake(){
   const [searchParams]=useSearchParams()
   const fromPath=searchParams.get('from') && searchParams.get('from')!.startsWith('/') ? searchParams.get('from')! : null
   const {speech,autoRead,toggleAutoRead,speak}=useAccessibility()
+  const [violations,setViolations]=useState(0)
+  useEffect(()=>{
+    setViolations(0)
+    disableShotGuard()
+  },[id])
+  useEffect(()=>{
+    if(!test || result || alreadyAttempted) return
+    const off=enableShotGuard(()=>setViolations(v=>v+1),{
+      warnTitle:t('tt_shot_warn_title'), warnMsg:t('tt_shot_warn_msg'),
+      blurTitle:t('tt_shot_blur_title'), blurMsg:t('tt_shot_blur_msg')
+    })
+    // fullscreen нужен жест пользователя: пробуем сразу (жест перехода по ссылке иногда жив),
+    // иначе вешаем на первый клик/тап в тесте
+    requestGuardFullscreen()
+    const once=()=>requestGuardFullscreen()
+    window.addEventListener('pointerdown',once,{once:true,capture:true})
+    return ()=>{ off(); window.removeEventListener('pointerdown',once,{capture:true}); if(document.fullscreenElement) document.exitFullscreen?.().catch(()=>{}) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[test?.id, result, alreadyAttempted])
   useEffect(()=>{
     if(speech && autoRead && test?.questions?.length){
       speak(`${t('tt_speak_test')} ${test.title}. ${t('tt_speak_qs')}: ${test.questions.length}. ${t('tt_speak_hint')}`)
@@ -121,6 +141,7 @@ export default function TestTake(){
           <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto text-2xl font-bold ${show.passed?'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300':'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>{show.score ?? 0}%</div>
           <h2 className="text-2xl font-bold mt-4 dark:text-white">{show.blocked ? t('tt_limited') : show.passed?t('tt_passed'):t('tt_done_title')}</h2>
           <p className="text-slate-500 dark:text-slate-400 mt-2">{show.blocked ? (blockedMsg || t('tt_already_msg')) : `${t('tt_earned_pre')} ${show.earned ?? 0} ${t('tt_earned_mid')} ${show.total ?? 0} ${t('tt_earned_post')}`}</p>
+          {violations>0 && <p data-testid="tt-sshot-count" className="mt-2 text-sm font-semibold text-red-600 dark:text-red-300">🚫 {t('tt_shot_violations')}: {violations}</p>}
           <div className="mt-6 p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">{t('tt_no_retry')}</div>
           <a href="/tests" className="mt-4 inline-block px-5 py-2.5 rounded-xl bg-blue-700 text-white">{t('tt_to_tests')}</a>
         </div>
@@ -145,7 +166,11 @@ export default function TestTake(){
       <div className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-2xl border p-4 sm:p-6">
         <h1 className="text-xl sm:text-2xl font-bold dark:text-white">{test.title}</h1>
         <p className="text-slate-500 dark:text-slate-400 text-sm sm:text-base">{test.description}</p>
-        <div className="text-xs sm:text-sm mt-2 dark:text-slate-300">{t('tt_pass_score')}: {test.pass_score}% • {t('tt_q')} {qi+1} {t('tt_of')} {test.questions.length} • {t('tt_answered')}: {answeredCount}{perQ>0 && ` • ⏱ ${perQ}${t('tt_per_q')}`}</div>
+          <div className="text-xs sm:text-sm mt-2 dark:text-slate-300">{t('tt_pass_score')}: {test.pass_score}% • {t('tt_q')} {qi+1} {t('tt_of')} {test.questions.length} • {t('tt_answered')}: {answeredCount}{perQ>0 && ` • ⏱ ${perQ}${t('tt_per_q')}`}</div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span data-testid="tt-shield-chip" className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-800">🛡 {t('tt_shield_on')}</span>
+          {violations>0 && <span data-testid="tt-violations-chip" className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/40 dark:text-red-300 dark:border-red-800">🚫 {t('tt_shot_violations')}: {violations}</span>}
+        </div>
         <div className="mt-3 h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
           <div className="h-full bg-blue-600 transition-all" style={{width:`${((qi+1)/test.questions.length)*100}%`}} />
         </div>
@@ -201,6 +226,13 @@ export default function TestTake(){
               <span>{o.text}</span>
             </label>
           ))}
+          {q.type==='multiple' && (
+            <button data-testid="tt_nextbtn" onClick={()=>{
+              if(result||alreadyAttempted) return
+              if(qi+1>=test.questions.length) doSubmit(answers)
+              else setQi(qi+1)
+            }} disabled={!(answers[q.id]||[]).length} title={t('tt_next_title')} className={`w-full py-2.5 rounded-xl font-bold text-sm sm:text-base ${((answers[q.id]||[]).length) ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-100 text-slate-400 dark:bg-slate-700 dark:text-slate-500 cursor-not-allowed'}`}>{t('tt_next')}</button>
+          )}
           {q.type==='text' && <div className="text-sm px-4 py-2.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200">Вопрос старого типа (текст) — оценка не требуется, жми «Отправить ответы».</div>}
         </div>
       </div>
