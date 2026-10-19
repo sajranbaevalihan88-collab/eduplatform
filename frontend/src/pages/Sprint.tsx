@@ -3,7 +3,7 @@ import { useAccessibility } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
 import client from '../api/client'
 import { WORD_PACKS, shuffle, wordsFromText } from '../utils/words'
-import { playGameSound, playTypeSound } from '../utils/sound'
+import { sfx } from '../utils/sfx'
 import { RotateCcw, Trophy, MousePointerClick } from 'lucide-react'
 
 type Src = 'ru' | 'kg' | 'en' | 'custom' | 'lesson'
@@ -33,6 +33,10 @@ export default function Sprint() {
   const [ghostPos, setGhostPos] = useState<{ left: number; top: number; h: number } | null>(null)
   const [shiftY, setShiftY] = useState(0)
   const [loading, setLoading] = useState(true)
+
+  // HiDPI/масштаб дисплея даёт субпиксельные осцилляции в getBoundingClientRect:
+  // без квантования они превращаются в бесконечный цикл set'ов (React #185).
+  const q = (v: number) => Math.round(v * 4) / 4
 
   const inputRef = useRef<HTMLInputElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -102,7 +106,7 @@ export default function Sprint() {
   useEffect(() => {
     if (!started || done || !focused) return
     if (left <= 0) { finish(); return }
-    if (left <= 5) playGameSound('tick')
+    if (left <= 5) sfx('clock')
     const iv = setInterval(() => setLeft(v => v - 1), 1000)
     return () => clearInterval(iv)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -116,7 +120,7 @@ export default function Sprint() {
   const finish = () => {
     setDone(true)
     const wpm = Math.round((correctChars / 5) / (mode / 60))
-    playGameSound('win')
+    sfx('sprint.fin')
     try {
       const prev = parseFloat(localStorage.getItem(`edu-sprint-best-${mode}`) || '0')
       if (wpm > prev) localStorage.setItem(`edu-sprint-best-${mode}`, String(wpm))
@@ -126,8 +130,8 @@ export default function Sprint() {
 
   const onType = (v: string) => {
     if (done) return
-    if (!started) { setStarted(true); startRef.current = Date.now(); playGameSound('go') }
-    else playTypeSound()
+    if (!started) { setStarted(true); startRef.current = Date.now(); sfx('ws.go') }
+    else sfx('sprint.key', 0.45)
     const cur = words[wi] || ''
     // лишние буквы сверх слова — игнор (как в monkeytype)
     if (!v.endsWith(' ') && v.length > cur.length + 10) return
@@ -138,7 +142,7 @@ export default function Sprint() {
       // пробел: 1 символ всего, 1 верный — только если слово сошлось
       setTotalChars(c => c + 1)
       if (ok) setCorrectChars(c => c + 1)
-      playGameSound(ok ? 'correct' : 'wrong')
+      sfx(ok ? 'sprint.space' : 'sprint.miss')
       setWordOk(a => [...a, ok])
       setWordTyped(a => [...a, word])
       prevRef.current = ''
@@ -182,19 +186,32 @@ export default function Sprint() {
     const wrap = wrapRef.current
     if (!wrap) return
     const wr = wrap.getBoundingClientRect()
+    // ближайший определённый спан к индексу (каретка/призрак): при конце слова
+    // следующий рядовой spан отсутствует — откатываемся на последний знак
+    const atIdx = (idx: number) => {
+      for (let i = Math.max(0, idx), back = 0; i >= 0 && back < 3; i--, back++) {
+        const el = letterRefs.current[i]
+        if (el) return { el, atEnd: i < idx }
+      }
+      return null
+    }
     const place = (idx: number) => {
-      const el = letterRefs.current[idx]
-      if (!el) return null
-      const r = el.getBoundingClientRect()
-      return { left: r.left - wr.left, top: r.top - wr.top, h: r.height || 28 }
+      const found = atIdx(idx)
+      if (!found) return null
+      const r = found.el.getBoundingClientRect()
+      return { left: q((found.atEnd ? r.right + 2 : r.left) - wr.left), top: q(r.top - wr.top), h: q(r.height || 28) }
     }
     const c = place(caretIndex())
-    if (c) setCaret(prev => (Math.abs(prev.left - c.left) < 0.5 && Math.abs(prev.top - c.top) < 0.5 && prev.h === c.h ? prev : c))
+    if (c) setCaret(prev => (Math.abs(prev.left - c.left) < 0.26 && Math.abs(prev.top - c.top) < 0.26 && Math.abs(prev.h - c.h) < 0.26 ? prev : c))
     // призрак: сколько символов успел бы напечатать темп 71
     if (ghost && started && !done) {
       const gChars = Math.floor(ghostWpm * 5 * elapsedMin())
       const g = place(Math.min(gChars, flat - 1))
-      setGhostPos(g)
+      setGhostPos(prev => {
+        if (!g && !prev) return prev
+        if (g && prev && Math.abs(prev.left - g.left) < 0.26 && Math.abs(prev.top - g.top) < 0.26 && Math.abs(prev.h - g.h) < 0.26) return prev
+        return g
+      })
     } else setGhostPos(null)
     // строки едут вверх, текущая — вторая (как в monkeytype)
     const cur = wordRefs.current[wi]
@@ -202,19 +219,26 @@ export default function Sprint() {
     if (cur && first) {
       const lineH = cur.offsetHeight || 40
       const line = Math.round((cur.offsetTop - first.offsetTop) / lineH)
-      setShiftY(prev => {
-        const next = line <= 0 ? 0 : (line - 1) * lineH
-        return next === prev ? prev : next
-      })
+      const next = line <= 0 ? 0 : (line - 1) * lineH
+      setShiftY(prev => (next === prev ? prev : next))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   })
+  // диагностический хук (используется e2e-пробами)
+  ;(window as any).__sp = {
+    typed, wi, caret, started,
+    cur: words[wi] || '',
+    nw: words.length,
+    refs: letterRefs.current.filter(Boolean).length,
+  }
 
   const renderWord = (w: string, i: number) => {
     let letters: React.ReactNode
     if (i < wi) {
       const ok = wordOk[i]
       const tw = wordTyped[i] || ''
+      // base фиксируется на слово: в ref-колбэках flat уже итоговый
+      const base = flat
       letters = w.split('').map((ch, j) => {
         const tch = tw[j]
         const cls = tch === undefined
@@ -222,11 +246,11 @@ export default function Sprint() {
           : tch === ch
             ? 'text-slate-900 dark:text-slate-100'
             : 'text-red-500'
-        return <span key={j} ref={el => { letterRefs.current[flat + j] = el }}>{ch}</span>
+        return <span key={j} ref={el => { letterRefs.current[base + j] = el }}>{ch}</span>
       })
       const extra = !ok && tw.length > w.length
         ? <span className="text-red-500">{tw.slice(w.length)}</span> : null
-      flat += w.length + 1
+      flat = base + w.length + 1
       return (
         <span key={i} ref={el => { wordRefs.current[i] = el }}
           className={!ok ? 'underline decoration-red-500 decoration-2 underline-offset-4' : ''}>
@@ -235,25 +259,27 @@ export default function Sprint() {
       )
     }
     if (i === wi) {
+      const base = flat
       const nodes = w.split('').map((ch, j) => {
         let cls = 'text-slate-400 dark:text-slate-500'
         if (j < typed.length) cls = typed[j] === ch ? 'text-slate-900 dark:text-slate-100' : 'text-red-500'
-        return <span key={j} ref={el => { letterRefs.current[flat + j] = el }} className={cls}>{ch}</span>
+        return <span key={j} ref={el => { letterRefs.current[base + j] = el }} className={cls}>{ch}</span>
       })
       const extra = typed.length > w.length
-        ? <span ref={el => { letterRefs.current[flat + w.length] = el }} className="text-red-500 bg-red-100 dark:bg-red-900/50 rounded">{typed.slice(w.length)}</span>
-        : <span ref={el => { letterRefs.current[flat + typed.length] = el }} className="inline-block w-px" />
-      flat += w.length + 1
+        ? <span ref={el => { letterRefs.current[base + typed.length] = el }} className="text-red-500 bg-red-100 dark:bg-red-900/50 rounded">{typed.slice(w.length)}</span>
+        : null
+      flat = base + Math.max(w.length, typed.length) + 1
       return (
         <span key={i} ref={el => { wordRefs.current[i] = el }} className="bg-amber-100/60 dark:bg-amber-900/20 rounded px-0.5">
           {nodes}{extra}{' '}
         </span>
       )
     }
+    const base = flat
     const nodes = w.split('').map((ch, j) => (
-      <span key={j} ref={el => { letterRefs.current[flat + j] = el }} className="text-slate-400 dark:text-slate-500">{ch}</span>
+      <span key={j} ref={el => { letterRefs.current[base + j] = el }} className="text-slate-400 dark:text-slate-500">{ch}</span>
     ))
-    flat += w.length + 1
+    flat = base + w.length + 1
     return <span key={i} ref={el => { wordRefs.current[i] = el }}>{nodes} </span>
   }
 
@@ -362,7 +388,7 @@ export default function Sprint() {
       <div className="flex items-center gap-4 text-lg font-bold dark:text-white" aria-live="polite">
         <span>{t('sprint_wpm')} {wpm}</span>
         <span>{t('sprint_acc')} {acc}%</span>
-        <span className="text-sm font-normal text-slate-400">{t('sprint_tab')}</span>
+        <span className="text-sm font-normal text-slate-400 hide-touch">{t('sprint_tab')}</span>
       </div>
     </div>
   )

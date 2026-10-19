@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Classroom, Enrollment, Assignment, Submission, Announcement
+from .models import Classroom, Enrollment, Assignment, Submission, Announcement, AnnouncementComment
 
 
 class ClassroomSerializer(serializers.ModelSerializer):
@@ -67,8 +67,18 @@ class SubmissionSerializer(serializers.ModelSerializer):
 
 class AnnouncementSerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source='author.username', read_only=True, default='')
+    comments_count = serializers.IntegerField(source='comments.count', read_only=True)
 
     class Meta:
         model = Announcement
-        fields = ['id', 'classroom', 'author', 'author_name', 'text', 'created_at']
+        fields = ['id', 'classroom', 'author', 'author_name', 'text', 'created_at', 'comments_count']
+        read_only_fields = ['id', 'author', 'created_at']
+
+
+class AnnouncementCommentSerializer(serializers.ModelSerializer):
+    author_name = serializers.CharField(source='author.username', read_only=True, default='')
+
+    class Meta:
+        model = AnnouncementComment
+        fields = ['id', 'announcement', 'author', 'author_name', 'text', 'created_at']
         read_only_fields = ['id', 'author', 'created_at']

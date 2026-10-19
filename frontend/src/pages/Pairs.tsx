@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import client from '../api/client'
 import { shuffle } from '../utils/words'
-import { playGameSound } from '../utils/sound'
+import { sfx } from '../utils/sfx'
 import { useAccessibility } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
 import { RotateCcw, Trophy } from 'lucide-react'
@@ -22,6 +22,7 @@ export default function Pairs() {
   const [done, setDone] = useState(false)
   const [busy, setBusy] = useState(false)
   const [best, setBest] = useState<string | null>(null)
+  const [pickN, setPickN] = useState(8)
 
   useEffect(() => {
     client.get('/tests/?owner=me').then(r => setTests(Array.isArray(r.data) ? r.data : r.data.results || [])).catch(() => {})
@@ -29,8 +30,13 @@ export default function Pairs() {
       const arr = Array.isArray(r.data) ? r.data : r.data.results || []
       setTests(prev => [...prev, ...arr.filter((x: any) => !prev.some((y: any) => y.id === x.id))])
     }).catch(() => {})
-    try { setBest(localStorage.getItem('edu-pairs-best')) } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    try { setBest(localStorage.getItem(`edu-pairs-best-${pickN}`) || localStorage.getItem('edu-pairs-best')) } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickN])
 
   useEffect(() => {
     if (done || cards.length === 0) return
@@ -46,7 +52,7 @@ export default function Pairs() {
       const qs = (r.data.questions || []).filter((q: any) =>
         (q.type === 'single' || q.type === 'true_false') && q.options?.length >= 2)
       if (qs.length < 3) { alert(t('pairs_min3')); return }
-      const picked = shuffle(qs).slice(0, 8)
+      const picked = shuffle(qs).slice(0, pickN)
       const deck: Card[] = []
       picked.forEach((q: any, i: number) => {
         const correct = q.options.find((o: any) => o.is_correct) || q.options[0]
@@ -55,14 +61,14 @@ export default function Pairs() {
       })
       setCards(shuffle(deck))
       setOpen([]); setMatched([]); setMoves(0); setSecs(0); setDone(false)
-      playGameSound('go')
+      sfx('ws.go')
     } catch { alert(t('pairs_fail')) } finally { setBusy(false) }
   }
 
   const flip = (key: number) => {
     if (done || open.includes(key) || matched.includes(key)) return
     if (open.length === 2) return
-    playGameSound('tick')
+    sfx('pairs.flip')
     const card = cards.find(c => c.key === key)
     if (card) say(card.label)
     const no = [...open, key]
@@ -73,23 +79,24 @@ export default function Pairs() {
       const b = cards.find(c => c.key === no[1])!
       if (a.pair === b.pair) {
         setTimeout(() => {
-          playGameSound('correct')
+          sfx('pairs.match')
           say(t('pairs_pair'))
           setMatched(m => [...m, ...no])
           setOpen([])
           if (matched.length + 2 >= cards.length) {
             setDone(true)
-            playGameSound('win')
+            sfx('pairs.win')
             say(`${t('pairs_win_a')} ${moves + 1} ${t('pairs_win_moves')} ${secs} ${t('pairs_win_secs')}`)
             try {
               const rec = `${moves + 1} ${t('pairs_moves')} • ${secs}${t('pairs_sec')}`
-              const prev = localStorage.getItem('edu-pairs-best')
-              if (!prev) { localStorage.setItem('edu-pairs-best', rec); setBest(rec) }
+              const k = `edu-pairs-best-${pickN}`
+              const prev = localStorage.getItem(k)
+              if (!prev) { localStorage.setItem(k, rec); setBest(rec) }
             } catch {}
           }
         }, 350)
       } else {
-        setTimeout(() => { playGameSound('wrong'); setOpen([]) }, 800)
+        setTimeout(() => { sfx('cm.wrong'); setOpen([]) }, 800)
       }
     }
   }
@@ -100,6 +107,14 @@ export default function Pairs() {
         {t('pairs_to_games')}
       </a>
       <h1 className="font-display font-bold text-2xl dark:text-white">{t('pairs_title')}</h1>
+      <div className="flex flex-wrap gap-2 items-center">
+        {[6, 8, 10].map(nn => (
+          <button key={nn} onClick={() => setPickN(nn)} aria-pressed={pickN === nn}
+            className={`px-3.5 py-2.5 min-h-[44px] rounded-xl text-sm font-bold border ${pickN === nn ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-800 dark:text-white dark:border-slate-700'}`}>
+            {nn} {t('pairs_n_of')}
+          </button>
+        ))}
+      </div>
       <div className="flex flex-wrap gap-2 items-center">
         <select value={testId} onChange={e => setTestId(e.target.value)} aria-label={t('pairs_quiz_aria')}
           className="flex-1 min-w-[200px] px-3 py-2.5 min-h-[52px] rounded-xl border bg-white text-slate-900 dark:bg-slate-800 dark:text-white dark:[color-scheme:dark] font-bold">

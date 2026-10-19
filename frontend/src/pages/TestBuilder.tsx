@@ -24,6 +24,8 @@ export default function TestBuilder(){
   const [genSource,setGenSource]=useState<string|null>(null)
   const [genPrompt,setGenPrompt]=useState('')
   const [saving,setSaving]=useState(false)
+  const [mode,setMode]=useState<'pick'|'form'|null>(isNew? 'pick' : 'form')
+  const justPick=mode==='pick'
   const doGenerate=async()=>{
     if(genPrompt.trim().length < 10){ alert(t('tb_gen_prompt_min')); return }
     setGenerating(true)
@@ -66,7 +68,36 @@ export default function TestBuilder(){
     <div className="max-w-3xl mx-auto space-y-4">
       <h1 className="sr-only">{t('tb_title')}</h1>
       {fromPath && <Link to={fromPath} className="inline-block px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">{t('tb_back_lesson')}</Link>}
+      {justPick ? (
+        <div className="bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border p-6 space-y-4">
+          <div className="text-center pt-2">
+            <div className="text-5xl mb-2">🧪</div>
+            <div className="font-display font-extrabold text-xl dark:text-white">{t('tb_mode_title')}</div>
+          </div>
+          <button onClick={()=>{setMode('form')}} data-testid="tb-manual"
+            className="w-full text-left px-5 py-4 min-h-[92px] rounded-2xl border-2 border-blue-400/60 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700 hover:border-blue-500 flex items-center gap-4 transition-colors">
+            <span className="text-4xl">✍️</span>
+            <span>
+              <span className="block font-extrabold text-lg dark:text-white">{t('tb_mode_manual')}</span>
+              <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('tb_mode_manual_sub')}</span>
+            </span>
+          </button>
+          <button onClick={()=>{setMode('form'); setShowGen(true)}} data-testid="tb-ai"
+            className="w-full text-left px-5 py-4 min-h-[92px] rounded-2xl border-2 border-emerald-400/60 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700 hover:border-emerald-500 flex items-center gap-4 transition-colors">
+            <span className="text-4xl">✨</span>
+            <span>
+              <span className="block font-extrabold text-lg dark:text-white">{t('tb_mode_ai')}</span>
+              <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('tb_mode_ai_sub')}</span>
+            </span>
+          </button>
+        </div>
+      ) : (<>
       <div className="bg-white rounded-2xl border p-6 space-y-3">
+        <div className="flex gap-2">
+          {isNew && (
+            <button onClick={()=>setMode('pick')} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold" title={t('tb_back_pick')}>← {t('tb_back_pick')}</button>
+          )}
+        </div>
         <input value={title} onChange={e=>setTitle(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 font-bold text-lg"/>
         <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder={t('tb_desc_ph')} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50"/>
         <div className="flex flex-wrap items-center gap-3">
@@ -155,6 +186,8 @@ export default function TestBuilder(){
             <div className="text-xs text-slate-400">{t('tb_gen_hint')}</div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   )

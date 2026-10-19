@@ -1,18 +1,30 @@
 import { useEffect, useRef, useState } from 'react'
 import { shuffle } from '../utils/words'
-import { playGameSound } from '../utils/sound'
+import { sfx } from '../utils/sfx'
 import { useAccessibility } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
 import { RotateCcw, Trophy } from 'lucide-react'
 
 type Phase = 'idle' | 'show' | 'recall' | 'over'
 
-const GRID = 16
 const SHOW_SECS = 10
 const RECALL_SECS = 30
+const MAX_LIVES = 5
+
+function gridN(level: number): number {
+  return level >= 7 ? 25 : 16
+}
 
 function levelCount(l: number): number {
+  if (l >= 7) return Math.min(6 + (l - 6), 15)
   return Math.min(4 + (l - 1), 10)
+}
+
+function deal(n: number, cells: number): (number | 0)[] {
+  const pos = shuffle([...Array(cells).keys()]).slice(0, n)
+  const arr = Array(cells).fill(0) as number[]
+  pos.forEach((p, i) => { arr[p] = i + 1 })
+  return arr
 }
 
 export default function Memory() {
@@ -21,8 +33,8 @@ export default function Memory() {
   const say = (s: string) => { try { if (speech) speak(s) } catch {} }
   const [phase, setPhase] = useState<Phase>('idle')
   const [level, setLevel] = useState(1)
-  const [lives, setLives] = useState(3)
-  const [cells, setCells] = useState<(number | 0)[]>(Array(GRID).fill(0))
+  const [lives, setLives] = useState(MAX_LIVES)
+  const [cells, setCells] = useState<(number | 0)[]>(Array(16).fill(0))
   const [found, setFound] = useState<number[]>([])
   const [wrongIdx, setWrongIdx] = useState<number | null>(null)
   const [nextNum, setNextNum] = useState(1)
@@ -32,6 +44,13 @@ export default function Memory() {
   const timerRef = useRef<any>(null)
 
   useEffect(() => { try { const b = parseInt(localStorage.getItem('edu-memory-best') || '', 10); if (b) setBest(b) } catch {} }, [])
+
+  useEffect(() => {
+    ;(window as any).__mem = {
+      phase, level, cells: gridN(level), found: found.length, target: levelCount(level),
+      lives, next: nextNum, over: phase === 'over',
+    }
+  })
 
   useEffect(() => {
     if (phase !== 'show' && phase !== 'recall') return
@@ -53,37 +72,32 @@ export default function Memory() {
   const outOfTime = () => { failLevel() }
 
   const startGame = () => {
-    setLevel(1); setLives(3)
+    setLevel(1); setLives(MAX_LIVES)
     setUpLevel(true)
   }
 
   const setUpLevel = (fresh: boolean) => {
-    const n = levelCount(fresh ? 1 : level)
-    const pos = shuffle([...Array(GRID).keys()]).slice(0, n)
-    const arr = Array(GRID).fill(0) as number[]
-    pos.forEach((p, i) => { arr[p] = i + 1 })
-    setCells(arr)
+    const lv = fresh ? 1 : level
+    setCells(deal(levelCount(lv), gridN(lv)))
     setFound([]); setNextNum(1); setWrongIdx(null); setPhase('show')
     setFlash('')
-    playGameSound('go')
+    sfx('mem.win')
     say(t('mem_memorize'))
   }
 
   const failLevel = () => {
     const lv = lives - 1
     setLives(lv)
-    playGameSound('wrong')
+    sfx('mem.miss')
+    try { navigator.vibrate && navigator.vibrate(60) } catch {}
     setFlash(t('mem_wrong'))
     if (lv <= 0) {
       setPhase('over')
       saveBest(level)
+      sfx('mem.lose')
       say(`${t('mem_gameover')} ${t('mem_level')} ${level}`)
     } else {
-      const n = levelCount(level)
-      const pos = shuffle([...Array(GRID).keys()]).slice(0, n)
-      const arr = Array(GRID).fill(0) as number[]
-      pos.forEach((p, i) => { arr[p] = i + 1 })
-      setCells(arr)
+      setCells(deal(levelCount(level), gridN(level)))
       setFound([]); setNextNum(1); setWrongIdx(null); setPhase('show')
     }
   }
@@ -103,23 +117,25 @@ export default function Memory() {
     const n = cells[idx]
     if (!n || found.includes(n)) return
     if (n === nextNum) {
-      playGameSound('tick')
+      sfx('mem.flip', 1, 1 + (n - 1) * 0.04)
       const nf = [...found, n]
       setFound(nf)
       setNextNum(n + 1)
       if (nf.length >= levelCount(level)) {
         clearInterval(timerRef.current)
-        playGameSound('win')
+        sfx('mem.match')
+        try { navigator.vibrate && navigator.vibrate(25) } catch {}
         saveBest(level + 1)
         setFlash(t('mem_level_ok'))
         setTimeout(() => {
-          setLevel(l => l + 1)
           const nl = level + 1
-          const cnt = levelCount(nl)
-          const pos = shuffle([...Array(GRID).keys()]).slice(0, cnt)
-          const arr = Array(GRID).fill(0) as number[]
-          pos.forEach((p, i) => { arr[p] = i + 1 })
-          setCells(arr)
+          setLevel(nl)
+          // +1 сердечко за каждые 3 пройденных уровня (макс 5)
+          if (nl % 3 === 0) {
+            sfx('mem.bonus')
+            setLives(v => Math.min(MAX_LIVES, v + 1))
+          }
+          setCells(deal(levelCount(nl), gridN(nl)))
           setFound([]); setNextNum(1); setWrongIdx(null); setPhase('show')
         }, 900)
       }
@@ -131,6 +147,8 @@ export default function Memory() {
   }
 
   const showNums = phase === 'show'
+  const N = gridN(level)
+  const cols = N === 25 ? 5 : 4
 
   const hintPhase = phase === 'show' ? t('mem_memorize') : phase === 'recall' ? t('mem_remember') : flash
 
@@ -158,9 +176,10 @@ export default function Memory() {
 
       {phase !== 'idle' && (
         <>
-          <div className="flex flex-wrap gap-3 items-center font-bold dark:text-white">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 items-center font-bold dark:text-white">
             <span>{t('mem_level')} {level} / {levelCount(level)} {t('mem_level_short')}</span>
             <span>{'❤️'.repeat(Math.max(0, lives))}</span>
+            {phase === 'recall' && <span className="text-emerald-600 dark:text-emerald-400">{found.length}/{levelCount(level)}</span>}
             {(phase === 'show' || phase === 'recall') && (
               <span aria-live="polite" className={phase === 'show' ? 'text-blue-600 dark:text-blue-400' : 'text-rose-600 dark:text-rose-400'}>
                 {secs}s
@@ -175,13 +194,13 @@ export default function Memory() {
           {(phase === 'show' || phase === 'recall') && flash && (
             <div className={`rounded-xl px-4 py-2 text-sm font-bold ${flash === t('mem_level_ok') ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300'}`}>{flash}</div>
           )}
-          <div className="grid grid-cols-4 gap-2 sm:gap-3" role="group" aria-label={t('mem_cells_aria')}>
+          <div className="grid gap-2 sm:gap-3" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }} role="group" aria-label={t('mem_cells_aria')}>
             {cells.map((n, i) => {
               const isOpen = n > 0 && (showNums || found.includes(n))
               return (
                 <button key={i} onClick={() => tap(i)} disabled={phase !== 'recall'}
                   aria-label={isOpen ? String(n) : t('mem_closed')}
-                  className={`min-h-[72px] sm:min-h-[88px] rounded-2xl border-2 font-display font-bold text-2xl sm:text-3xl transition-all ${showNums && n > 0
+                  className={`min-h-[64px] sm:min-h-[88px] rounded-2xl border-2 font-display font-bold text-2xl sm:text-3xl transition-all ${showNums && n > 0
                     ? 'bg-white border-blue-500 dark:bg-slate-700 dark:text-white'
                     : isOpen
                       ? 'bg-emerald-100 border-emerald-500 dark:bg-emerald-900/40 text-slate-800 dark:text-white'
@@ -207,6 +226,7 @@ export default function Memory() {
           <button onClick={startGame} className="mt-4 px-6 py-3 min-h-[52px] rounded-xl bg-blue-600 text-white font-bold inline-flex items-center gap-2 mx-auto"><RotateCcw size={17} /> {t('mem_again')}</button>
         </div>
       )}
+      <div className="sr-only" aria-live="polite">{hintPhase}</div>
     </div>
   )
 }

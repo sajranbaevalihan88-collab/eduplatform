@@ -145,6 +145,7 @@ export default function VSCodeEditor(){
   const [requirements,setRequirements]=useState('')
   const [projectMode,setProjectMode]=useState(false)
   const iframeRef=useRef<HTMLIFrameElement>(null)
+  const [mobPrev, setMobPrev] = useState(false)
   const editorRef=useRef<any>(null)
   const runRef=useRef<()=>void>(()=>{})
   const [cursor,setCursor]=useState({line:1, col:1})
@@ -297,6 +298,7 @@ export default function VSCodeEditor(){
     try{
       if(active.lang==='html'){
         if(iframeRef.current) iframeRef.current.srcdoc=code
+        if(window.innerWidth < 1024) setMobPrev(true)
         setOutput('▶ '+active.name+'\n'+t('vsc_html_preview'))
         toast(t('vsc_preview_upd'),'success')
       } else if(active.lang==='css'){
@@ -464,6 +466,11 @@ export default function VSCodeEditor(){
               <button onClick={()=>setFontSize(f=>Math.max(10,f-1))} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs flex items-center justify-center" title={t('vsc_font_down')}>A-</button>
               <button onClick={()=>setFontSize(f=>Math.min(24,f+1))} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs flex items-center justify-center" title={t('vsc_font_up')}>A+</button>
               <button onClick={()=>setEditorTheme(t=>t==='vs-dark'?'light':'vs-dark')} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs flex items-center justify-center" title={t('vsc_theme')}>{editorTheme==='vs-dark'?'☀':'🌙'}</button>
+              {active.lang==='html' && (
+                <button onClick={()=>setMobPrev(v=>!v)} className="h-9 px-2 lg:h-6 lg:px-1.5 rounded text-xs flex items-center justify-center gap-1 font-bold shrink-0 bg-[#007acc] text-white" title={t('vsc_prev_title')}>
+                  {mobPrev ? `◂ ${t('vsc_code')}` : `${t('vsc_preview')} ▸`}
+                </button>
+              )}
               <span className="w-px h-4 bg-[#3c3c3c] mx-0.5 hidden sm:block"/>
               <button onClick={downloadFile} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs hidden sm:flex items-center justify-center gap-1" title={t('vsc_download_title')}><Download size={11}/><span className="hidden lg:inline">{t('vsc_download')}</span></button>
               <button onClick={()=>{setShareUrl(''); setShowShare(v=>!v)}} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs hidden sm:flex items-center justify-center gap-1" title={t('vsc_share_title')}><Share2 size={11}/><span className="hidden lg:inline">{t('vsc_share')}</span></button>
@@ -485,7 +492,7 @@ export default function VSCodeEditor(){
             <button onClick={()=>runProject()} disabled={running} className="px-2 py-0.5 rounded bg-[#16825d] hover:bg-[#1a9c6e] text-white text-xs flex items-center gap-1 shrink-0"><Play size={10}/> Run Project</button>
           </div>
           <div className="flex-1 min-h-0 relative flex">
-            <div className="flex-1 min-w-0 relative">
+            <div className={mobPrev ? 'hidden' : 'flex-1 min-w-0 relative'}>
             <Editor
               height="100%"
               path={active.id+'/'+active.name}
@@ -527,7 +534,7 @@ export default function VSCodeEditor(){
             />
             </div>
             {active.lang==='html' && (
-              <div className="w-1/2 border-l border-[#2d2d2d] bg-white hidden lg:flex flex-col shrink-0">
+              <div className={`${mobPrev?'flex':'hidden lg:flex'} w-full lg:w-1/2 border-l border-[#2d2d2d] bg-white flex-col shrink-0`}>
                 <div className="px-2 py-1 bg-[#f3f3f3] border-b text-xs font-semibold text-slate-600 flex items-center justify-between shrink-0">
                   <span>Preview — live</span>
                   <div className="flex gap-1">

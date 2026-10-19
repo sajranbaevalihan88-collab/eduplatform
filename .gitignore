@@ -10,3 +10,6 @@ frontend/dist/
 *.log
 .DS_Store
 
+frontend/vlog*.txt
+frontend/pglog.txt
+devlog.txt

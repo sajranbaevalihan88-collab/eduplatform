@@ -95,6 +95,8 @@ export default function WordEditor() {
   const [handle, setHandle] = useState<{ x: number, y: number } | null>(null)
   const [inTable, setInTable] = useState(false)
   const lastTable = useRef<HTMLTableElement | null>(null)
+  const tblOverlayRef = useRef<HTMLDivElement>(null)
+  const tblDragRef = useRef<{ t: HTMLTableElement } | null>(null)
   const [showTblPicker, setShowTblPicker] = useState(false)
   const [tblRows, setTblRows] = useState(3)
   const [tblCols, setTblCols] = useState(3)
@@ -199,7 +201,6 @@ export default function WordEditor() {
     else markSelImg(null)
     rememberTable()
   }
-
   const imgSetWidth = (pct: number) => {
     if (!selImg) return
     const v = Math.max(10, Math.min(100, pct))
@@ -374,8 +375,9 @@ export default function WordEditor() {
   // клик по кнопкам панели уводит фокус — таблицу помним отдельно, иначе +/- не находят её
   const rememberTable = () => {
     const t = curTable()
-    if (t) lastTable.current = t
+    if (t) { lastTable.current = t; prepareTable(t) } else { lastTable.current = null }
     setInTable(!!t)
+    requestAnimationFrame(placeTblOverlay)
   }
   const getTable = (): HTMLTableElement | null => {
     const t = curTable()
@@ -385,6 +387,186 @@ export default function WordEditor() {
   }
 
   const styleCell = (c: HTMLTableCellElement) => { c.style.cssText = CELL_STYLE }
+
+  // каретка внутри ячейки (для кнопок панели)
+  const curCell = (): HTMLTableCellElement | null => {
+    try {
+      const sel = window.getSelection()
+      const n = sel?.anchorNode
+      const el = (n instanceof Element ? n : (n as Node)?.parentElement) as HTMLElement | null
+      const c = el?.closest?.('td,th') as HTMLTableCellElement | null
+      return (c && editRef.current?.contains(c)) ? c : null
+    } catch { return null }
+  }
+
+  // таблица одним куском: fixed-layout + равные колонки один раз
+  const prepareTable = (t: HTMLTableElement) => {
+    try {
+      t.style.borderCollapse = 'collapse'
+      t.style.margin = t.style.margin || '8px 0'
+      if (t.dataset.fixed !== '1') {
+        t.dataset.fixed = '1'
+        t.style.tableLayout = 'fixed'
+        const first = t.rows[0]
+        if (first) {
+          const w = `${(100 / Math.max(1, first.cells.length)).toFixed(2)}%`
+          for (const c of Array.from(first.cells)) { c.style.width = w }
+        }
+      }
+    } catch {}
+  }
+
+  // ——— оверлей живой таблицы: рамка, ручка «передвинуть», ширины колонок, высоты строк ———
+  const placeTblOverlay = () => {
+    const layer = tblOverlayRef.current
+    const wrap = wrapRef.current
+    const t = lastTable.current
+    if (!layer || !wrap) return
+    if (!t || !wrap.contains(t) || !document.contains(t)) {
+      if (layer.childElementCount) layer.innerHTML = ''
+      return
+    }
+    const tr = t.getBoundingClientRect()
+    const wr = wrap.getBoundingClientRect()
+    if (!tr.width || tr.bottom < -40 || tr.top > innerHeight + 40) {
+      if (layer.childElementCount) layer.innerHTML = ''
+      return
+    }
+    layer.innerHTML = ''
+    const box = document.createElement('div')
+    box.className = 'word-tbl-box'
+    box.style.cssText = `left:${tr.left - wr.left - 3}px;top:${tr.top - wr.top - 3}px;width:${tr.width + 4}px;height:${tr.height + 4}px`
+    layer.appendChild(box)
+    // ручка «тащи таблицу»
+    const mv = document.createElement('div')
+    mv.className = 'word-tbl-move'
+    mv.title = 'Тяни — переставить таблицу'
+    mv.style.cssText = `left:${Math.max(0, tr.left - wr.left + 2)}px;top:${tr.top - wr.top - 13}px`
+    mv.textContent = '⠿'
+    mv.addEventListener('mousedown', ev => { ev.preventDefault(); ev.stopPropagation(); startTblMove(ev as MouseEvent, t) })
+    layer.appendChild(mv)
+    // ширины столбцов — ручки на границах
+    const first = t.rows[0]
+    if (first) {
+      for (let i = 1; i < first.cells.length; i++) {
+        const cr = (first.cells[i] as HTMLTableCellElement).getBoundingClientRect()
+        const h = document.createElement('div')
+        h.className = 'word-col-h'
+        h.title = 'Тяни — ширина столбца'
+        h.style.cssText = `left:${cr.left - wr.left - 4}px;top:${tr.top - wr.top}px;height:${tr.height}px`
+        h.addEventListener('mousedown', ev => { ev.preventDefault(); ev.stopPropagation(); startColDrag(ev as MouseEvent, t, i - 1) })
+        layer.appendChild(h)
+      }
+    }
+    // высоты строк — ручки слева
+    for (let i = 0; i < t.rows.length; i++) {
+      const rr = (t.rows[i] as HTMLTableRowElement).getBoundingClientRect()
+      const h = document.createElement('div')
+      h.className = 'word-row-h'
+      h.title = 'Тяни — высота строки'
+      h.style.cssText = `left:${Math.max(0, tr.left - wr.left - 5)}px;top:${rr.bottom - wr.top - 4}px;width:${Math.min(34, tr.width)}px`
+      h.addEventListener('mousedown', ev => { ev.preventDefault(); ev.stopPropagation(); startRowDrag(ev as MouseEvent, t, i) })
+      layer.appendChild(h)
+    }
+  }
+
+  const startColDrag = (e: MouseEvent, t: HTMLTableElement, idx: number) => {
+    const first = t.rows[0]
+    const cell = first?.cells[idx] as HTMLTableCellElement | undefined
+    if (!cell) return
+    const startX = e.clientX
+    const startW = cell.getBoundingClientRect().width
+    const tableW = t.getBoundingClientRect().width || 1
+    const move = (ev: MouseEvent) => {
+      const w = Math.max(24, Math.min(tableW - 24, startW + (ev.clientX - startX)))
+      cell.style.width = `${((w / tableW) * 100).toFixed(2)}%`
+      placeTblOverlay()
+    }
+    const up = () => {
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+      tblDragRef.current = null
+      setDirty(true)
+    }
+    tblDragRef.current = { t }
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+  }
+
+  const startRowDrag = (e: MouseEvent, t: HTMLTableElement, idx: number) => {
+    const row = t.rows[idx] as HTMLTableRowElement | undefined
+    if (!row) return
+    const startY = e.clientY
+    const startH = row.getBoundingClientRect().height
+    const move = (ev: MouseEvent) => {
+      row.style.height = `${Math.max(24, Math.min(500, startH + (ev.clientY - startY)))}px`
+      placeTblOverlay()
+    }
+    const up = () => {
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+      setDirty(true)
+    }
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+  }
+
+  // перестановка таблицы: тяни ручку — синяя линия показывает, куда встанет
+  const startTblMove = (e: MouseEvent, t: HTMLTableElement) => {
+    const ed = editRef.current
+    if (!ed) return
+    e.preventDefault()
+    document.body.style.userSelect = 'none'
+    const kids = Array.from(ed.children) as HTMLElement[]
+    const line = document.createElement('div')
+    line.className = 'word-drop-line'
+    line.style.display = 'none'
+    document.body.appendChild(line)
+    let dropBefore: Element | null = null
+    let atEnd = false
+    const compute = (ev: MouseEvent) => {
+      const y = ev.clientY
+      dropBefore = null
+      atEnd = true
+      line.style.display = 'block'
+      for (const k of kids) {
+        if (k === t || !ed.contains(k)) continue
+        const r = k.getBoundingClientRect()
+        if (y < (r.top + r.bottom) / 2) {
+          dropBefore = k
+          atEnd = false
+          line.style.left = `${r.left}px`
+          line.style.width = `${r.width}px`
+          line.style.top = `${r.top}px`
+          break
+        }
+      }
+      if (atEnd) {
+        const last = kids[kids.length - 1]
+        const r = (last && ed.contains(last) && last !== t) ? last.getBoundingClientRect() : ed.getBoundingClientRect()
+        line.style.left = `${r.left}px`
+        line.style.width = `${r.width}px`
+        line.style.top = `${r.bottom - 2}px`
+      }
+    }
+    compute(e)
+    const move = (ev: MouseEvent) => compute(ev)
+    const up = () => {
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+      line.remove()
+      document.body.style.userSelect = ''
+      try {
+        if (atEnd) ed.appendChild(t)
+        else if (dropBefore) ed.insertBefore(t, dropBefore)
+      } catch {}
+      lastTable.current = t
+      setDirty(true)
+      requestAnimationFrame(placeTblOverlay)
+    }
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+  }
 
   const insertTable = (rows?: number, cols?: number) => {
     const R = Math.max(1, Math.min(10, rows ?? tblRows ?? 3))
@@ -413,15 +595,24 @@ export default function WordEditor() {
     const t = getTable()
     if (!t) return
     const cols = t.rows[0]?.cells.length || 1
-    const r = t.insertRow()
-    for (let i = 0; i < cols; i++) { const c = r.insertCell() as HTMLTableCellElement; c.innerHTML = ' '; styleCell(c) }
+    const cell = curCell()
+    const rowEl = cell ? (cell.closest('tr') as HTMLTableRowElement | null) : null
+    const at = rowEl ? rowEl.rowIndex + 1 : t.rows.length
+    const r = t.insertRow(Math.max(0, at))
+    for (let i = 0; i < cols; i++) { const c = r.insertCell() as HTMLTableCellElement; c.innerHTML = ' '; styleCell(c) }
+    if (rowEl) focusCell(r.cells[0])
     setDirty(true)
+    requestAnimationFrame(placeTblOverlay)
   }
   const tableAddCol = () => {
     const t = getTable()
     if (!t) return
-    for (const r of Array.from(t.rows)) { const c = r.insertCell() as HTMLTableCellElement; c.innerHTML = ' '; styleCell(c) }
+    const cell = curCell()
+    const n = (t.rows[0]?.cells.length || 0)
+    const at = cell ? Math.max(0, Math.min(n, cell.cellIndex + 1)) : n
+    for (const r of Array.from(t.rows)) { const c = r.insertCell(at) as HTMLTableCellElement; c.innerHTML = ' '; styleCell(c) }
     setDirty(true)
+    requestAnimationFrame(placeTblOverlay)
   }
   const tableDelRow = () => {
     const t = getTable()
@@ -435,6 +626,7 @@ export default function WordEditor() {
       if (t.rows.length <= 1) { t.remove(); setInTable(false) } else t.deleteRow(idx)
     } catch {}
     setDirty(true)
+    requestAnimationFrame(placeTblOverlay)
   }
   const tableDelCol = () => {
     const t = getTable()
@@ -449,6 +641,7 @@ export default function WordEditor() {
       for (const r of Array.from(t.rows)) { try { r.deleteCell(idx) } catch {} }
     } catch {}
     setDirty(true)
+    requestAnimationFrame(placeTblOverlay)
   }
   const tableDelete = () => {
     const t = getTable()
@@ -456,6 +649,60 @@ export default function WordEditor() {
     t.remove()
     lastTable.current = null
     setInTable(false)
+    setDirty(true)
+    requestAnimationFrame(placeTblOverlay)
+  }
+
+  // выравнивание всей таблицы в листе
+  const tblAlign = (mode: 'left' | 'center' | 'right') => {
+    const t = getTable()
+    if (!t) return
+    t.style.float = 'none'
+    t.style.width = '100%'
+    t.style.margin = mode === 'center' ? '10px auto' : mode === 'right' ? '10px 0 10px auto' : '8px 0'
+    setDirty(true)
+    requestAnimationFrame(placeTblOverlay)
+  }
+
+  // обтекание как у Word-таблицы (картинка/текст сбоку)
+  const tblFloat = (side: '' | 'left' | 'right') => {
+    const t = getTable()
+    if (!t) return
+    if (!side) { t.style.float = ''; t.style.width = '100%'; t.style.margin = '8px 0' }
+    else { t.style.float = side; t.style.width = '48%'; t.style.margin = side === 'left' ? '6px 12px 6px 0' : '6px 0 6px 12px' }
+    setDirty(true)
+    requestAnimationFrame(placeTblOverlay)
+  }
+
+  // первая строка — шапка (th) или обычная (td)
+  const tblHeader = () => {
+    const t = getTable()
+    if (!t || !t.rows[0]) return
+    const toTh = (t.rows[0].cells[0] as HTMLTableCellElement)?.tagName === 'TD'
+    for (const c of Array.from(t.rows[0].cells) as HTMLTableCellElement[]) {
+      const nc = document.createElement(toTh ? 'th' : 'td')
+      nc.innerHTML = c.innerHTML
+      nc.style.cssText = c.style.cssText
+      if (toTh) nc.style.width = c.style.width
+      c.replaceWith(nc)
+    }
+    setDirty(true)
+    requestAnimationFrame(placeTblOverlay)
+  }
+
+  // фон текущей ячейки
+  const tblCellBg = (v: string) => {
+    const c = curCell()
+    if (!c) return
+    c.style.backgroundColor = v
+    setDirty(true)
+  }
+
+  // выравнивание текста в текущей ячейке
+  const tblCellAlign = (mode: 'left' | 'center' | 'right') => {
+    const c = curCell()
+    if (!c) return
+    c.style.textAlign = mode
     setDirty(true)
   }
 
@@ -511,10 +758,11 @@ export default function WordEditor() {
     }
   }
 
-  // явная кнопка «+ Страница»: новый лист в конец + прокрутка к нему
+  // явная кнопка «+ Страница»: разрыв + наполнение пустым листом + переход к нему
   const addPage = () => {
     const ed = editRef.current
     if (!ed) return
+    const wasPages = Math.max(1, pages)
     ed.focus()
     try {
       const r = document.createRange()
@@ -528,11 +776,69 @@ export default function WordEditor() {
     insertPageBreak()
     requestAnimationFrame(() => {
       try {
-        const brs = ed.querySelectorAll('.page-break')
-        brs[brs.length - 1]?.scrollIntoView({ block: 'center' })
+        const ph = pageHRef.current
+        const pad = SHEET_PAD
+        // добить пустыми абзацами ровно до границы нового листа (без фантомных страниц)
+        const target = pad * 2 + (wasPages + 1) * ph
+        let guard = 0
+        let firstNew: HTMLElement | null = null
+        let lastAdded: HTMLElement | null = null
+        let before = ed.scrollHeight
+        while (before < target - 8 && guard < 200) {
+          const p = document.createElement('p')
+          p.innerHTML = '<br/>'
+          if (!firstNew) firstNew = p
+          ed.appendChild(p)
+          guard++
+          const after = ed.scrollHeight
+          if (after > target) {
+            // абзац перелился на следующий лист — убираем, чтобы не плодить фантомную страницу
+            p.remove()
+            break
+          }
+          before = after
+          lastAdded = p
+        }
+        // каретка на свежем листе — сразу можно писать
+        const prov = lastAdded || firstNew
+        const caretEl = prov ?? (ed.lastElementChild as HTMLElement | null)
+        if (caretEl) {
+          try {
+            const r = document.createRange()
+            r.selectNodeContents(caretEl)
+            r.collapse(true)
+            const sel = window.getSelection()
+            sel?.removeAllRanges()
+            sel?.addRange(r)
+            ed.focus()
+            saveSelection()
+          } catch {}
+        }
+        updatePages()
+        refreshCounts()
+        setDirty(true)
+        // скролл к верхней границе нового листа
+        const wrap = wrapRef.current
+        if (wrap) {
+          const wr = wrap.getBoundingClientRect()
+          const y = window.scrollY + wr.top + pad + wasPages * ph
+          window.scrollTo({ top: Math.max(0, y - 4), behavior: 'smooth' })
+        }
       } catch {}
       updatePages()
+      updateCurPage()
     })
+  }
+
+  // переход к листу N (кнопки-страницы под тулбаром)
+  const gotoSheet = (n: number) => {
+    const wrap = wrapRef.current
+    if (!wrap) return
+    const ph = pageHRef.current
+    const wr = wrap.getBoundingClientRect()
+    const y = window.scrollY + wr.top + SHEET_PAD + (n - 1) * ph
+    setCurPage(n)
+    window.scrollTo({ top: Math.max(0, y - 4), behavior: 'smooth' })
   }
 
   // загрузка списка: бэк, при ошибке — локально (стенд без интернета)
@@ -559,7 +865,7 @@ export default function WordEditor() {
         setFull(false)
       }
     }
-    const onScrollResize = () => placeHandle()
+    const onScrollResize = () => { placeHandle(); placeTblOverlay() }
     document.addEventListener('selectionchange', onSel)
     window.addEventListener('keydown', onKey)
     window.addEventListener('scroll', updateCurPage, { passive: true })
@@ -989,6 +1295,21 @@ export default function WordEditor() {
             <button onMouseDown={keepFocus} onClick={tableAddCol} className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">+ Столбец</button>
             <button onMouseDown={keepFocus} onClick={tableDelRow} className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">− Строка</button>
             <button onMouseDown={keepFocus} onClick={tableDelCol} className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">− Столбец</button>
+            <span className="hidden sm:inline-block w-px h-5 bg-emerald-200 dark:bg-emerald-800" aria-hidden="true" />
+            <button onMouseDown={keepFocus} onClick={() => tblHeader()} className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold" title="Первая строка — шапка или обычная">Шапка</button>
+            <button onMouseDown={keepFocus} onClick={() => tblCellAlign('left')} title="Текст ячейки слева" className="p-1.5 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600"><AlignLeft size={14} /></button>
+            <button onMouseDown={keepFocus} onClick={() => tblCellAlign('center')} title="Текст ячейки по центру" className="p-1.5 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600"><AlignCenter size={14} /></button>
+            <button onMouseDown={keepFocus} onClick={() => tblCellAlign('right')} title="Текст ячейки справа" className="p-1.5 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600"><AlignRight size={14} /></button>
+            <label className="flex items-center gap-1 text-xs font-bold dark:text-white px-1" title="Фон ячейки">
+              Фон
+              <input type="color" onChange={e => tblCellBg(e.target.value)} className="w-7 h-7 rounded cursor-pointer bg-transparent border dark:border-slate-600" aria-label="Фон ячейки" />
+            </label>
+            <span className="hidden sm:inline-flex items-center gap-1 text-xs font-bold dark:text-white whitespace-nowrap" title="Таблица в листе">В листе:
+              <button onMouseDown={keepFocus} onClick={() => tblAlign('center')} title="Таблица по центру" className="px-1.5 py-1 rounded-lg bg-white dark:bg-slate-700 border dark:border-slate-600 font-bold">Центр</button>
+              <button onMouseDown={keepFocus} onClick={() => tblFloat('left')} title="Текст обтекает слева" className="px-1.5 py-1 rounded-lg bg-white dark:bg-slate-700 border dark:border-slate-600 font-bold">↙</button>
+              <button onMouseDown={keepFocus} onClick={() => tblFloat('right')} title="Текст обтекает справа" className="px-1.5 py-1 rounded-lg bg-white dark:bg-slate-700 border dark:border-slate-600 font-bold">↘</button>
+              <button onMouseDown={keepFocus} onClick={() => tblFloat('')} title="Вернуть в полную ширину" className="px-1.5 py-1 rounded-lg bg-white dark:bg-slate-700 border dark:border-slate-600 font-bold">В строку</button>
+            </span>
             <button onMouseDown={keepFocus} onClick={tableDelete} className="ml-auto p-2 rounded-xl bg-red-50 text-red-600" title="Удалить таблицу" aria-label="Удалить таблицу"><Trash2 size={15} /></button>
           </div>
         )}
@@ -1050,6 +1371,23 @@ export default function WordEditor() {
           </span>
           <input ref={fileRef} type="file" accept=".docx" className="hidden" onChange={onImport} />
         </div>
+        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Листы документа">
+          {Array.from({ length: Math.max(1, pages) }, (_, k) => (
+            <button
+              key={k}
+              role="tab"
+              aria-selected={curPage === k + 1}
+              onClick={() => gotoSheet(k + 1)}
+              title={`Перейти к листу ${k + 1}`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${curPage === k + 1 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 hover:bg-blue-50 dark:hover:bg-slate-600'}`}
+            >
+              Лист {k + 1}
+            </button>
+          ))}
+          <button onClick={addPage} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-dashed bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 hover:bg-blue-50 dark:hover:bg-slate-600" title="Добавить лист в конец">
+            + Лист
+          </button>
+        </div>
 
         {/* лист */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-2 sm:p-4"
@@ -1062,7 +1400,7 @@ export default function WordEditor() {
               role="textbox"
               aria-multiline="true"
               aria-label="Текст документа Word"
-              onInput={() => { saveSelection(); setDirty(true); refreshCounts(); autoStash(); updatePages(); placeHandle() }}
+              onInput={() => { saveSelection(); setDirty(true); refreshCounts(); autoStash(); updatePages(); placeHandle(); requestAnimationFrame(placeTblOverlay) }}
               onMouseUp={() => { saveSelection(); refreshCounts() }}
               onKeyUp={() => { saveSelection(); refreshCounts(); updatePages() }}
               onKeyDown={onEditorKeyDown}
@@ -1078,6 +1416,7 @@ export default function WordEditor() {
                 </div>
               ))}
             </div>
+            <div ref={tblOverlayRef} className="absolute inset-0 pointer-events-none z-[6]" aria-hidden="true" />
             {selImg && handle && (
               <div className="img-handle" style={{ left: handle.x, top: handle.y }}
                 onMouseDown={startResize} title="Тяни — размер фото" />

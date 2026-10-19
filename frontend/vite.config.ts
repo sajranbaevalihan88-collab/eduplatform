@@ -24,10 +24,11 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        entryFileNames: 'assets/[name].js',
-        chunkFileNames: 'assets/[name].js',
-        assetFileNames: 'assets/[name][extname]',
-        // Чистые имена без хэшей + разрезка для скорости.
+        // Хэш в имени файла: браузер не может склеить старый кеш с новым билдом.
+        // index.html отдаётся без кеша, ассеты — с вечным кешом (имена меняются).
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
         // vendor едет сразу (react-экосистема целиком в нём — делить её
         // нельзя, между router/zustand циклические импорты: Circular chunk).
         // vendor-heavy (monaco/tldraw) и vendor-docs (mammoth/jszip)
