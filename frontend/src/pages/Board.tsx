@@ -10,6 +10,27 @@ const Board3D = lazy(() => import('../components/Board3D'))
 
 const DRAFT_KEY = 'board-draft-v2'
 
+// ——— геометрия для «ластика по частям» ———
+type Pt = { x: number; y: number }
+const segDist = (p: Pt, a: Pt, b: Pt): number => {
+  const dx = b.x - a.x, dy = b.y - a.y
+  const l2 = dx * dx + dy * dy
+  let tt = 0
+  if (l2 > 0) tt = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2))
+  const cx = a.x + tt * dx, cy = a.y + tt * dy
+  return Math.hypot(p.x - cx, p.y - cy)
+}
+export const distToPath = (p: Pt, pts: Pt[]): number => {
+  if (!pts.length) return Infinity
+  if (pts.length === 1) return Math.hypot(p.x - pts[0].x, p.y - pts[0].y)
+  let best = Infinity
+  for (let i = 0; i < pts.length - 1; i++) {
+    const d = segDist(p, pts[i], pts[i + 1])
+    if (d < best) best = d
+  }
+  return best
+}
+
 function readDraft2(): { snap: any; title: string } | null {
   try {
     const raw = localStorage.getItem(DRAFT_KEY)
@@ -100,7 +121,10 @@ export default function Board() {
     const iv = setInterval(flushDraft, 30000)
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isFullscreen) setIsFullscreen(false)
-      if (e.key === 'Escape') { clipToolRef.current = null; setClipToolS(null); setAxesOpen(false) }
+      if (e.key === 'Escape') {
+        clipToolRef.current = null; setClipToolS(null); setAxesOpen(false)
+        partToolRef.current = false; setPartToolS(false)
+      }
     }
     const onVis = () => {
       if (document.visibilityState === 'hidden' && dirtyRef.current) {
@@ -460,6 +484,7 @@ export default function Board() {
     g.style.height = Math.abs(cy - d.y0) + 'px'
   }
   const onAreaPointerDown = (e: React.PointerEvent) => {
+    if (partToolRef.current) { onPartDown(e); return }
     const k = clipToolRef.current
     if (!k || !editorRef.current) return
     const el = e.target as Element
@@ -475,6 +500,7 @@ export default function Board() {
     ghostDrag(clipDragRef.current, e.clientX, e.clientY)
   }
   const onAreaPointerMove = (e: React.PointerEvent) => {
+    if (partToolRef.current) { onPartMove(e); return }
     const k = clipToolRef.current
     if (!k) { ghostHide(); return }
     const d = clipDragRef.current
@@ -483,21 +509,24 @@ export default function Board() {
   }
   const onAreaPointerUp = (e: React.PointerEvent) => {
     const d = clipDragRef.current
-    if (!d) return
-    clipDragRef.current = null
-    ghostHide()
-    let p2: any = null
-    try { p2 = editorRef.current?.screenToPage({ x: e.clientX, y: e.clientY }) } catch {}
-    if (!p2) return
-    try { (e.currentTarget as Element).releasePointerCapture(e.pointerId) } catch {}
-    const quick = Math.hypot(e.clientX - d.x0, e.clientY - d.y0) <= 12
-    if (quick) {
-      let hit: any = null
-      try { hit = editorRef.current?.getShapeAtPoint?.({ x: p2.x, y: p2.y }, { hitInside: true, hitLabels: true } as any) } catch {}
-      if (hit) { justPlacedRef.current = 0; setClipTool(null); return }
+    if (d) {
+      clipDragRef.current = null
+      ghostHide()
+      let p2: any = null
+      try { p2 = editorRef.current?.screenToPage({ x: e.clientX, y: e.clientY }) } catch {}
+      if (!p2) return
+      try { (e.currentTarget as Element).releasePointerCapture(e.pointerId) } catch {}
+      const quick = Math.hypot(e.clientX - d.x0, e.clientY - d.y0) <= 12
+      if (quick) {
+        let hit: any = null
+        try { hit = editorRef.current?.getShapeAtPoint?.({ x: p2.x, y: p2.y }, { hitInside: true, hitLabels: true } as any) } catch {}
+        if (hit) { justPlacedRef.current = 0; setClipTool(null); return }
+      }
+      placeClipRange(d.kind, d.px, d.py, p2.x, p2.y)
+      justPlacedRef.current = performance.now()
+      return
     }
-    placeClipRange(d.kind, d.px, d.py, p2.x, p2.y)
-    justPlacedRef.current = performance.now()
+    if (partToolRef.current) onPartUp()
   }
   const onAreaClickCapture = (e: React.MouseEvent) => {
     if (!clipToolRef.current) return
@@ -515,14 +544,124 @@ export default function Board() {
       setClipTool(null)
       ghostHide()
     }
+    if (e.key === 'Escape' && partToolRef.current) {
+      e.stopPropagation()
+      if (partDragRef.current) { try { editorRef.current?.squashToMark(partDragRef.current.markId) } catch {} partDragRef.current = null }
+      setPartTool(false)
+    }
+  }
+
+  // === Ластик по частям: стирает только пройденный кусок штриха ===
+  const [partTool, setPartToolS] = useState(false)
+  const partToolRef = useRef(false)
+  const setPartTool = (v: boolean) => {
+    partToolRef.current = v
+    setPartToolS(v)
+    if (v) setClipTool(null)
+  }
+  type PartDrag = { pts: Pt[]; markId: string }
+  const partDragRef = useRef<PartDrag | null>(null)
+  const partSweep = (p: Pt) => {
+    const ed = editorRef.current
+    if (!ed) return
+    try {
+      const d = partDragRef.current
+      if (!d) return
+      const r = Math.max(6, 13 / (ed.getZoomLevel() || 1))
+      for (const s of ed.getCurrentPageShapes()) {
+        if (!s) continue
+        const tp = s.type
+        if (tp !== 'draw' && tp !== 'highlight') continue
+        const segs: any[] = (s.props && s.props.segments) || []
+        if (!segs.length) continue
+        const tr = ed.getShapePageTransform(s.id)
+        if (!tr) continue
+        let anyErase = false
+        let anyAlive = false
+        const newSegs: any[] = []
+        for (const sg of segs) {
+          const pts: any[] = (sg && sg.points) || []
+          if (!pts.length) continue
+          const flags = pts.map((pt: any) => distToPath(tr.applyToPoint({ x: pt.x, y: pt.y }), d.pts) <= r)
+          const cnt = flags.reduce((a: number, f: boolean) => a + (f ? 1 : 0), 0)
+          if (cnt === 0) { newSegs.push(sg); anyAlive = true; continue }
+          if (cnt === flags.length) { anyErase = true; continue }
+          anyErase = true
+          anyAlive = true
+          let run: any[] = []
+          const flush = () => { if (run.length) { newSegs.push({ type: sg.type, points: run }); run = [] } }
+          for (let i2 = 0; i2 < flags.length; i2++) {
+            if (!flags[i2]) run.push(pts[i2])
+            else flush()
+          }
+          flush()
+        }
+        if (!anyErase) continue
+        if (newSegs.length === 0 || !anyAlive) {
+          ed.deleteShapes([s.id])
+        } else if (newSegs.length === 1) {
+          ed.updateShape({ id: s.id, type: tp, props: { ...s.props, segments: newSegs } } as any)
+        } else {
+          // Break into separate shapes — tldraw renders fresh shapes correctly
+          const stamp = performance.now().toString(36)
+          ed.updateShape({ id: s.id, type: tp, props: { ...s.props, segments: [newSegs[0]] } } as any)
+          const rest = newSegs.slice(1)
+          if (rest.length) {
+            ed.createShapes(rest.map((sg: any, ri: number) => ({
+              id: ('shape:pe' + stamp + 'x' + ri) as any,
+              type: tp,
+              x: s.x, y: s.y, rotation: s.rotation, opacity: s.opacity,
+              props: { ...s.props, segments: [sg] },
+            })) as any)
+          }
+        }
+        dirtyRef.current = true
+      }
+    } catch {}
+  }
+  const onPartDown = (e: React.PointerEvent) => {
+    const ed = editorRef.current
+    if (!ed) return
+    const el = e.target as Element
+    if (!el || !el.closest('.tl-canvas')) return
+    if (!e.isPrimary) return
+    e.preventDefault()
+    e.stopPropagation()
+    try { (e.currentTarget as Element).setPointerCapture(e.pointerId) } catch {}
+    let page: Pt = { x: 0, y: 0 }
+    try { page = ed.screenToPage({ x: e.clientX, y: e.clientY }) } catch {}
+    const drag: PartDrag = { pts: [page], markId: 'part-erase-' + Math.random().toString(36).slice(2, 8) }
+    partDragRef.current = drag
+    try { ed.mark(drag.markId) } catch {}
+    partSweep(page)
+  }
+  const onPartMove = (e: React.PointerEvent) => {
+    if (!partToolRef.current) return
+    const d = partDragRef.current
+    if (!d) return
+    const ed = editorRef.current
+    if (!ed) return
+    try {
+      const page = ed.screenToPage({ x: e.clientX, y: e.clientY })
+      const lastPt = d.pts[d.pts.length - 1]
+      if (Math.hypot(page.x - lastPt.x, page.y - lastPt.y) < 1.2) return
+      d.pts.push(page)
+    } catch {}
+    partSweep(d.pts[d.pts.length - 1])
+  }
+  const onPartUp = () => {
+    const d = partDragRef.current
+    if (!d) return
+    partDragRef.current = null
+    try { editorRef.current?.squashToMark(d.markId) } catch {}
   }
 
   const tldrawArea = (
     <div
-      className={`relative rounded-2xl border overflow-hidden bg-white ${isFullscreen ? 'flex-1 min-h-0' : 'h-full w-full'} ${clipTool ? '[&_.tl-container]:!cursor-crosshair' : ''}`}
+      className={`relative rounded-2xl border overflow-hidden bg-white ${isFullscreen ? 'flex-1 min-h-0' : 'h-full w-full'} ${clipTool ? '[&_.tl-container]:!cursor-crosshair' : ''} ${partTool ? '[&_.tl-canvas]:!cursor-cell' : ''}`}
       onPointerDownCapture={onAreaPointerDown}
-      onPointerMoveCapture={mode === '2d' && clipTool ? onAreaPointerMove : undefined}
-      onPointerUpCapture={mode === '2d' && clipTool ? onAreaPointerUp : undefined}
+      onPointerMoveCapture={mode === '2d' && (clipTool || partTool) ? onAreaPointerMove : undefined}
+      onPointerUpCapture={mode === '2d' && (clipTool || partTool) ? onAreaPointerUp : undefined}
       onClickCapture={onAreaClickCapture}
       onKeyDown={onAreaKeyDown}
     >
@@ -541,8 +680,13 @@ export default function Board() {
           } as any) : ({ SharePanel: null } as any)}
         />
       </div>
+      {partTool && mode === '2d' && (
+        <div data-testid="bd2-part-hint" className="absolute left-1/2 -translate-x-1/2 bottom-16 z-30 pointer-events-none px-3 py-1.5 rounded-full bg-emerald-900/90 text-white text-xs font-medium shadow-lg">
+          🧽 {t('bd2_part_hint')} · {t('bd2_part_exit')}
+        </div>
+      )}
       {clipTool && mode === '2d' && (
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-3 z-20 pointer-events-none px-3 py-1.5 rounded-full bg-slate-900/90 text-white text-xs font-medium shadow-lg">
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-16 z-30 pointer-events-none px-3 py-1.5 rounded-full bg-slate-900/90 text-white text-xs font-medium shadow-lg">
           {t('bd2_click_place')}{clipTool === 'axes' ? ` ±${axesCfg.range} (${t('bd2_axes_step_short')} ${axesCfg.step})` : ''}
         </div>
       )}
@@ -596,6 +740,7 @@ export default function Board() {
       {mode === '2d' && !isFullscreen && (
         <div className="shrink-0 flex flex-wrap gap-1.5 items-center bg-white dark:bg-slate-800 border-b border-slate-200/60 dark:border-slate-700/60 px-3 py-1.5">
           <button data-clipbtn onClick={() => { setClipTool(clipTool === 'axes' ? null : 'axes'); setAxesOpen(o => !o) }} title={t('bd2_axes')} className={`px-2.5 py-1.5 rounded-lg text-xs font-medium min-h-[32px] border ${clipTool === 'axes' ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-amber-50 dark:bg-slate-900 dark:hover:bg-slate-700 text-amber-700 dark:text-amber-300 border-amber-200'}`}>{t('bd2_axes')}</button>
+          <button data-testid="bd2-partbtn" onPointerDown={e => e.stopPropagation()} onClick={() => setPartTool(!partTool)} title={t('bd2_part_hint')} className={`px-2.5 py-1.5 rounded-lg text-xs font-bold min-h-[32px] border flex items-center gap-1.5 ${partTool ? 'bg-emerald-600 text-white border-emerald-600 shadow' : 'bg-white dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-white border-slate-200'}`}>🧽 {t('bd2_part')}</button>
         </div>
       )}
 

@@ -5,6 +5,7 @@
 определений), true_false (факты + отрицания), text (дать определение).
 Учитель правит результат в TestBuilder и сохраняет как обычно.
 """
+import random
 import re
 from collections import Counter
 
@@ -64,6 +65,7 @@ def generate_questions(text, count=5):
             others.append('Ничего из перечисленного')
         options = [{'text': defi[:200], 'is_correct': True}]
         options += [{'text': o[:200], 'is_correct': False} for o in others[:3]]
+        random.shuffle(options)
         questions.append({
             'text': f'Что такое «{term}»?',
             'type': 'single', 'points': 1, 'options': options,

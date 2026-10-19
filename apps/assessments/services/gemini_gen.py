@@ -4,6 +4,7 @@
 на офлайн-генератор (generator.py) — честный фолбэк без выдумок.
 """
 import json
+import random
 import re
 
 ALLOWED_TYPES = {'single', 'multiple', 'true_false'}
@@ -22,7 +23,8 @@ def _prompt(text, count, instruction=''):
         '"options":[{"text":"...","is_correct":true},{"text":"...","is_correct":false}]}]\n'
         "Правила: single — ровно 4 варианта, правильный ровно 1; "
         "multiple — 4-6 вариантов, правильных минимум 1; "
-        "true_false — варианты Верно/Неверно."
+        "true_false — варианты Верно/Неверно. "
+        "Правильный ответ ставь на РАЗНЫЕ позиции (1-й, 2-й, 3-й или 4-й) — не всегда первым."
     )
     extra = str(instruction or '').strip()[:2000]
     if extra:
@@ -67,10 +69,12 @@ def _normalize(items, count):
             if sum(1 for o in opts if o['is_correct']) != 1 or len(opts) < 2:
                 continue
             opts = opts[:4]
+            random.shuffle(opts)
         elif qtype == 'multiple':
             if sum(1 for o in opts if o['is_correct']) < 1 or len(opts) < 2:
                 continue
             opts = opts[:6]
+            random.shuffle(opts)
         elif qtype == 'true_false':
             if len(opts) < 2:
                 continue
