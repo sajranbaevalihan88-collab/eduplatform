@@ -36,6 +36,8 @@ export default function Games() {
   const memoryBest = best('edu-memory-best')
   const colorBest = best('edu-colormatch-best')
   const hangBest = best('edu-hangman-best')
+  const wsBest = best('edu-wordsearch-best')
+  const farmerBest = best('edu-farmer-best')
 
   const cards = [
     {
@@ -67,6 +69,16 @@ export default function Games() {
       to: '/games/hangman', icon: '🎯', title: t('games_hangman'),
       desc: t('games_hangman_desc'),
       best: hangBest ? `🏆 ${t('hm_solved_n')}: ${hangBest}` : null, ready: true,
+    },
+    {
+      to: '/games/word-search', icon: '🔎', title: t('games_wordsearch'),
+      desc: t('ws_hub_desc'),
+      best: wsBest ? `🏆 ${t('ws_level')} ${wsBest}` : null, ready: true,
+    },
+    {
+      to: '/games/farmer', icon: '🧑‍🌾', title: t('games_farmer'),
+      desc: t('fb_hub_desc'),
+      best: farmerBest ? `🏆 ${farmerBest} ⭐` : null, ready: true,
     },
   ]
 

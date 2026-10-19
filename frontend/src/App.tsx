@@ -68,8 +68,11 @@ import Pairs from './pages/Pairs'
 import Memory from './pages/Memory'
 import ColorMatch from './pages/ColorMatch'
 import Hangman from './pages/Hangman'
+import WordSearch from './pages/WordSearch'
+import FarmerBala from './pages/FarmerBala'
 import Login from './pages/Login'
 import Profile from './pages/Profile'
+import ErrorBoundary from './components/ErrorBoundary'
 
 export default function App() {
   return (
@@ -77,7 +80,8 @@ export default function App() {
       <LangProvider>
         <AccessibilityProvider>
           <Layout>
-            <Suspense fallback={<div className="p-8"><div className="skeleton h-32 rounded-2xl" /></div>}>
+            <ErrorBoundary label="страница">
+              <Suspense fallback={<div className="p-8"><div className="skeleton h-32 rounded-2xl" /></div>}>
               <Routes>
                 <Route path="/" element={<Landing />} />
                 <Route path="/dashboard" element={<Dashboard />} />
@@ -111,6 +115,8 @@ export default function App() {
                 <Route path="/games/memory" element={<Memory />} />
                 <Route path="/games/colormatch" element={<ColorMatch />} />
                 <Route path="/games/hangman" element={<Hangman />} />
+                <Route path="/games/word-search" element={<WordSearch />} />
+                <Route path="/games/farmer" element={<FarmerBala />} />
                 <Route path="/s/:token" element={<SharedView />} />
                 <Route path="/editor" element={<VSCodeEditor />} />
                 <Route path="/board" element={<TeacherRoute><Board /></TeacherRoute>} />
@@ -118,6 +124,7 @@ export default function App() {
                 <Route path="*" element={<ErrorFallback/>} />
               </Routes>
             </Suspense>
+            </ErrorBoundary>
             <ToastContainer/>
           </Layout>
         </AccessibilityProvider>

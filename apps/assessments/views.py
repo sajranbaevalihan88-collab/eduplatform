@@ -1,6 +1,7 @@
 from rest_framework import viewsets, permissions, status, throttling
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from .models import Test, TestAttempt, Question
 from .serializers import TestSerializer, TestDetailSerializer, TestAttemptSerializer, TestPublicSerializer
 from apps.accounts.permissions import TeacherWriteMixin
@@ -298,3 +299,46 @@ class AttemptViewSet(viewsets.ReadOnlyModelViewSet):
         if user.is_staff or getattr(user,'role',None)=='admin':
             return super().get_queryset()
         return super().get_queryset().filter(user=user)
+
+
+class WordGenView(APIView):
+    """AI-подбор СЛОВ для игр (Найди слово / Виселица): тема -> список слов.
+    POST /api/ai/words/ {prompt, count} -> {words:[...], source}. Без GEMINI_API_KEY -> 503."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        from django.conf import settings as _dj
+        from .services.gemini_text import generate_text
+        prompt = str(request.data.get('prompt') or '').strip()[:300]
+        if len(prompt) < 3:
+            return Response({'error': 'Напиши тему минимум из 3 символов'}, status=400)
+        try:
+            count = int(request.data.get('count') or 10)
+        except Exception:
+            count = 10
+        count = max(3, min(20, count))
+        api_key = getattr(_dj, 'GEMINI_API_KEY', '')
+        if not api_key:
+            return Response({'error': 'ИИ не подключён на сервере (нет GEMINI_API_KEY) — введи слова сам или возьми из урока'}, status=503)
+        gprompt = (
+            f"Дай РОВНО {count} отдельных коротких СЛОВ по теме: «{prompt}». "
+            "Это для школьной игры «угадай слово». Правила: только реальные существительные/имена; "
+            "Маленькими буквами; каждое слово отдельно; БЕЗ фраз из нескольких слов, БЕЗ знаков препинания; "
+            "длина 3-12 букв; дубликаты запрещены; язык роли — как в теме (русский/кыргызский/английский). "
+            "Ответ — ТОЛЬКО JSON-массив строк, без пояснений."
+        )
+        items, used = generate_text(gprompt, api_key, getattr(_dj, 'GEMINI_MODEL', ''), expect_json=True)
+        import re as _re
+        words = []
+        seen = set()
+        if isinstance(items, list):
+            for it in items:
+                w = _re.sub(r'[^\w\u0400-\u04FF\u0600-\u06FF\u0900-\u097F]', '', str(it)).strip().lower() if isinstance(it, str) else ''
+                if 3 <= len(w) <= 12 and w not in seen:
+                    words.append(w)
+                    seen.add(w)
+                if len(words) >= count:
+                    break
+        if not words:
+            return Response({'error': 'ИИ не вернул слов — попробуй другую тему'}, status=502)
+        return Response({'words': words, 'count': len(words), 'source': f'gemini:{used}'})

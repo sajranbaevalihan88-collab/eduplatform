@@ -116,3 +116,17 @@ class Announcement(models.Model):
 
     def __str__(self):
         return f"{self.classroom}: {self.text[:50]}"
+
+
+class AnnouncementComment(models.Model):
+    """Комментарий к объявлению — как в Google Classroom."""
+    announcement = models.ForeignKey(Announcement, on_delete=models.CASCADE, related_name='comments')
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='announcement_comments')
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.author}: {self.text[:40]}"

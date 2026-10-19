@@ -5,9 +5,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, ValidationError, NotFound
 from apps.accounts.permissions import IsTeacherOrAdmin
-from .models import Classroom, Enrollment, Assignment, Submission, Announcement
+from .models import Classroom, Enrollment, Assignment, Submission, Announcement, AnnouncementComment
 from .serializers import (ClassroomSerializer, EnrollmentSerializer, AssignmentSerializer,
-                          SubmissionSerializer, AnnouncementSerializer)
+                          SubmissionSerializer, AnnouncementSerializer, AnnouncementCommentSerializer)
 
 
 def _is_admin(u):
@@ -176,6 +176,81 @@ class ClassroomViewSet(viewsets.ModelViewSet):
                         'score': s.score if s else None})
         return Response(out)
 
+    @action(detail=True, methods=['post'])
+    def ai_report(self, request, pk=None):
+        """⚡ Килллер-фича: ИИ-отчёт учителю по классу (Gemini), честный офлайн-фолбэк.
+        POST /api/classrooms/{id}/ai_report/ -> {report, source, stats}"""
+        room = self._get_owned()
+        students = list(room.enrollments.select_related('student').all())
+        assignments = list(room.assignments.select_related('lesson', 'test').all())
+        subs = list(Submission.objects.filter(assignment__in=assignments).select_related('student', 'assignment'))
+        test_ids = [a.test_id for a in assignments if a.kind == 'test' and a.test_id]
+        per_student = {e.student_id: {'username': e.student.username, 'scores': [], 'done': 0, 'late': 0, 'missed': 0, 'attempts': []} for e in students}
+        for s in subs:
+            ps = per_student.get(s.student_id)
+            if not ps:
+                continue
+            if s.score is not None:
+                ps['scores'].append(s.score)
+            ps['done' if s.status == 'submitted' else 'late'] += 1 if s.status in ('submitted', 'late') else 0
+            if s.status == 'late':
+                ps['late'] += 1
+        now = timezone.now()
+        for a in assignments:
+            for e in students:
+                done = any(s.student_id == e.student_id for s in subs if s.assignment_id == a.id)
+                if not done:
+                    overdue = bool(a.deadline and a.deadline < now)
+                    per_student.get(e.student_id, {}).get('attempts', [])
+                    key = 'missed' if overdue else 'pending'
+                    ps = per_student.get(e.student_id)
+                    if ps:
+                        ps[key] = ps.get(key, 0) + 1
+        if test_ids:
+            from apps.assessments.models import TestAttempt
+            for att in TestAttempt.objects.filter(test_id__in=test_ids).order_by('-created_at'):
+                ps = per_student.get(att.user_id)
+                if ps and att.score is not None and len(ps['attempts']) < 6:
+                    ps['attempts'].append(round(att.score, 1))
+        stats_students = []
+        for sid, ps in per_student.items():
+            avg = round(sum(ps['scores']) / len(ps['scores']), 1) if ps['scores'] else None
+            stats_students.append({'username': ps['username'], 'avg': avg,
+                                   'done': ps['done'], 'late': ps['late'],
+                                   'missed': ps.get('missed', 0), 'pending': ps.get('pending', 0),
+                                   'recent_attempts': ps['attempts']})
+        stats = {'classroom': room.title, 'students_count': len(students),
+                 'assignments_count': len(assignments), 'students': stats_students}
+        from django.conf import settings as _dj
+        from apps.assessments.services.gemini_text import generate_text
+        import json as _json
+        facts = _json.dumps(stats, ensure_ascii=False)
+        prompt = (
+            "Ты — ИИ-ассистент учителя. Собери КОРОТКИЙ живой отчёт по классу из данных JSON. "
+            "Формат: markdown-lite текст с эмодзи, строго такие секции:\n"
+            "🏆 Лидеры (2-3 имени + причина)\n⚠️ Нужна помощь (кто отстаёт: средний балл низкий/много пропусков)\n"
+            "📚 Что повторить (темы по названиям заданий, где средний балл < 60% или много провалов)\n"
+            "✅ Действия на следующую неделю (2-3 конкретных шага)\n"
+            "Правила: только реальные имена/цифры из данных, БЕЗ выдумок; дружелюбно и по делу; не длиннее ~15 строк.\n\nДАННЫЕ:\n" + facts
+        )
+        text, used = generate_text(prompt, getattr(_dj, 'GEMINI_API_KEY', ''), getattr(_dj, 'GEMINI_MODEL', ''))
+        if text:
+            return Response({'report': text[:6000], 'source': f'gemini:{used}', 'stats': stats})
+        # офлайн-фолбэк: честные числа, без выдумок
+        with_score = [s for s in stats_students if s['avg'] is not None]
+        leaders = sorted(with_score, key=lambda s: s['avg'], reverse=True)[:3]
+        risky = [s for s in stats_students if (s['avg'] or 0) < 60 or s.get('missed', 0) > 0]
+        lines = [f"📊 Класс «{room.title}»: {len(students)} учеников, заданий {len(assignments)}"]
+        if leaders:
+            lines.append('🏆 Лидеры: ' + ', '.join(f"{s['username']} (средний {s['avg']})" for s in leaders))
+        if risky:
+            lines.append('⚠️ Нужна помощь: ' + ', '.join(f"{s['username']}" + (f" (средний {s['avg']})" if s['avg'] else '') for s in risky[:5]))
+        late_total = sum(s.get('late', 0) for s in stats_students)
+        missed_total = sum(s.get('missed', 0) for s in stats_students)
+        lines.append(f"⏰ Сдали с опозданием: {late_total} • пропустили дедлайн: {missed_total}")
+        lines.append('✅ Действия: индивидуальные разборы со списком «Нужна помощь»; повторные попытки тестов с низким средним.')
+        return Response({'report': '\n'.join(lines), 'source': 'offline', 'stats': stats})
+
 
 class AssignmentViewSet(viewsets.ModelViewSet):
     serializer_class = AssignmentSerializer
@@ -284,4 +359,38 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         u = self.request.user
         if not (_is_admin(u) or instance.classroom.owner_id == u.id):
             raise PermissionDenied('Только владелец класса')
+        instance.delete()
+
+
+class AnnouncementCommentViewSet(viewsets.ModelViewSet):
+    """Комментарии к объявлениям: fullscreen по ?announcement=ID; пишет любой участник класса."""
+    serializer_class = AnnouncementCommentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        u = self.request.user
+        qs = AnnouncementComment.objects.select_related('author', 'announcement', 'announcement__classroom').filter(
+            announcement__classroom__in=_visible_classrooms(u))
+        ann = self.request.query_params.get('announcement')
+        if ann:
+            qs = qs.filter(announcement_id=ann)
+        return qs.order_by('created_at')
+
+    def perform_create(self, serializer):
+        ann = serializer.validated_data['announcement']
+        u = self.request.user
+        if not ann.classroom.is_member(u):
+            raise PermissionDenied('Ты не участник класса')
+        text = serializer.validated_data.get('text', '').strip()
+        if not text:
+            raise ValidationError({'text': 'Пустой комментарий'})
+        serializer.validated_data['text'] = text[:2000]
+        serializer.save(author=u)
+
+    def perform_destroy(self, instance):
+        u = self.request.user
+        if not (u.is_staff or getattr(u, 'role', None) == 'admin'
+                or instance.author_id == u.id or instance.announcement.classroom.owner_id == u.id):
+            raise PermissionDenied('Удалить может автор или владелец класса')
         instance.delete()

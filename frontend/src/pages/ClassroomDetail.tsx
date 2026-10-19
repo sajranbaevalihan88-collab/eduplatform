@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import client from '../api/client'
-import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink } from 'lucide-react'
+import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
 
@@ -47,6 +47,15 @@ export default function ClassroomDetail(){
   const [adl,setAdl]=useState('')
   const [ainstr,setAinstr]=useState('')
   const [creating,setCreating]=useState(false)
+  // комментарии к объявлениям (как в Google Classroom)
+  const [cmOpen,setCmOpen]=useState<Record<number,boolean>>({})
+  const [cmList,setCmList]=useState<Record<number,any[]>>({})
+  const [cmText,setCmText]=useState<Record<number,string>>({})
+  const [cmBusy,setCmBusy]=useState(false)
+  // ✨ ИИ-отчёт по классу
+  const [rep,setRep]=useState<string|null>(null)
+  const [repSrc,setRepSrc]=useState<string|null>(null)
+  const [repBusy,setRepBusy]=useState(false)
 
   const load=()=>{
     client.get(`/classrooms/${id}/`).then(r=>setRoom(r.data)).catch(()=>nav('/classes'))
@@ -93,6 +102,37 @@ export default function ClassroomDetail(){
   }
   const copy=()=>{ try{ navigator.clipboard.writeText(room.invite_code); setCopied(true); setTimeout(()=>setCopied(false),1500) }catch{} }
 
+  const toggleComments=async(nid:number)=>{
+    const next=!cmOpen[nid]
+    setCmOpen(m=>({...m,[nid]:next}))
+    if(next && !cmList[nid]){
+      try{ const r=await client.get(`/announcement-comments/?announcement=${nid}`); setCmList(m=>({...m,[nid]:(r.data.results||r.data||[])})) }catch{}
+    }
+  }
+  const postComment=async(nid:number)=>{
+    const v=(cmText[nid]||'').trim(); if(!v||cmBusy) return
+    setCmBusy(true)
+    try{
+      const r=await client.post('/announcement-comments/', {announcement:nid, text:v})
+      setCmList(m=>({...m,[nid]:[...(m[nid]||[]), r.data]})); setCmText(m=>({...m,[nid]:''}))
+      toast(t('cls_comm_added'),'success')
+    }catch(e:any){ toast(e?.response?.data?.text||e?.response?.data?.detail||'err','error') }
+    setCmBusy(false)
+  }
+  const delComment=async(nid:number, cid:number)=>{
+    try{ await client.delete(`/announcement-comments/${cid}/`); setCmList(m=>({...m,[nid]:(m[nid]||[]).filter((c:any)=>c.id!==cid)})) }catch{}
+  }
+  const genReport=async()=>{
+    if(repBusy) return
+    setRepBusy(true)
+    try{
+      const r=await client.post(`/classrooms/${id}/ai_report/`, {})
+      setRep(String(r.data.report||'')); setRepSrc(typeof r.data.source==='string'? r.data.source : null)
+      toast(t('cls_report_ready'),'success')
+    }catch(e:any){ toast(e?.response?.data?.detail||e?.response?.data?.error||'err','error') }
+    setRepBusy(false)
+  }
+
   const tabs:any[] = [
     {k:'stream', label:t('cls_tab_stream'), icon:Megaphone},
     {k:'tasks', label:t('cls_tab_tasks'), icon:ClipboardList},
@@ -134,7 +174,34 @@ export default function ClassroomDetail(){
               {notes.map(n=>(
                 <div key={n.id} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 border dark:border-slate-700">
                   <div className="text-sm whitespace-pre-wrap dark:text-slate-100">{n.text}</div>
-                  <div className="text-xs text-slate-400 mt-2">{n.author_name} • {new Date(n.created_at).toLocaleString()}</div>
+                  <div className="text-xs text-slate-400 mt-2 flex items-center gap-3">
+                    <span>{n.author_name} • {new Date(n.created_at).toLocaleString()}</span>
+                    <button onClick={()=>toggleComments(n.id)} className="ml-auto font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1" data-testid={`comm-btn-${n.id}`}>
+                      <MessageSquare size={13}/> {t('cls_comments')} {(cmList[n.id]?.length || n.comments_count || 0) ? `(${cmList[n.id]?.length ?? n.comments_count ?? 0})` : ''}
+                    </button>
+                  </div>
+                  {cmOpen[n.id] && (
+                    <div className="mt-2 space-y-2 border-t dark:border-slate-700 pt-2" data-testid={`comm-list-${n.id}`}>
+                      {(cmList[n.id]||[]).map((c:any)=>(
+                        <div key={c.id} className="flex items-start gap-2">
+                          <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 flex items-center justify-center text-[10px] font-bold shrink-0">{c.author_name?.[0]?.toUpperCase()}</div>
+                          <div className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border dark:border-slate-700">
+                            <span className="text-xs font-bold dark:text-white">{c.author_name}</span>
+                            <div className="text-xs break-words dark:text-slate-200">{c.text}</div>
+                          </div>
+                          {(String(c.author)===String(meId) || isOwner) && (
+                            <button onClick={()=>delComment(n.id, c.id)} className="text-xs text-slate-400 hover:text-red-500">✕</button>
+                          )}
+                        </div>
+                      ))}
+                      <div className="flex gap-2">
+                        <input value={cmText[n.id]||''} onChange={e=>setCmText(m=>({...m,[n.id]:e.target.value}))}
+                          onKeyDown={e=>e.key==='Enter'&&postComment(n.id)} placeholder={t('cls_comm_ph')}
+                          className="flex-1 px-3 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white text-sm outline-none"/>
+                        <button onClick={()=>postComment(n.id)} disabled={cmBusy} className="px-3 py-2 rounded-xl bg-blue-700 text-white"><Send size={15}/></button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               {notes.length===0 && <div className="text-center text-slate-400 py-8">{t('cls_no_news')}</div>}
@@ -220,7 +287,25 @@ export default function ClassroomDetail(){
           )}
 
           {tab==='grades' && isOwner && (
-            <div className="overflow-auto">
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <button onClick={genReport} disabled={repBusy}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold flex items-center gap-2 disabled:opacity-50" data-testid="cls-report">
+                  <Sparkles size={17}/> {repBusy? t('cls_report_busy') : t('cls_report')}
+                </button>
+                <span className="text-xs text-slate-400 self-center">{t('cls_report_hint')}</span>
+              </div>
+              {rep && (
+                <div className="p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20" data-testid="cls-report-card">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-bold text-sm dark:text-white">✨ {t('cls_report')}</span>
+                    {repSrc && <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${repSrc.startsWith('gemini')?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}`}>{repSrc.startsWith('gemini')? (repSrc.split(':')[1]||'Gemini') : t('cls_report_off')}</span>}
+                    <button onClick={()=>{try{navigator.clipboard.writeText(rep);toast(t('cls_report_copied'),'success')}catch{}}} className="ml-auto text-xs underline text-slate-500">{t('shared_copy')}</button>
+                  </div>
+                  <div className="text-sm whitespace-pre-wrap leading-relaxed dark:text-slate-100" data-testid="cls-report-text">{rep}</div>
+                </div>
+              )}
+              <div className="overflow-auto">
               {!gb || gb.assignments.length===0 ? <div className="text-center text-slate-400 py-8">{t('cls_no_tasks')}</div> : (
               <table className="w-full text-sm min-w-[500px] dark:text-slate-100">
                 <thead>
@@ -248,6 +333,7 @@ export default function ClassroomDetail(){
                 </tbody>
               </table>
               )}
+              </div>
             </div>
           )}
         </div>

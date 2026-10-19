@@ -139,8 +139,30 @@ export default function LessonBuilder(){
   type InlineOpt={text:string,is_correct:boolean}
   type InlineQ={text:string,type:string,points:number,options:InlineOpt[]}
   const [inlineTests,setInlineTests]=useState<Record<string,{title:string,desc:string,pass:number,questions:InlineQ[]}>>({})
+  // ИИ-генерация вопросов прямо в inline-тесте (тот же /tests/generate/, что в ТестВыборatеле)
+  const [ltAiOpen,setLtAiOpen]=useState<Record<string,boolean>>({})
+  const [ltAiPrompt,setLtAiPrompt]=useState('')
+  const [ltAiCount,setLtAiCount]=useState(5)
+  const [ltAiBusy,setLtAiBusy]=useState(false)
+  const [ltAiSrc,setLtAiSrc]=useState<string|null>(null)
   const getPresTab=(id:string)=> presTabs[id] || (options.presentations.length ? 'select' : 'upload')
   const getInlineTest=(id:string)=> inlineTests[id] || {title:'',desc:'',pass:60,questions:[{text:'Сколько будет 2+2?',type:'single',points:1,options:[{text:'3',is_correct:false},{text:'4',is_correct:true},{text:'5',is_correct:false}]}]}
+  const ltAiGenerate=async(bid:string)=>{
+    if(ltAiBusy) return
+    if(ltAiPrompt.trim().length<10){ toast('Напиши указание для ИИ (от 10 символов)','error'); return }
+    setLtAiBusy(true)
+    try{
+      const r=await client.post('/tests/generate/',{count:ltAiCount,prompt:ltAiPrompt.trim().slice(0,2000)})
+      const got=(r.data.questions||[]).map((q:any)=>({text:String(q.text||''),type:String(q.type||'single'),points:q.points||1,exp:String(q.explanation||''),options:(q.options||[]).map((o:any)=>({text:String(o.text||''),is_correct:!!o.is_correct}))})).filter((q:any)=>q.text)
+      if(!got.length) throw new Error('empty')
+      const cur=getInlineTest(bid)
+      const isFreshEmpty = cur.questions.length===0 || (cur.questions.length===1 && cur.questions[0].text==='Сколько будет 2+2?' && !cur.title.trim())
+      setInlineTests(prev=>({...prev,[bid]:{...cur,questions:isFreshEmpty?got:[...cur.questions,...got]}}))
+      setLtAiSrc(typeof r.data.source==='string'? r.data.source : null)
+      toast(`ИИ добавил ${got.length} вопросов ✓`,'success')
+    }catch(e:any){ toast(e?.response?.data?.error||'ИИ не сгенерировал — попробуй другую тему','error') }
+    setLtAiBusy(false)
+  }
   const toEmbedUrl=(url:string)=>{
     if(!url) return ''
     url=url.trim()
@@ -393,12 +415,19 @@ export default function LessonBuilder(){
         <span className="text-slate-900 font-medium">{isNew?t('lb_new'):t('lb_editing')}</span>
       </div>
       {draftBanner && (
-        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="text-sm"><span className="font-semibold text-amber-800">{t('lb_draft_found')}</span> <span className="text-amber-700">— {draftBanner.title?`"${draftBanner.title.slice(0,40)}"`:`${draftBanner.blocks?.length||0} ${t('lessons_blocks')}`} • {new Date(draftBanner.ts).toLocaleString()}</span></div>
-          <div className="flex gap-2">
-            <button onClick={()=>{ setTitle(draftBanner.title||''); setDesc(draftBanner.desc||''); setSubject(draftBanner.subject!=null?Number(draftBanner.subject):null); if(draftBanner.blocks) setBlocks(draftBanner.blocks); setDraftBanner(null); toast(t('lb_draft_restored2'),'success')}} className="px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-semibold">{t('lb_restore')}</button>
-            <button onClick={()=>{ localStorage.removeItem('lesson-draft'); setDraftBanner(null); toast(t('lb_draft_deleted'),'info')}} className="px-4 py-2 rounded-xl bg-white border text-sm">{t('delete')}</button>
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-[94vw] sm:max-w-md rounded-2xl bg-slate-900/92 dark:bg-black/85 text-white shadow-2xl border border-white/10 px-4 py-3 flex items-center gap-3" data-testid="lb-draft-chip">
+          <span className="text-xl shrink-0">↩️</span>
+          <div className="min-w-0">
+            <div className="text-sm font-bold leading-tight">{t('lb_draft_restored')}</div>
+            <div className="text-xs text-slate-300 truncate">{draftBanner.title ? `«${draftBanner.title.slice(0, 40)}»` : `${draftBanner.blocks?.length || 0} ${t('lessons_blocks')}`} · {new Date(draftBanner.ts).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
           </div>
+          <button onClick={() => {
+            localStorage.removeItem('lesson-draft')
+            setTitle(''); setDesc(''); setSubject(null)
+            setBlocks([{ id: '1', type: 'text', data: { title: 'Введение', content: '' } }])
+            setDraftBanner(null); toast(t('lb_draft_deleted'), 'info')
+          }} className="px-3 py-2 rounded-xl bg-amber-500 text-slate-900 text-xs font-bold hover:bg-amber-400 shrink-0" data-testid="lb-draft-clear">{t('lb_start_fresh')}</button>
+          <button onClick={() => setDraftBanner(null)} className="w-8 h-8 rounded-lg bg-white/10 text-white text-sm font-bold hover:bg-white/20 shrink-0" data-testid="lb-draft-hide" title={t('fb_hide') || '✕'}>✕</button>
         </div>
       )}
 
@@ -636,6 +665,30 @@ export default function LessonBuilder(){
                         <div className="flex items-center justify-between">
                           <div className="text-sm font-bold">Новый тест для урока</div>
                           <button onClick={()=>setTestInlineOpen(p=>({...p,[b.id]:false}))} className="text-xs px-2 py-1 rounded-full bg-white border">✕ Свернуть</button>
+                        </div>
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 space-y-2" data-testid="lb-ai">
+                          <button onClick={()=>setLtAiOpen(p=>({...p,[b.id]:!p[b.id]}))}
+                            className="px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold flex items-center gap-1.5" data-testid="lb-ai-btn">
+                            ✨ Создать вопросы с ИИ {ltAiOpen[b.id] ? '▾' : '▸'}
+                          </button>
+                          {ltAiOpen[b.id] && (
+                            <div className="space-y-2" data-testid="lb-ai-panel">
+                              <textarea value={ltAiPrompt} onChange={e=>setLtAiPrompt(e.target.value)}
+                                placeholder="Например: тест на тему «Атомы» для 6 класса, простые вопросы, по-русски"
+                                className="w-full px-3 py-2 rounded-xl border bg-white text-sm min-h-[64px]" />
+                              <div className="flex items-center gap-2">
+                                <label className="text-xs text-slate-600">Вопросов:
+                                  <input type="number" min={1} max={40} value={ltAiCount} onChange={e=>setLtAiCount(Math.max(1,Math.min(40,parseInt(e.target.value)||5)))} className="w-16 px-2 py-1 rounded border ml-1"/>
+                                </label>
+                                <button onClick={()=>ltAiGenerate(b.id)} disabled={ltAiBusy}
+                                  className="ml-auto px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold disabled:opacity-50" data-testid="lb-ai-gen">
+                                  {ltAiBusy?'⏳ Думаю…':'Сгенерировать'}
+                                </button>
+                              </div>
+                              {ltAiSrc && <div className={`text-[11px] font-bold px-2 py-1 rounded-lg w-fit ${ltAiSrc.startsWith('gemini') ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{ltAiSrc.startsWith('gemini') ? `🤖 ${ltAiSrc.split(':')[1] || 'Gemini'} отвечает` : '🧮 офлайн-генератор'}</div>}
+                              <div className="text-[11px] text-slate-500">Вопросы добавятся в список ниже — проверь и поправь, потом сохрани тест.</div>
+                            </div>
+                          )}
                         </div>
                         <input value={getInlineTest(b.id).title} onChange={e=>setInlineTests(prev=>({...prev,[b.id]:{...getInlineTest(b.id), title:e.target.value}}))} placeholder="Название теста, напр. Ребусы — проверка" className="w-full px-3 py-2 rounded-xl border bg-white text-sm font-semibold"/>
                         <textarea value={getInlineTest(b.id).desc} onChange={e=>setInlineTests(prev=>({...prev,[b.id]:{...getInlineTest(b.id), desc:e.target.value}}))} placeholder="Описание (необязательно)" rows={2} className="w-full px-3 py-2 rounded-xl border bg-white text-sm"/>

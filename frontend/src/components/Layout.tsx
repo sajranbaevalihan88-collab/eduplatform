@@ -14,6 +14,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [hideSidebar,setHideSidebar]=useState(false)
   const [showLang,setShowLang]=useState(false)
   const [showA11y,setShowA11y]=useState(false)
+  const isGameFull = /^\/games\/.+/.test(loc.pathname)
   const {theme,toggle:toggleTheme}=useTheme()
   const {lang,t,setLang}=useLang()
   const {poor,speech}=useAccessibility()
@@ -96,7 +97,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-xl focus:bg-blue-700 focus:text-white">{t('skip_content')}</a>
       <div aria-live="polite" role="status" className="sr-only">{announce}</div>
       {/* Sidebar desktop */}
-      {!hideSidebar ? (
+      {(!isGameFull && !hideSidebar) ? (
       <aside className="hidden lg:flex w-[280px] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-r border-slate-200/60 dark:border-slate-700/60 flex-col sticky top-0 h-screen shadow-sm animate-slideIn">
         <div className="h-[64px] flex items-center gap-3 px-6 border-b border-slate-100 dark:border-slate-700">
           <img src="/logo.svg" alt="EduPlatform AI" className="w-10 h-10 shrink-0 drop-shadow-md" />
@@ -126,9 +127,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           )}
         </div>
       </aside>
-      ) : (
+      ) : (!isGameFull ? (
         <button onClick={toggleSidebar} className="hidden lg:flex fixed left-4 top-4 z-30 p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300 animate-scaleIn" title={t('show_tabs')}><PanelLeft size={18}/></button>
-      )}
+      ) : null)}
 
       {/* Mobile drawer */}
       {open && (
@@ -160,7 +161,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       )}
 
       <div className={`flex-1 min-w-0 ${loc.pathname.startsWith('/board') ? 'flex flex-col h-screen' : ''}`}>
-        {!loc.pathname.startsWith('/board') && (
+        {!loc.pathname.startsWith('/board') && !isGameFull && (
         <header className="h-[64px] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2 px-4 lg:px-8 sticky top-0 z-10 shadow-sm overflow-hidden">
           <div className="flex items-center gap-3 min-w-0">
             <button className="lg:hidden shrink-0 p-2 rounded-xl bg-slate-100 hover:bg-white hover:shadow-md transition-all" onClick={()=>setOpen(true)}><Menu size={18}/></button>
@@ -195,7 +196,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         )}
-        <main id="main-content" tabIndex={-1} key={loc.pathname} className={loc.pathname.startsWith('/board') ? 'flex-1 min-h-0 w-full page-enter' : 'p-4 lg:p-8 max-w-[1400px] mx-auto page-enter'}>{children}</main>
+        <main id="main-content" tabIndex={-1} key={loc.pathname} className={loc.pathname.startsWith('/board') ? 'flex-1 min-h-0 w-full page-enter' : isGameFull ? 'w-full min-h-screen page-enter relative' : 'p-4 lg:p-8 max-w-[1400px] mx-auto page-enter'}>{children}</main>
+        {isGameFull && (
+          <button onClick={() => nav('/games')} aria-label={t('games')}
+            className="fixed left-3 bottom-3 z-30 p-3 rounded-full bg-slate-900/80 dark:bg-white/90 text-white dark:text-slate-900 shadow-xl hover:scale-110 active:scale-95 transition-transform backdrop-blur-sm">
+            <ChevronLeft size={20} />
+          </button>
+        )}
       </div>
       {/* Панель доступности — вне шапки: родитель с backdrop-blur создаёт containing block
           для position:fixed и overflow-hidden режет панель до 64px (казалось «не нажимается») */}
