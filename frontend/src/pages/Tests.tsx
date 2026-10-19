@@ -50,7 +50,15 @@ export default function Tests(){
           </div>
         ))}
       </div>
-      {filtered.length===0 && <div className="text-center py-16 bg-white rounded-2xl border text-slate-400">{q ? t('tests_empty_search') : t('tests_empty')}</div>}
+      {filtered.length===0 && (
+        <div className="text-center py-16 bg-white rounded-2xl border border-slate-100 px-6" data-testid="tests-empty">
+          <div className="text-4xl mb-3">🧪</div>
+          <div className="text-slate-400 mb-5">{q ? t('tests_empty_search') : t('tests_empty')}</div>
+          {!q && !isStudent() && (
+            <Link to="/tests/new" data-testid="tests-cta" className="inline-flex px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-orange-600 text-white font-semibold btn-hover shadow-md"><Plus size={18} className="inline mr-1"/>{t('dash_new_test')}</Link>
+          )}
+        </div>
+      )}
     </div>
   )
 }
