@@ -136,14 +136,32 @@ export default function TestTake(){
     const show = result
     if(show){
       const isBlocked = show.blocked || (!show.passed && blockedMsg?.includes('уже проходили'))
+      const perfect = !show.blocked && !!show.passed && (show.score ?? 0) >= 100
+      const confetti = perfect ? Array.from({ length: 80 }, (_, i) => {
+        const colors = ['#dc2626', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#fde047']
+        return { left: (i * 97) % 100, delay: ((i * 37) % 20) / 10, dur: 2.6 + ((i * 53) % 20) / 10, size: 6 + ((i * 29) % 8), color: colors[i % colors.length], round: i % 3 === 0 }
+      }) : []
       return (
-        <div className="max-w-2xl mx-auto bg-white dark:bg-slate-800 dark:border-slate-700 rounded-2xl border p-6 sm:p-8 text-center motion-safe:animate-scaleIn">
+        <div className="relative motion-safe:animate-scaleIn">
+          {perfect && (
+            <div className="pointer-events-none fixed inset-0 overflow-hidden z-50" aria-hidden="true" data-testid="tt-confetti">
+              {confetti.map((c: any, i: number) => (
+                <span key={i} className="confetti-piece" style={{
+                  left: `${c.left}%`, width: c.size, height: c.round ? c.size : c.size * 0.55,
+                  background: c.color, borderRadius: c.round ? '50%' : '2px',
+                  animationDelay: `${c.delay}s`, animationDuration: `${c.dur}s`,
+                }} />
+              ))}
+            </div>
+          )}
+          <div className="max-w-2xl mx-auto bg-white dark:bg-slate-800 dark:border-slate-700 rounded-2xl border p-6 sm:p-8 text-center">
           <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto text-2xl font-bold ${show.passed?'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300':'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>{show.score ?? 0}%</div>
           <h2 className="text-2xl font-bold mt-4 dark:text-white">{show.blocked ? t('tt_limited') : show.passed?t('tt_passed'):t('tt_done_title')}</h2>
           <p className="text-slate-500 dark:text-slate-400 mt-2">{show.blocked ? (blockedMsg || t('tt_already_msg')) : `${t('tt_earned_pre')} ${show.earned ?? 0} ${t('tt_earned_mid')} ${show.total ?? 0} ${t('tt_earned_post')}`}</p>
           {violations>0 && <p data-testid="tt-sshot-count" className="mt-2 text-sm font-semibold text-red-600 dark:text-red-300">🚫 {t('tt_shot_violations')}: {violations}</p>}
           <div className="mt-6 p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">{t('tt_no_retry')}</div>
           <a href="/tests" className="mt-4 inline-block px-5 py-2.5 rounded-xl bg-blue-700 text-white">{t('tt_to_tests')}</a>
+          </div>
         </div>
       )
     }
@@ -201,7 +219,7 @@ export default function TestTake(){
         <div className="mt-3 space-y-2">
           {(q.type==='single' || q.type==='true_false') && q.options.map((o:any)=>(
             <label key={o.id} className={`flex items-center gap-2 sm:gap-3 p-3 rounded-xl border cursor-pointer text-sm sm:text-base dark:text-white ${answers[q.id]!==undefined && String(answers[q.id])===String(o.id)?'border-blue-600 bg-blue-50 dark:bg-blue-900/30':'bg-slate-50 hover:bg-white dark:bg-slate-700/50 dark:border-slate-600'}`}>
-              <input type="radio" name={`q${q.id}`} checked={answers[q.id]!==undefined && String(answers[q.id])===String(o.id)} onChange={()=>{
+              <input type="radio" name={`q${q.id}`} value={o.id} checked={answers[q.id]!==undefined && String(answers[q.id])===String(o.id)} onChange={()=>{
                 const next = {...answers, [q.id]: o.id}
                 setAnswers(next)
                 // автовопрос: выбрал — едем дальше; на последнем — автосдача
@@ -239,7 +257,7 @@ export default function TestTake(){
       )}
       <div className="text-center text-xs text-slate-400">{t('tt_hint')}</div>
       {qi+1 >= test.questions.length && (
-        <button onClick={submit} className="w-full py-3 rounded-xl bg-blue-600 text-white font-bold text-lg">{t('tt_submit')}</button>
+        <button data-testid="tt-submit" onClick={submit} disabled={answeredCount===0} title={answeredCount===0? t('tt_need_answer'):undefined} className={`w-full py-3 rounded-xl font-bold text-lg ${answeredCount===0 ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-blue-600 text-white font-bold text-lg hover:bg-blue-700'}`}>{t('tt_submit')}</button>
       )}
     </div>
   )
