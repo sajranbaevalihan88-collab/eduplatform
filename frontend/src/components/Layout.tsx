@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap } from 'lucide-react'
+import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info } from 'lucide-react'
 import A11yPanel from './A11yPanel'
 import { useState, useEffect } from 'react'
 import client from '../api/client'
@@ -33,6 +33,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { to: '/word', label: 'Word', icon: FileText },
     { to: '/games', label: t('games'), icon: Gamepad2 },
     { to: '/editor', label: t('editor'), icon: Code2 },
+    { to: '/about', label: t('ab_menu'), icon: Info },
   ]
   useEffect(()=>{
     const token=localStorage.getItem('token')

@@ -6,6 +6,7 @@ import { ThemeProvider, AccessibilityProvider, ToastContainer } from './context/
 import { LangProvider } from './context/LangContext'
 import { configureMonacoLocale } from './monacoLocale'
 import Landing from './pages/Landing'
+import About from './pages/About'
 
 // Меню Monaco (правый клик в редакторе) — на языке интерфейса, по умолчанию русское.
 // Конфиг должен примениться ДО первого монтирования <Editor/>.
@@ -84,6 +85,7 @@ export default function App() {
               <Suspense fallback={<div className="p-8"><div className="skeleton h-32 rounded-2xl" /></div>}>
               <Routes>
                 <Route path="/" element={<Landing />} />
+                <Route path="/about" element={<About />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
