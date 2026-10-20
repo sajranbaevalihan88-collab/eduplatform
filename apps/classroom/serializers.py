@@ -30,7 +30,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Assignment
-        fields = ['id', 'classroom', 'kind', 'lesson', 'test', 'title', 'object_id',
+        fields = ['id', 'classroom', 'kind', 'lesson', 'test', 'title', 'object_id', 'manual_title',
                   'instructions', 'deadline', 'max_score', 'created_at']
         read_only_fields = ['id', 'created_at']
 
@@ -43,6 +43,11 @@ class AssignmentSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         kind = attrs.get('kind', getattr(self.instance, 'kind', None))
+        if kind == 'manual':
+            title = (attrs.get('manual_title') or getattr(self.instance, 'manual_title') or '').strip()
+            if not title:
+                raise serializers.ValidationError({'manual_title': 'Назови колонку журнала'})
+            return attrs
         lesson = attrs.get('lesson', getattr(self.instance, 'lesson', None))
         test = attrs.get('test', getattr(self.instance, 'test', None))
         if kind == 'lesson' and not lesson:
@@ -50,7 +55,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
         if kind == 'test' and not test:
             raise serializers.ValidationError({'test': 'Выбери тест для задания'})
         if kind not in ('lesson', 'test'):
-            raise serializers.ValidationError({'kind': 'kind должен быть lesson или test'})
+            raise serializers.ValidationError({'kind': 'kind должен быть lesson, test или manual'})
         return attrs
 
 

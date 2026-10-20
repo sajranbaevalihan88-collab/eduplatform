@@ -134,22 +134,69 @@ class ClassroomViewSet(viewsets.ModelViewSet):
     def gradebook(self, request, pk=None):
         room = self._get_owned()
         students = list(room.enrollments.select_related('student').all())
-        assignments = list(room.assignments.all().order_by('deadline', '-created_at', 'id'))
+        assignments = list(room.assignments.order_by('deadline', '-created_at', 'id'))
+        # колонки журнала: сначала автозадания с дедлайнами, ручные — после, по порядку создания
+        assignments.sort(key=lambda a: (
+            1 if a.kind == 'manual' else 0,
+            a.deadline.timestamp() if a.deadline else 0,
+            a.id))
         subs = Submission.objects.filter(assignment__in=assignments).select_related('student')
         sub_map = {(s.assignment_id, s.student_id): s for s in subs}
         now = timezone.now()
+        cells = [
+            {'assignment': a.id, 'student': e.student.id,
+             'status': (sub_map[(a.id, e.student.id)].status if (a.id, e.student.id) in sub_map
+                        else ('overdue' if (a.deadline and a.deadline < now) else 'pending')),
+             'score': (sub_map[(a.id, e.student.id)].score if (a.id, e.student.id) in sub_map else None)}
+            for a in assignments for e in students
+        ]
+        avgs_s = {}
+        for e in students:
+            vals = [c['score'] for c in cells if c['student'] == e.student.id and c['score'] is not None]
+            avgs_s[str(e.student.id)] = round(sum(vals) / len(vals), 1) if vals else None
+        avgs_a = {}
+        for a in assignments:
+            vals = [c['score'] for c in cells if c['assignment'] == a.id and c['score'] is not None]
+            avgs_a[str(a.id)] = round(sum(vals) / len(vals), 1) if vals else None
         return Response({
             'students': [{'id': e.student.id, 'username': e.student.username} for e in students],
             'assignments': [{'id': a.id, 'title': a.title, 'kind': a.kind,
                              'deadline': a.deadline, 'max_score': a.max_score} for a in assignments],
-            'cells': [
-                {'assignment': a.id, 'student': e.student.id,
-                 'status': (sub_map[(a.id, e.student.id)].status if (a.id, e.student.id) in sub_map
-                            else ('overdue' if (a.deadline and a.deadline < now) else 'pending')),
-                 'score': (sub_map[(a.id, e.student.id)].score if (a.id, e.student.id) in sub_map else None)}
-                for a in assignments for e in students
-            ],
+            'cells': cells,
+            'avg_student': avgs_s,
+            'avg_assignment': avgs_a,
         })
+
+    @action(detail=True, methods=['post'])
+    def gradebook_score(self, request, pk=None):
+        """Ручная оценка в журнале: {assignment, student, score|null} (owner-only)."""
+        room = self._get_owned()
+        a_id = request.data.get('assignment')
+        s_id = request.data.get('student')
+        try:
+            a = room.assignments.get(pk=int(a_id))
+        except (Assignment.DoesNotExist, TypeError, ValueError):
+            raise NotFound('Колонка не найдена')
+        try:
+            e = room.enrollments.get(student_id=int(s_id))
+        except (Enrollment.DoesNotExist, TypeError, ValueError):
+            raise NotFound('Ученик не найден')
+        raw = request.data.get('score')
+        if raw is None or raw == '':
+            Submission.objects.filter(assignment=a, student=e.student).delete()
+            return Response({'ok': True, 'assignment': a.id, 'student': e.student.id, 'score': None})
+        try:
+            score = float(raw)
+        except (TypeError, ValueError):
+            raise ValidationError({'score': 'Число'})
+        if score < 0:
+            raise ValidationError({'score': 'Не меньше 0'})
+        if score > (a.max_score or 0):
+            raise ValidationError({'score': f'Не больше {a.max_score}'})
+        sub, _ = Submission.objects.update_or_create(
+            assignment=a, student=e.student,
+            defaults={'status': 'submitted', 'score': score})
+        return Response(SubmissionSerializer(sub).data)
 
     @action(detail=True, methods=['get'])
     def my_tasks(self, request, pk=None):
@@ -157,7 +204,7 @@ class ClassroomViewSet(viewsets.ModelViewSet):
         room = self.get_object()
         if not room.is_member(request.user):
             raise PermissionDenied('Ты не участник класса')
-        assignments = list(room.assignments.all().order_by('deadline', '-created_at', 'id'))
+        assignments = list(room.assignments.exclude(kind='manual').order_by('deadline', '-created_at', 'id'))
         sub_map = {s.assignment_id: s for s in Submission.objects.filter(
             assignment__in=assignments, student=request.user)}
         now = timezone.now()
@@ -259,6 +306,11 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Assignment.objects.select_related('classroom', 'lesson', 'test').filter(
             classroom__in=_visible_classrooms(self.request.user))
+        kind = self.request.query_params.get('kind')
+        if kind:
+            qs = qs.filter(kind=kind)
+        else:
+            qs = qs.exclude(kind='manual')
         room = self.request.query_params.get('classroom')
         if room:
             qs = qs.filter(classroom_id=room)
