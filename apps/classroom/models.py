@@ -60,7 +60,7 @@ class Enrollment(models.Model):
 
 
 class Assignment(models.Model):
-    KIND_CHOICES = [('lesson', 'Урок'), ('test', 'Тест')]
+    KIND_CHOICES = [('lesson', 'Урок'), ('test', 'Тест'), ('manual', 'Ручная колонка')]
     classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='assignments')
     kind = models.CharField(max_length=10, choices=KIND_CHOICES)
     lesson = models.ForeignKey('lessons.Lesson', on_delete=models.SET_NULL, null=True, blank=True, related_name='assignments')
@@ -68,6 +68,7 @@ class Assignment(models.Model):
     instructions = models.TextField(blank=True)
     deadline = models.DateTimeField(null=True, blank=True)
     max_score = models.PositiveIntegerField(default=100)
+    manual_title = models.CharField(max_length=300, blank=True, help_text="Название ручной колонки журнала")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -75,6 +76,8 @@ class Assignment(models.Model):
 
     @property
     def title(self):
+        if self.kind == 'manual':
+            return self.manual_title or 'Оценка'
         if self.kind == 'lesson' and self.lesson:
             return self.lesson.title
         if self.kind == 'test' and self.test:

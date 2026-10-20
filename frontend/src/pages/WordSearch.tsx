@@ -269,26 +269,29 @@ export default function WordSearch() {
     return () => clearInterval(iv)
   }, [])
 
-  const cellAt = (e: React.PointerEvent): [number, number] | null => {
-    const el = ((e.target as HTMLElement).closest('[data-c]')
-      || document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-c]')) as HTMLElement | null
+  const cellFromPoint = (cx: number, cy: number): [number, number] | null => {
+    // на таче e.target остаётся стартовой клеткой (имплицитный захват указателя),
+    // поэтому текущую клетку ищем строго по координатам
+    const el = document.elementFromPoint(cx, cy)?.closest('[data-c]') as HTMLElement | null
     if (!el) return null
     const [x, y] = (el as HTMLElement).dataset.c!.split(',').map(Number)
     return [x, y]
   }
 
-  const onCellDown = (e: React.PointerEvent) => {
-    const c = cellAt(e)
+  // один жест = одна семья событий: pointerdown+touchstart прилетают вместе
+  const gestureRef = useRef<{ active: boolean; src: 'pointer' | 'touch' | '' }>({ active: false, src: '' })
+
+  const startSel = (c: [number, number] | null, src: 'pointer' | 'touch') => {
     if (!c) return
+    const g = gestureRef.current
+    if (g.active) { if (g.src !== src) return } else { g.active = true; g.src = src }
     sfx('ws.select')
     setDragging(true)
     setSelPath([c])
   }
 
-  const onCellMove = (e: React.PointerEvent) => {
-    if (!dragging) return
-    const c = cellAt(e)
-    if (!c) return
+  const extendSel = (c: [number, number] | null) => {
+    if (!c || !gestureRef.current.active) return
     setSelPath(p => {
       const [sx, sy] = p[0]
       const dx = c[0] - sx, dy = c[1] - sy
@@ -303,10 +306,14 @@ export default function WordSearch() {
     })
   }
 
-  const finish = () => {
+  const finishSel = () => {
+    const g = gestureRef.current
+    if (!g.active) return
+    g.active = false
+    g.src = ''
     setDragging(false)
     const path = selPath
-    if (path.length < 2) return
+    if (path.length < 2) { setSelPath([]); return }
     const word = path.map(([x, y]) => board.grid[y][x]).join('')
     const rev = [...word].reverse().join('')
     const hit = board.words.find(w => (w === word || w === rev) && !found[w])
@@ -324,6 +331,42 @@ export default function WordSearch() {
     }
     setSelPath([])
   }
+
+  // нативные touch-события: preventDefault не даёт браузеру отменить жест (pointercancel со скролла)
+  useEffect(() => {
+    const el = boardRef.current
+    if (!el) return
+    const stop = (ev: Event) => ev.preventDefault()
+    el.addEventListener('touchstart', stop, { passive: false })
+    el.addEventListener('touchmove', stop, { passive: false })
+    return () => { el.removeEventListener('touchstart', stop); el.removeEventListener('touchmove', stop) }
+  }, [])
+
+  const onCellDown = (e: React.PointerEvent) => {
+    if (!e.isPrimary) return
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch {}
+    startSel(cellFromPoint(e.clientX, e.clientY), 'pointer')
+  }
+
+  const onCellMove = (e: React.PointerEvent) => {
+    if (!dragging) return
+    extendSel(cellFromPoint(e.clientX, e.clientY))
+  }
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    const tt = e.touches[0]
+    if (!tt) return
+    startSel(cellFromPoint(tt.clientX, tt.clientY), 'touch')
+  }
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!gestureRef.current.active || gestureRef.current.src !== 'touch') return
+    const tt = e.touches[0]
+    if (!tt) return
+    extendSel(cellFromPoint(tt.clientX, tt.clientY))
+  }
+
+  const finish = () => finishSel()
 
   const advancedRef = useRef(false)
   useEffect(() => { if (!allDone) advancedRef.current = false }, [allDone])
@@ -490,7 +533,8 @@ export default function WordSearch() {
         <div className={wrongFlash ? 'animate-pulse' : ''}>
           <div ref={boardRef} className="grid mx-auto select-none touch-none bg-white dark:bg-slate-900 rounded-2xl p-1.5 sm:p-2 shadow-lg border border-slate-200 dark:border-slate-700"
             style={{ gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))`, maxWidth: 560 }}
-            onPointerDown={onCellDown} onPointerMove={onCellMove} onPointerUp={finish} onPointerCancel={finish}>
+            onPointerDown={onCellDown} onPointerMove={onCellMove} onPointerUp={finish} onPointerCancel={finish}
+            onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={finish} onTouchCancel={finish}>
             {board.grid.map((row, y) => row.map((ch, x) => {
               const f = inFound(x, y), s = inSel(x, y)
               const isHint = !!hintCell && hintCell[0] === x && hintCell[1] === y

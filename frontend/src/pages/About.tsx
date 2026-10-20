@@ -7,12 +7,12 @@ const DICT: Record<string, Record<string, string>> = {
     ab_title: 'О платформе',
     ab_sub: 'Почему EduPlatform AI существует и чем отличается',
     ab_story_t: 'Откуда идея',
-    ab_story_p1: 'Идея родилась дома. Мама — преподаватель. Постоянно одно и то же: открыть Word, порыться в папках в поисках то презентации, то видео, то теста. Десять вкладок браузера, Word, PowerPoint, плеер — всё одновременно.',
-    ab_story_p2: 'Ноутбук старый, оперативки мало, кулер воет, ноутбук виснет посреди урока. И так не у неё одной — у большинства преподавателей университетов и колледжей техника слабая. Стало ясно: преподавателям нужен один инструмент вместо десяти окон.',
+    ab_story_p1: 'Идея родилась дома. Мама — учительница. Постоянно одно и то же: открыть Word, порыться в папках в поисках то презентации, то видео, то теста. Десять вкладок браузера, Word, PowerPoint, плеер — всё одновременно.',
+    ab_story_p2: 'Ноутбук старый, оперативки мало, кулер воет, компьютер виснет посреди урока. И так не у неё одной — у большинства учителей и преподавателей техника слабая. Стало ясно: им всем нужен один инструмент вместо десяти окон.',
     ab_prob1t: 'Десять окон вместо одного',
     ab_prob1x: 'Word + PowerPoint + видео + тест — четыре программы и десяток вкладок ради одного урока.',
     ab_prob2t: 'Слабые ноутбуки не тянут',
-    ab_prob2x: 'Старая техника у большинства преподов: много вкладок = нагрузка на оперативку и процессор, зависания на уроке.',
+    ab_prob2x: 'Старая техника у большинства учителей и преподавателей: много вкладок = нагрузка на оперативку и процессор, зависания на уроке.',
     ab_prob3t: 'Всё в разных местах',
     ab_prob3x: 'Материалы теряются в папках и флешках: урок, тест, презентация живут отдельно друг от друга.',
     ab_sol_t: 'Решение — всё в одном окне',
@@ -31,7 +31,7 @@ const DICT: Record<string, Record<string, string>> = {
     ab_sub: 'Why EduPlatform AI exists and how it differs',
     ab_story_t: 'Where the idea came from',
     ab_story_p1: 'The idea was born at home. My mom is a teacher. The same routine every day: open Word, dig through folders for a presentation, a video, a test. Ten browser tabs, Word, PowerPoint, a video player — all at once.',
-    ab_story_p2: 'Her laptop is old, low on RAM, the fan roars, the machine freezes mid-lesson. And she is not alone — most university and college teachers have weak hardware. Teachers need one tool instead of ten windows.',
+    ab_story_p2: 'Her laptop is old, low on RAM, the fan roars, the machine freezes mid-lesson. And she is not alone — most teachers and lecturers have weak hardware. They all need one tool instead of ten windows.',
     ab_prob1t: 'Ten windows instead of one',
     ab_prob1x: 'Word + PowerPoint + video + test — four programs and a dozen tabs for a single lesson.',
     ab_prob2t: 'Weak laptops suffer',
@@ -54,7 +54,7 @@ const DICT: Record<string, Record<string, string>> = {
     ab_sub: 'EduPlatform AI эмне үчүн жана эмнеси менен айырмаланат',
     ab_story_t: 'Идея кайдан жаралды',
     ab_story_p1: 'Идея үйдө жаралды. Апам — мугалим. Күн сайын бирдей: Word ачып, папкалардан презентация, видео, тест издейт. Он вкладка, Word, PowerPoint, видео ойноткуч — бир убакта.',
-    ab_story_p2: 'Ноутбук эски, оперативка аз, желбирөөч айкалдап, сабактын ортосунда тоңуп калат. Ал гана эмес — университет жана колледж мугалимдеринин көбүнүн техникасы алсыз. Мугалимге он терезенин ордуна бир курал керек.',
+    ab_story_p2: 'Ноутбук эски, оперативка аз, желбирөөч айкалдап, сабактын ортосунда тоңуп калат. Ал гана эмес — мугалимдердин жана окутуучулардын көбүнүн техникасы алсыз. Бардыгына он терезенин ордуна бир курал керек.',
     ab_prob1t: 'Биринин ордуна он терезе',
     ab_prob1x: 'Word + PowerPoint + видео + тест — бир сабак үчүн төрт программа жана он вкладка.',
     ab_prob2t: 'Алсыз ноутбуктор көтөрбөйт',
@@ -84,6 +84,9 @@ const ROWS_RU = [
   { name: 'Игры-тренажёры по предметам', vals: [2, 0, 2, 0] },
   { name: 'Защита тестов от скриншотов', vals: [2, 0, 0, 0] },
   { name: 'Всё в одном окне (урок+тест+презентация)', vals: [2, 1, 0, 1] },
+  { name: 'Мини-журнал: ручные колонки, оценки и средние', vals: [2, 2, 0, 1] },
+  { name: 'Работает на телефоне и интерактивной доске', vals: [2, 2, 2, 1] },
+  { name: 'Демо-вход без регистрации и сборок', vals: [2, 0, 0, 0] },
   { name: 'Лёгкая для старых ноутбуков', vals: [2, 1, 2, 0] },
 ]
 
@@ -148,6 +151,11 @@ export default function About() {
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-xs font-medium text-slate-500 dark:text-slate-400" data-testid="about-table-legend">
+          <span className="inline-flex items-center gap-1.5"><span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"><Check size={12} strokeWidth={3} /></span>{L.ab_yes}</span>
+          <span className="inline-flex items-center gap-1.5"><span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"><Minus size={11} strokeWidth={3} /></span>{L.ab_part}</span>
+          <span className="inline-flex items-center gap-1.5"><span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800"><X size={11} strokeWidth={3} /></span>{L.ab_no}</span>
         </div>
       </section>
 

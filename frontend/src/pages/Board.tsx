@@ -10,26 +10,8 @@ const Board3D = lazy(() => import('../components/Board3D'))
 
 const DRAFT_KEY = 'board-draft-v2'
 
-// ——— геометрия для «ластика по частям» ———
+// ——— (старая геометрия разрезания удалена — ластик теперь работает как в Paint) ———
 type Pt = { x: number; y: number }
-const segDist = (p: Pt, a: Pt, b: Pt): number => {
-  const dx = b.x - a.x, dy = b.y - a.y
-  const l2 = dx * dx + dy * dy
-  let tt = 0
-  if (l2 > 0) tt = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2))
-  const cx = a.x + tt * dx, cy = a.y + tt * dy
-  return Math.hypot(p.x - cx, p.y - cy)
-}
-export const distToPath = (p: Pt, pts: Pt[]): number => {
-  if (!pts.length) return Infinity
-  if (pts.length === 1) return Math.hypot(p.x - pts[0].x, p.y - pts[0].y)
-  let best = Infinity
-  for (let i = 0; i < pts.length - 1; i++) {
-    const d = segDist(p, pts[i], pts[i + 1])
-    if (d < best) best = d
-  }
-  return best
-}
 
 function readDraft2(): { snap: any; title: string } | null {
   try {
@@ -82,6 +64,7 @@ export default function Board() {
   const flushDraft = () => {
     if (!editorRef.current || !dirtyRef.current) return
     // не дёргаем снапшот прямо во время рисования — иначе подлагивания
+    try { if (editorRef.current.getInstanceState().isDrawing) { lastDrawRef.current = performance.now(); return } } catch {}
     if (performance.now() - lastDrawRef.current < 2500) return
     const doFlush = () => {
       try {
@@ -103,16 +86,30 @@ export default function Board() {
     editorRef.current = editor
     ;(window as any).__tlEd = editor
     try { editor.user.updateUserPreferences({ locale: langRef.current === 'en' ? 'en' : 'ru' }) } catch {}
-    try { editor.updateInstanceState({ isGridMode: true }) } catch {}
+    try { editor.updateInstanceState({ isGridMode: false }) } catch {}
+    // батчим: на каждый кадр максимум один колбэк — иначе на больших досках кисть отстаёт
+    let pending = 0
     editor.store.listen(() => {
-      dirtyRef.current = true
-      try { if (editor.getInstanceState().isDrawing) lastDrawRef.current = performance.now() } catch {}
+      if (pending) return
+      pending = requestAnimationFrame(() => {
+        pending = 0
+        dirtyRef.current = true
+      })
     }, { scope: 'document' })
     if (pendingImport) {
       const pi = pendingImport
       setPendingImport(null)
       setDraft(true)
       importLegacyPages(editor, pi.pages, pi.target, (n: number) => langRef.current === 'en' ? `Sheet ${n}` : `Лист ${n}`)
+      return
+    }
+    // черновик грузим вручную: битый снапшот не должен ронять всю доску
+    if (initSnap) {
+      try { editor.loadSnapshot(initSnap); setDraft(true) } catch {
+        try { localStorage.removeItem(DRAFT_KEY) } catch {}
+        setInitSnap(null)
+        setDraft(false)
+      }
     }
   }
 
@@ -551,73 +548,63 @@ export default function Board() {
     }
   }
 
-  // === Ластик по частям: стирает только пройденный кусок штриха ===
+  // ——— Ластик: стирает как в Paint — рисует штрих цветом фона поверх рисунка ———
   const [partTool, setPartToolS] = useState(false)
   const partToolRef = useRef(false)
+  type PartDrag = { pts: Pt[]; markId: string }
+  const partDragRef = useRef<PartDrag | null>(null)
+  const partPendingRef = useRef<Pt | null>(null)
+  const partRafRef = useRef(0)
   const setPartTool = (v: boolean) => {
     partToolRef.current = v
     setPartToolS(v)
     if (v) setClipTool(null)
   }
-  type PartDrag = { pts: Pt[]; markId: string }
-  const partDragRef = useRef<PartDrag | null>(null)
+  const eraseShapeRef = useRef<string | null>(null)
+  const eraseStartRef = useRef<Pt>({ x: 0, y: 0 })
+  const ERASE_W = 26
   const partSweep = (p: Pt) => {
     const ed = editorRef.current
     if (!ed) return
     try {
-      const d = partDragRef.current
-      if (!d) return
-      const r = Math.max(6, 13 / (ed.getZoomLevel() || 1))
-      for (const s of ed.getCurrentPageShapes()) {
-        if (!s) continue
-        const tp = s.type
-        if (tp !== 'draw' && tp !== 'highlight') continue
-        const segs: any[] = (s.props && s.props.segments) || []
-        if (!segs.length) continue
-        const tr = ed.getShapePageTransform(s.id)
-        if (!tr) continue
-        let anyErase = false
-        let anyAlive = false
-        const newSegs: any[] = []
-        for (const sg of segs) {
-          const pts: any[] = (sg && sg.points) || []
-          if (!pts.length) continue
-          const flags = pts.map((pt: any) => distToPath(tr.applyToPoint({ x: pt.x, y: pt.y }), d.pts) <= r)
-          const cnt = flags.reduce((a: number, f: boolean) => a + (f ? 1 : 0), 0)
-          if (cnt === 0) { newSegs.push(sg); anyAlive = true; continue }
-          if (cnt === flags.length) { anyErase = true; continue }
-          anyErase = true
-          anyAlive = true
-          let run: any[] = []
-          const flush = () => { if (run.length) { newSegs.push({ type: sg.type, points: run }); run = [] } }
-          for (let i2 = 0; i2 < flags.length; i2++) {
-            if (!flags[i2]) run.push(pts[i2])
-            else flush()
-          }
-          flush()
-        }
-        if (!anyErase) continue
-        if (newSegs.length === 0 || !anyAlive) {
-          ed.deleteShapes([s.id])
-        } else if (newSegs.length === 1) {
-          ed.updateShape({ id: s.id, type: tp, props: { ...s.props, segments: newSegs } } as any)
-        } else {
-          // Break into separate shapes — tldraw renders fresh shapes correctly
-          const stamp = performance.now().toString(36)
-          ed.updateShape({ id: s.id, type: tp, props: { ...s.props, segments: [newSegs[0]] } } as any)
-          const rest = newSegs.slice(1)
-          if (rest.length) {
-            ed.createShapes(rest.map((sg: any, ri: number) => ({
-              id: ('shape:pe' + stamp + 'x' + ri) as any,
-              type: tp,
-              x: s.x, y: s.y, rotation: s.rotation, opacity: s.opacity,
-              props: { ...s.props, segments: [sg] },
-            })) as any)
-          }
-        }
+      if (!eraseShapeRef.current) {
+        // первый касание — создаём штрих-маску цветом фона
+        const id = ('shape:eraser' + Math.random().toString(36).slice(2, 8)) as any
+        ed.createShape({
+          id,
+          type: 'draw',
+          x: p.x, y: p.y,
+          props: { color: 'white', size: 'xl', segments: [{ type: 'free', points: [{ x: 0, y: 0 }] }] } as any,
+        } as any)
+        eraseShapeRef.current = id as string
+        eraseStartRef.current = p
         dirtyRef.current = true
+        return
       }
+      const id = eraseShapeRef.current
+      const shape = ed.getShape(id)
+      if (!shape) { eraseShapeRef.current = null; return }
+      const segs: any[] = shape.props.segments
+      const seg = segs[segs.length - 1]
+      const pts: any[] = seg.points
+      const lx = p.x - eraseStartRef.current.x
+      const ly = p.y - eraseStartRef.current.y
+      if (pts.length && Math.hypot((pts[pts.length - 1].x as number) - lx, (pts[pts.length - 1].y as number) - ly) < ERASE_W / 4) return
+      pts.push({ x: lx, y: ly })
+      ed.updateShape({ id, type: 'draw', props: { ...shape.props, segments: [{ type: 'free', points: pts }] } } as any)
+      dirtyRef.current = true
     } catch {}
+  }
+  const queueSweep = (p: Pt) => {
+    // сглаживаем: одна стирка на кадр, иначе на больших досках съезжает по кадрам
+    partPendingRef.current = p
+    if (partRafRef.current) return
+    partRafRef.current = requestAnimationFrame(() => {
+      partRafRef.current = 0
+      const pt = partPendingRef.current
+      partPendingRef.current = null
+      if (pt) partSweep(pt)
+    })
   }
   const onPartDown = (e: React.PointerEvent) => {
     const ed = editorRef.current
@@ -630,9 +617,10 @@ export default function Board() {
     try { (e.currentTarget as Element).setPointerCapture(e.pointerId) } catch {}
     let page: Pt = { x: 0, y: 0 }
     try { page = ed.screenToPage({ x: e.clientX, y: e.clientY }) } catch {}
-    const drag: PartDrag = { pts: [page], markId: 'part-erase-' + Math.random().toString(36).slice(2, 8) }
-    partDragRef.current = drag
-    try { ed.mark(drag.markId) } catch {}
+    const markId = 'part-erase-' + Math.random().toString(36).slice(2, 8)
+    partDragRef.current = { pts: [page], markId }
+    try { ed.mark(markId) } catch {}
+    eraseShapeRef.current = null
     partSweep(page)
   }
   const onPartMove = (e: React.PointerEvent) => {
@@ -644,15 +632,18 @@ export default function Board() {
     try {
       const page = ed.screenToPage({ x: e.clientX, y: e.clientY })
       const lastPt = d.pts[d.pts.length - 1]
-      if (Math.hypot(page.x - lastPt.x, page.y - lastPt.y) < 1.2) return
+      if (Math.hypot(page.x - lastPt.x, page.y - lastPt.y) < ERASE_W / 8) return
       d.pts.push(page)
+      queueSweep(page)
     } catch {}
-    partSweep(d.pts[d.pts.length - 1])
   }
   const onPartUp = () => {
     const d = partDragRef.current
     if (!d) return
     partDragRef.current = null
+    eraseShapeRef.current = null
+    try { if (partRafRef.current) { cancelAnimationFrame(partRafRef.current); partRafRef.current = 0 } } catch {}
+    partPendingRef.current = null
     try { editorRef.current?.squashToMark(d.markId) } catch {}
   }
 
@@ -671,7 +662,6 @@ export default function Board() {
       <div className="absolute inset-0">
         <Tldraw
           key={resetKey}
-          snapshot={initSnap || undefined}
           onMount={onMount}
           components={mode === '3d' ? ({
             Toolbar: null, StylePanel: null, TopPanel: null, SharePanel: null, NavigationPanel: null,
@@ -681,9 +671,16 @@ export default function Board() {
         />
       </div>
       {partTool && mode === '2d' && (
-        <div data-testid="bd2-part-hint" className="absolute left-1/2 -translate-x-1/2 bottom-16 z-30 pointer-events-none px-3 py-1.5 rounded-full bg-emerald-900/90 text-white text-xs font-medium shadow-lg">
+        <div data-testid="bd2-part-hint" className="absolute right-3 bottom-16 z-30 pointer-events-none px-3 py-1.5 rounded-full bg-emerald-900/90 text-white text-xs font-medium shadow-lg">
           🧽 {t('bd2_part_hint')} · {t('bd2_part_exit')}
         </div>
+      )}
+      {mode === '2d' && (
+        <button data-testid="bd2-partbtn" onPointerDown={e => e.stopPropagation()}
+          onClick={() => setPartTool(!partTool)} title={t('bd2_part_hint')}
+          className={`absolute z-30 bottom-3 right-3 w-12 h-12 rounded-2xl text-xl flex items-center justify-center shadow-lg border transition-colors ${partTool ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white/95 dark:bg-slate-800/95 dark:text-white border-slate-200 dark:border-slate-600'}`}>
+          🧽
+        </button>
       )}
       {clipTool && mode === '2d' && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-16 z-30 pointer-events-none px-3 py-1.5 rounded-full bg-slate-900/90 text-white text-xs font-medium shadow-lg">
@@ -740,7 +737,6 @@ export default function Board() {
       {mode === '2d' && !isFullscreen && (
         <div className="shrink-0 flex flex-wrap gap-1.5 items-center bg-white dark:bg-slate-800 border-b border-slate-200/60 dark:border-slate-700/60 px-3 py-1.5">
           <button data-clipbtn onClick={() => { setClipTool(clipTool === 'axes' ? null : 'axes'); setAxesOpen(o => !o) }} title={t('bd2_axes')} className={`px-2.5 py-1.5 rounded-lg text-xs font-medium min-h-[32px] border ${clipTool === 'axes' ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-amber-50 dark:bg-slate-900 dark:hover:bg-slate-700 text-amber-700 dark:text-amber-300 border-amber-200'}`}>{t('bd2_axes')}</button>
-          <button data-testid="bd2-partbtn" onPointerDown={e => e.stopPropagation()} onClick={() => setPartTool(!partTool)} title={t('bd2_part_hint')} className={`px-2.5 py-1.5 rounded-lg text-xs font-bold min-h-[32px] border flex items-center gap-1.5 ${partTool ? 'bg-emerald-600 text-white border-emerald-600 shadow' : 'bg-white dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-white border-slate-200'}`}>🧽 {t('bd2_part')}</button>
         </div>
       )}
 

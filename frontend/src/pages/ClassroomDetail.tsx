@@ -56,6 +56,13 @@ export default function ClassroomDetail(){
   const [rep,setRep]=useState<string|null>(null)
   const [repSrc,setRepSrc]=useState<string|null>(null)
   const [repBusy,setRepBusy]=useState(false)
+  // 📒 Журнал: ручные колонки и инлайн-оценки
+  const [colOpen,setColOpen]=useState(false)
+  const [colTitle,setColTitle]=useState('')
+  const [colMax,setColMax]=useState('5')
+  const [colBusy,setColBusy]=useState(false)
+  const [editCell,setEditCell]=useState<{a:number,s:number}|null>(null)
+  const [editVal,setEditVal]=useState('')
 
   const load=()=>{
     client.get(`/classrooms/${id}/`).then(r=>setRoom(r.data)).catch(()=>nav('/classes'))
@@ -101,6 +108,63 @@ export default function ClassroomDetail(){
     catch(e:any){ toast(e?.response?.data?.detail||e?.response?.data?.username||'err','error') }
   }
   const copy=()=>{ try{ navigator.clipboard.writeText(room.invite_code); setCopied(true); setTimeout(()=>setCopied(false),1500) }catch{} }
+
+  // 📒 Журнал
+  const addCol=async()=>{
+    const nm=colTitle.trim(); if(!nm||colBusy) return
+    setColBusy(true)
+    try{
+      await client.post('/assignments/', {classroom:id, kind:'manual', manual_title:nm, max_score:Number(colMax)||5, instructions:''})
+      setColTitle(''); setColMax('5'); setColOpen(false); load()
+      toast(t('cls_g_created'),'success')
+    }catch(e:any){ toast(e?.response?.data?.manual_title||e?.response?.data?.detail||'err','error') }
+    setColBusy(false)
+  }
+  const saveCell=async(aid:number,sid:number,val:string)=>{
+    if(editCell && editCell.a===aid && editCell.s===sid) setEditCell(null)
+    const blank = val.trim()==='' 
+    try{
+      await client.post(`/classrooms/${id}/gradebook_score/`, {assignment:aid, student:sid, score: blank? null: Number(val)})
+      setGb((g:any)=>{
+        if(!g) return g
+        const cells=g.cells.map((c:any)=> c.assignment===aid&&c.student===sid
+          ? (blank? {...c, score:null, status:'pending'} : {...c, score:Number(val), status:'submitted'}) : c)
+        const sv=cells.filter((x:any)=>x.student===sid&&x.score!=null).map((x:any)=>x.score)
+        const av=cells.filter((x:any)=>x.assignment===aid&&x.score!=null).map((x:any)=>x.score)
+        return {...g, cells,
+          avg_student:{...g.avg_student, [String(sid)]: sv.length? Math.round(sv.reduce((p:number,c:number)=>p+c,0)/sv.length*10)/10 : null},
+          avg_assignment:{...g.avg_assignment, [String(aid)]: av.length? Math.round(av.reduce((p:number,c:number)=>p+c,0)/av.length*10)/10 : null}}
+      })
+      toast(t('cls_g_saved'),'success')
+    }catch(e:any){
+      toast(e?.response?.data?.score||e?.response?.data?.detail||'err','error'); load()
+    }
+  }
+  const delCol=async(aid:number,title:string)=>{
+    if(!confirm(`${t('cls_g_del')} «${title}»? ${t('cls_g_del_hint')}`)) return
+    try{ await client.delete(`/assignments/${aid}/?kind=manual`); load(); toast(t('cls_g_del'),'success') }
+    catch(e:any){ toast(e?.response?.data?.detail||'err','error') }
+  }
+  const exportCSV=()=>{
+    if(!gb) return
+    const q=(v:string)=>'"'+String(v).replace(/"/g,'""')+'"'
+    const num=(v:any)=> v!=null? String(Math.round(v*10)/10).replace('.',',') : ''
+    const head=[t('cls_student'), ...gb.assignments.map((a:any)=>a.title), t('cls_g_avg')].map(q).join(';')
+    const rows=gb.students.map((s:any)=>[
+      s.username,
+      ...gb.assignments.map((a:any)=>{
+        const c=gb.cells.find((x:any)=>x.assignment===a.id&&x.student===s.id)
+        return num(c?.score)
+      }),
+      num(gb.avg_student?.[String(s.id)])
+    ].map(q).join(';'))
+    const csv='\uFEFF'+[head,...rows].join('\r\n')
+    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}))
+    const aEl=document.createElement('a')
+    aEl.href=url
+    aEl.download=((room?.title||'gradebook').replace(/[\\/:*?"<>|]+/g,'').trim().slice(0,40)||'gradebook')+'.csv'
+    aEl.click(); URL.revokeObjectURL(url)
+  }
 
   const toggleComments=async(nid:number)=>{
     const next=!cmOpen[nid]
@@ -305,35 +369,105 @@ export default function ClassroomDetail(){
                   <div className="text-sm whitespace-pre-wrap leading-relaxed dark:text-slate-100" data-testid="cls-report-text">{rep}</div>
                 </div>
               )}
-              <div className="overflow-auto">
-              {!gb || gb.assignments.length===0 ? <div className="text-center text-slate-400 py-8">{t('cls_no_tasks')}</div> : (
-              <table className="w-full text-sm min-w-[500px] dark:text-slate-100">
-                <thead>
-                  <tr>
-                    <th className="text-left p-2 border-b dark:border-slate-700">{t('cls_student')}</th>
-                    {gb.assignments.map((a:any)=>(
-                      <th key={a.id} className="p-2 border-b dark:border-slate-700 text-center" title={a.title}>{a.title.slice(0,18)}{a.title.length>18?'…':''}<div className="font-normal text-xs text-slate-400">max {a.max_score}</div></th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {gb.students.map((s:any)=>(
-                    <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                      <td className="p-2 border-b dark:border-slate-700 font-semibold">{s.username}</td>
-                      {gb.assignments.map((a:any)=>{
-                        const c = gb.cells.find((x:any)=>x.assignment===a.id && x.student===s.id)
-                        return <td key={a.id} className="p-2 border-b dark:border-slate-700 text-center">
-                          <span className={`inline-block min-w-[64px] px-2 py-1 rounded-lg border text-xs font-bold ${ST_CLS[c?.status||'pending']}`}>
-                            {c?.score!=null? Math.round(c.score*10)/10 : ST_TXT[c?.status||'pending']}
-                          </span>
-                        </td>
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              )}
+              <div className="flex flex-wrap gap-2 items-center">
+                {isOwner && (
+                  <button onClick={()=>setColOpen(o=>!o)} data-testid="cls-addcol"
+                    className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold text-sm hover:bg-blue-50 dark:hover:bg-slate-700 flex items-center gap-1">
+                    <Plus size={16}/>{t('cls_g_addcol')}
+                  </button>
+                )}
+                {isOwner && gb && (
+                  <button onClick={exportCSV} data-testid="cls-csv"
+                    className="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700">
+                    {t('cls_g_csv')}
+                  </button>
+                )}
+                {isOwner && gb && gb.assignments.some((a:any)=>a.kind==='manual') && (
+                  <span className="text-xs text-slate-400">{t('cls_g_del_hint')}</span>
+                )}
               </div>
+              {colOpen && isOwner && (
+                <div className="flex flex-wrap gap-2 p-3 rounded-2xl border border-blue-100 dark:border-slate-700 bg-blue-50/50 dark:bg-slate-800" data-testid="cls-colform">
+                  <input data-testid="cls-colname" value={colTitle} onChange={e=>setColTitle(e.target.value)}
+                    onKeyDown={e=>{ if(e.key==='Enter') addCol() }}
+                    placeholder={t('cls_g_col_name')} className="px-3 py-2 rounded-xl border flex-1 min-w-[220px]"/>
+                  <input value={colMax} onChange={e=>setColMax(e.target.value.replace(/\D/g,''))}
+                    placeholder={t('cls_g_col_max')} aria-label={t('cls_g_col_max')} className="px-3 py-2 rounded-xl border w-24 text-center"/>
+                  <button data-testid="cls-colcreate" onClick={addCol} disabled={colBusy}
+                    className="px-4 py-2 rounded-xl bg-blue-700 dark:bg-blue-600 text-white font-bold text-sm disabled:opacity-50">{t('cls_g_create')}</button>
+                  <button onClick={()=>setColOpen(false)} className="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border text-sm">{t('cls_g_cancel')}</button>
+                </div>
+              )}
+              {(!gb || !(gb.assignments||[]).length) && (
+                <div className="text-center text-slate-400 py-8" data-testid="cls-journal-empty">{t('cls_no_tasks')}</div>
+              )}
+              {gb && gb.assignments.length>0 && (
+                <div className="overflow-auto">
+                <table className="w-full text-sm min-w-[560px] dark:text-slate-100">
+                  <thead>
+                    <tr>
+                      <th className="text-left p-2 border-b dark:border-slate-700">{t('cls_student')}</th>
+                      {gb.assignments.map((a:any)=>(
+                        <th key={a.id} className="p-2 border-b dark:border-slate-700 text-center" title={a.title}>
+                          <div className="flex items-center justify-center gap-1">
+                            <span>{a.title.slice(0,14)}{a.title.length>14?'…':''}</span>
+                            {a.kind==='manual' && (
+                              <button onClick={()=>delCol(a.id,a.title)} data-testid={`gb-delcol-${a.id}`}
+                                title={t('cls_g_del')} className="text-red-400 hover:text-red-600 leading-none">✕</button>
+                            )}
+                          </div>
+                          <div className="font-normal text-xs text-slate-400">max {a.max_score}</div>
+                        </th>
+                      ))}
+                      <th className="p-2 border-b dark:border-slate-700 text-center text-blue-700 dark:text-blue-300">{t('cls_g_avg')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gb.students.map((s:any)=>(
+                      <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
+                        <td className="p-2 border-b dark:border-slate-700 font-semibold">{s.username}</td>
+                        {gb.assignments.map((a:any)=>{
+                          const c = gb.cells.find((x:any)=>x.assignment===a.id && x.student===s.id)
+                          const isEdit = !!(editCell && editCell.a===a.id && editCell.s===s.id)
+                          if(isEdit) return (
+                            <td key={a.id} className="p-2 border-b dark:border-slate-700 text-center">
+                              <input autoFocus value={editVal} onChange={e=>setEditVal(e.target.value)}
+                                onBlur={()=>saveCell(a.id,s.id,editVal)}
+                                onKeyDown={e=>{
+                                  if(e.key==='Enter') saveCell(a.id,s.id,editVal)
+                                  else if(e.key==='Escape') setEditCell(null)
+                                }}
+                                className="w-16 px-1 py-1 rounded-lg border-2 border-blue-500 text-center text-xs bg-white dark:bg-slate-800 dark:text-white"/>
+                            </td>
+                          )
+                          return (
+                            <td key={a.id} className="p-2 border-b dark:border-slate-700 text-center">
+                              <button data-testid={`gb-cell-${s.id}-${a.id}`} title={a.title}
+                                onClick={()=>{ setEditCell({a:a.id,s:s.id}); setEditVal(c?.score!=null? String(Math.round(c.score*10)/10) : '') }}
+                                className={`inline-flex items-center justify-center min-w-[64px] px-2 py-1 rounded-lg border text-xs font-bold ${ST_CLS[c?.status||'pending']} hover:ring-2 hover:ring-blue-200 dark:hover:ring-blue-700 transition cursor-pointer`}>
+                                {c?.score!=null? Math.round(c.score*10)/10 : ST_TXT[c?.status||'pending']}
+                              </button>
+                            </td>
+                          )
+                        })}
+                        <td className="p-2 border-b dark:border-slate-700 text-center font-bold text-blue-700 dark:text-blue-300" data-testid={`gb-avg-${s.id}`}>
+                          {gb.avg_student?.[String(s.id)]!=null? gb.avg_student[String(s.id)] : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="bg-slate-50/70 dark:bg-slate-800/60">
+                      <td className="p-2 font-semibold text-slate-500 dark:text-slate-300">{t('cls_g_avg_class')}</td>
+                      {gb.assignments.map((a:any)=>(
+                        <td key={'avg'+a.id} data-testid={`gb-avgcol-${a.id}`} className="p-2 text-center text-xs font-bold text-slate-600 dark:text-slate-300">
+                          {gb.avg_assignment?.[String(a.id)]!=null? gb.avg_assignment[String(a.id)] : '—'}
+                        </td>
+                      ))}
+                      <td className="p-2"/>
+                    </tr>
+                  </tbody>
+                </table>
+                </div>
+              )}
             </div>
           )}
         </div>
