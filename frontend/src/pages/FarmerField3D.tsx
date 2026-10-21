@@ -317,7 +317,7 @@ export default function FarmerField3D({ st, wx, stopped, celebrate }: { st: F3DS
   return (
     <div className="relative rounded-2xl overflow-hidden border-4 border-emerald-600 bg-emerald-800" data-testid="fb3d-host" style={{ minHeight: 300 }}>
       <div ref={hostRef} className="w-full h-[44vh] max-h-[420px] min-h-[240px] sm:h-[56vh] sm:min-h-[300px]" />
-      <div className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-black/45 text-white text-[11px] font-bold pointer-events-none" data-testid="fb3d-hint">🧊 3D · тряси мышкой, чтобы вращать</div>
+      <div className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-black/45 text-white text-[11px] font-bold pointer-events-none" data-testid="fb3d-hint">🧊 3D · пальцем/мышкой — вращение, щипок — зум</div>
     </div>
   )
 }

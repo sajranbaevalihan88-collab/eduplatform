@@ -192,10 +192,10 @@ export default function TestTake(){
         <div className="mt-3 h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
           <div className="h-full bg-blue-600 transition-all" style={{width:`${((qi+1)/test.questions.length)*100}%`}} />
         </div>
-        <div className="mt-3 flex flex-wrap gap-1 sm:gap-1.5">
+        <div className="mt-3 flex flex-wrap gap-1 sm:gap-2">
           {test.questions.map((x:any,i:number)=>(
             <button key={x.id} onClick={()=>setQi(i)} aria-label={`${t('tt_q')} ${i+1}`}
-              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-bold ${i===qi ? 'bg-blue-600 text-white' : answers[x.id]!==undefined && answers[x.id]!=='' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'}`}>
+              className={`w-11 h-11 rounded-lg text-sm font-bold shrink-0 ${i===qi ? 'bg-blue-600 text-white' : answers[x.id]!==undefined && answers[x.id]!=='' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'}`}>
               {i+1}
             </button>
           ))}
@@ -204,8 +204,8 @@ export default function TestTake(){
       {q && (
       <div key={q.id} className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-2xl border p-4 sm:p-5 motion-safe:animate-slide">
         <div className="flex items-start gap-2">
-          <div className="font-semibold flex-1 text-base sm:text-lg dark:text-white">#{qi+1} {q.text} <span className="text-xs px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-700 dark:text-slate-300 ml-2">{q.points} {t('points')}</span> <button onClick={()=>speak(`${t('tt_q')} ${qi+1}. ${q.text}. ${t('tt_variants')}: ${(q.options||[]).map((o:any)=>o.text).join(', ')}`)} className="ml-1 px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-blue-100 dark:bg-slate-700 dark:text-white text-xs" title={t('tt_read_aloud')}>🔊</button>
-            <button onClick={toggleAutoRead} aria-pressed={autoRead} title={t('tt_autoread_title')} className={`ml-1 px-2 py-0.5 rounded-lg text-xs font-bold ${autoRead ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 dark:text-white'}`}>{autoRead ? '🔊 Авто' : '🔇 Авто'}</button>
+          <div className="font-semibold flex-1 text-base sm:text-lg dark:text-white">#{qi+1} {q.text} <span className="text-xs px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-700 dark:text-slate-300 ml-2">{q.points} {t('points')}</span> <button onClick={()=>speak(`${t('tt_q')} ${qi+1}. ${q.text}. ${t('tt_variants')}: ${(q.options||[]).map((o:any)=>o.text).join(', ')}`)} className="ml-1 inline-flex items-center justify-center align-middle min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-blue-100 dark:bg-slate-700 dark:text-white text-base" title={t('tt_read_aloud')}>🔊</button>
+            <button onClick={toggleAutoRead} aria-pressed={autoRead} title={t('tt_autoread_title')} className={`ml-1 inline-flex items-center justify-center align-middle min-w-[44px] min-h-[44px] rounded-xl text-sm font-bold ${autoRead ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 dark:text-white'}`}>{autoRead ? '🔊 Авто' : '🔇 Авто'}</button>
           </div>
           {perQ>0 && (
             <span className={`shrink-0 font-mono font-bold text-lg sm:text-xl px-2.5 sm:px-3 py-1 rounded-xl ${left<=5 ? 'bg-red-100 text-red-600 motion-safe:animate-pulse dark:bg-red-900/40 dark:text-red-300' : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-white'}`} role="timer" title={t('tt_left_title')}>0:{String(Math.max(0,left)).padStart(2,'0')}</span>

@@ -407,7 +407,7 @@ const tr = useLang().t
         <div className="arkan-arena p-4 sm:p-6 space-y-4">
           <div className="oimo-strip" />
           {/* счёт + канат */}
-          <div className="flex items-center gap-3 font-display font-bold text-xl sm:text-2xl">
+          <div className="flex flex-wrap items-center gap-2 font-display font-bold text-lg sm:text-2xl">
             <span className={`px-3 py-1 rounded-xl bg-white/70 ${turn === 'A' ? 'text-blue-700' : 'text-slate-500'}`}>{mascA} {teamA} {scoreA}</span>
             <span className="ml-auto px-3 py-1 rounded-xl bg-white/70 text-slate-500">{scoreB} {teamB} {mascB}</span>
           </div>

@@ -27,7 +27,7 @@ export default function Tests(){
           <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-gradient-to-br from-rose-500 to-amber-400 text-white"><FlaskConical size={20}/></span> {t('tests')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{filtered.length}</span></h1>
         </div>
         <div className="flex gap-2">
-          <div className="relative group"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('tests_search_ph')} className="pl-9 pr-4 py-2.5 rounded-xl border bg-white w-[220px] focus-ring transition-all focus:w-[260px]"/></div>
+          <div className="flex items-center gap-2 flex-1 min-w-[240px]"><div className="relative group flex-1 max-w-[260px] sm:max-w-[320px]"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('tests_search_ph')} className="pl-9 pr-4 py-2.5 rounded-xl border bg-white w-full focus-ring"/></div></div>
           {!isStudent() && (
           <Link to="/tests/new" className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('tests_create')}</Link>
           )}
@@ -44,8 +44,8 @@ export default function Tests(){
             <p className="text-sm text-slate-500 line-clamp-2">{item.description||t('tests_no_desc')}</p>
             <div className="flex gap-2 text-xs mt-3 text-slate-500"><span className="flex items-center gap-1"><Target size={12}/> {t('tests_pass')} {item.pass_score}%</span><span className="flex items-center gap-1"><Clock size={12}/> {item.time_limit||t('tests_no_limit')} {t('tests_min')}</span></div>
             <div className="flex gap-2 mt-4">
-              <Link to={`/tests/${item.id}/take`} onClick={()=>requestGuardFullscreen()} className="flex-1 px-3 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold text-center">{t('tests_take')}</Link>
-              {canEdit(item) ? <Link to={`/tests/${item.id}`} className="px-3 py-2 rounded-xl bg-slate-100 text-sm font-medium">{t('edit')}</Link> : <span className="px-3 py-2 rounded-xl bg-slate-50 text-slate-400 text-sm" title={t('tests_lock')}>🔒</span>}
+              <Link to={`/tests/${item.id}/take`} onClick={()=>requestGuardFullscreen()} className="flex-1 px-3 py-2.5 min-h-[44px] rounded-xl bg-blue-600 text-white text-sm font-semibold text-center flex items-center justify-center">{t('tests_take')}</Link>
+              {canEdit(item) ? <Link to={`/tests/${item.id}`} className="px-3 py-2.5 min-h-[44px] rounded-xl bg-slate-100 text-sm font-medium flex items-center justify-center">{t('edit')}</Link> : <span className="px-3 py-2.5 min-h-[44px] rounded-xl bg-slate-50 text-slate-400 text-sm flex items-center justify-center" title={t('tests_lock')}>🔒</span>}
             </div>
           </div>
         ))}

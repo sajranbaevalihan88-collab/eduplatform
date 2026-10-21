@@ -297,7 +297,7 @@ export default function WordEditor() {
       origW: ir.width,
       origL: ir.left - wr.left, origT: ir.top - wr.top,
     }
-    const move = (ev: MouseEvent) => {
+    const move = (ev: PointerEvent) => {
       const d = dragRef.current
       if (!d) return
       img.style.left = `${Math.max(0, d.origL + (ev.clientX - d.startX))}px`
@@ -305,13 +305,15 @@ export default function WordEditor() {
       placeHandle()
     }
     const up = () => {
-      document.removeEventListener('mousemove', move)
-      document.removeEventListener('mouseup', up)
+      document.removeEventListener('pointermove', move)
+      document.removeEventListener('pointerup', up)
+      document.removeEventListener('pointercancel', up)
       dragRef.current = null
       setDirty(true)
     }
-    document.addEventListener('mousemove', move)
-    document.addEventListener('mouseup', up)
+    document.addEventListener('pointermove', move)
+    document.addEventListener('pointerup', up)
+    document.addEventListener('pointercancel', up)
   }
 
   // уголок: тянешь — размер меняется
@@ -324,7 +326,7 @@ export default function WordEditor() {
     const startX = e.clientX
     const startW = img.getBoundingClientRect().width
     const base = editRef.current?.clientWidth || 1
-    const move = (ev: MouseEvent) => {
+    const move = (ev: PointerEvent) => {
       const w = Math.max(30, startW + (ev.clientX - startX))
       if (free) {
         img.style.width = `${Math.round(w)}px`
@@ -338,12 +340,14 @@ export default function WordEditor() {
       placeHandle()
     }
     const up = () => {
-      document.removeEventListener('mousemove', move)
-      document.removeEventListener('mouseup', up)
+      document.removeEventListener('pointermove', move)
+      document.removeEventListener('pointerup', up)
+      document.removeEventListener('pointercancel', up)
       setDirty(true)
     }
-    document.addEventListener('mousemove', move)
-    document.addEventListener('mouseup', up)
+    document.addEventListener('pointermove', move)
+    document.addEventListener('pointerup', up)
+    document.addEventListener('pointercancel', up)
   }
 
   const imgSizeChange = (v: number) => {
@@ -444,6 +448,7 @@ export default function WordEditor() {
     mv.style.cssText = `left:${Math.max(0, tr.left - wr.left + 2)}px;top:${tr.top - wr.top - 13}px`
     mv.textContent = '⠿'
     mv.addEventListener('mousedown', ev => { ev.preventDefault(); ev.stopPropagation(); startTblMove(ev as MouseEvent, t) })
+    mv.addEventListener('pointerdown', ev => { ev.preventDefault(); ev.stopPropagation(); startTblMove(ev as unknown as MouseEvent, t) })
     layer.appendChild(mv)
     // ширины столбцов — ручки на границах
     const first = t.rows[0]
@@ -455,6 +460,7 @@ export default function WordEditor() {
         h.title = 'Тяни — ширина столбца'
         h.style.cssText = `left:${cr.left - wr.left - 4}px;top:${tr.top - wr.top}px;height:${tr.height}px`
         h.addEventListener('mousedown', ev => { ev.preventDefault(); ev.stopPropagation(); startColDrag(ev as MouseEvent, t, i - 1) })
+        h.addEventListener('pointerdown', ev => { ev.preventDefault(); ev.stopPropagation(); startColDrag(ev as unknown as MouseEvent, t, i - 1) })
         layer.appendChild(h)
       }
     }
@@ -466,6 +472,7 @@ export default function WordEditor() {
       h.title = 'Тяни — высота строки'
       h.style.cssText = `left:${Math.max(0, tr.left - wr.left - 5)}px;top:${rr.bottom - wr.top - 4}px;width:${Math.min(34, tr.width)}px`
       h.addEventListener('mousedown', ev => { ev.preventDefault(); ev.stopPropagation(); startRowDrag(ev as MouseEvent, t, i) })
+      h.addEventListener('pointerdown', ev => { ev.preventDefault(); ev.stopPropagation(); startRowDrag(ev as unknown as MouseEvent, t, i) })
       layer.appendChild(h)
     }
   }
@@ -477,20 +484,22 @@ export default function WordEditor() {
     const startX = e.clientX
     const startW = cell.getBoundingClientRect().width
     const tableW = t.getBoundingClientRect().width || 1
-    const move = (ev: MouseEvent) => {
+    const move = (ev: PointerEvent) => {
       const w = Math.max(24, Math.min(tableW - 24, startW + (ev.clientX - startX)))
       cell.style.width = `${((w / tableW) * 100).toFixed(2)}%`
       placeTblOverlay()
     }
     const up = () => {
-      document.removeEventListener('mousemove', move)
-      document.removeEventListener('mouseup', up)
+      document.removeEventListener('pointermove', move)
+      document.removeEventListener('pointerup', up)
+      document.removeEventListener('pointercancel', up)
       tblDragRef.current = null
       setDirty(true)
     }
     tblDragRef.current = { t }
-    document.addEventListener('mousemove', move)
-    document.addEventListener('mouseup', up)
+    document.addEventListener('pointermove', move)
+    document.addEventListener('pointerup', up)
+    document.addEventListener('pointercancel', up)
   }
 
   const startRowDrag = (e: MouseEvent, t: HTMLTableElement, idx: number) => {
@@ -498,17 +507,19 @@ export default function WordEditor() {
     if (!row) return
     const startY = e.clientY
     const startH = row.getBoundingClientRect().height
-    const move = (ev: MouseEvent) => {
+    const move = (ev: PointerEvent) => {
       row.style.height = `${Math.max(24, Math.min(500, startH + (ev.clientY - startY)))}px`
       placeTblOverlay()
     }
     const up = () => {
-      document.removeEventListener('mousemove', move)
-      document.removeEventListener('mouseup', up)
+      document.removeEventListener('pointermove', move)
+      document.removeEventListener('pointerup', up)
+      document.removeEventListener('pointercancel', up)
       setDirty(true)
     }
-    document.addEventListener('mousemove', move)
-    document.addEventListener('mouseup', up)
+    document.addEventListener('pointermove', move)
+    document.addEventListener('pointerup', up)
+    document.addEventListener('pointercancel', up)
   }
 
   // перестановка таблицы: тяни ручку — синяя линия показывает, куда встанет
@@ -551,9 +562,13 @@ export default function WordEditor() {
     }
     compute(e)
     const move = (ev: MouseEvent) => compute(ev)
+    const moveU = (ev: PointerEvent) => compute(ev)
     const up = () => {
       document.removeEventListener('mousemove', move)
       document.removeEventListener('mouseup', up)
+      document.removeEventListener('pointermove', moveU)
+      document.removeEventListener('pointerup', up)
+      document.removeEventListener('pointercancel', up)
       line.remove()
       document.body.style.userSelect = ''
       try {
@@ -566,6 +581,9 @@ export default function WordEditor() {
     }
     document.addEventListener('mousemove', move)
     document.addEventListener('mouseup', up)
+    document.addEventListener('pointermove', moveU)
+    document.addEventListener('pointerup', up)
+    document.addEventListener('pointercancel', up)
   }
 
   const insertTable = (rows?: number, cols?: number) => {
@@ -1406,6 +1424,7 @@ export default function WordEditor() {
               onKeyDown={onEditorKeyDown}
               onClick={onEditorClick}
               onMouseDown={onFreeMouseDown}
+              onPointerDown={onFreeMouseDown as any}
               className="word-page min-h-[500px] bg-white text-slate-900 rounded-xl border border-slate-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 prose-sm"
               style={{ lineHeight: 1.7, minHeight: page.pageH + SHEET_PAD * 2, padding: SHEET_PAD }}
             />
@@ -1419,7 +1438,7 @@ export default function WordEditor() {
             <div ref={tblOverlayRef} className="absolute inset-0 pointer-events-none z-[6]" aria-hidden="true" />
             {selImg && handle && (
               <div className="img-handle" style={{ left: handle.x, top: handle.y }}
-                onMouseDown={startResize} title="Тяни — размер фото" />
+                onMouseDown={startResize} onPointerDown={startResize as any} title="Тяни — размер фото" />
             )}
           </div>
         </div>

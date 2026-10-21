@@ -14,6 +14,14 @@ body { touch-action: manipulation; padding-bottom: env(safe-area-inset-bottom); 
 @media (hover: none) {
   .hide-touch { display: none !important; }
 }
+/* Тач/интерактивная доска: контролы, спрятанные за hover, всегда видимы (иначе кнопки «мёртвы» на телефоне) */
+@media (hover: none), (pointer: coarse) {
+  .group-hover\:opacity-100 { opacity: 1 !important; }
+}
+/* Стандарт тап-зоны ≥44px для критичных кнопок (по классам точечно на этапах 2-5) */
+.tap44 { min-width: 44px; min-height: 44px; }
+/* Стандарт мобильной модалки: внутри экрана + прокрутка */
+.modal-safe { max-height: 85dvh; overflow-y: auto; }
 .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
 * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
@@ -125,7 +133,10 @@ body { touch-action: manipulation; padding-bottom: env(safe-area-inset-bottom); 
 .word-page a { color: #4f46e5; text-decoration: underline; }
 /* уголок размера фото */
 .img-handle { position: absolute; width: 16px; height: 16px; background: #2563eb; border: 3px solid #fff; border-radius: 5px; cursor: nwse-resize; z-index: 20; transform: translate(-50%,-50%); box-shadow: 0 2px 8px rgba(0,0,0,.35); }
-.word-page img[data-free="1"] { cursor: move; }
+.word-page img[data-free="1"] { cursor: move; touch-action: none; }
+@media (hover: none), (pointer: coarse) {
+  .img-handle { width: 40px; height: 40px; }
+}
 /* границы листов как в Word */
 .page-guide { position: absolute; left: 0; right: 0; border-top: 2px dashed #c084fc; }
 .page-guide span { position: absolute; top: -11px; right: 12px; background: #f5f3ff; color: #2563eb; font-size: 11px; font-weight: 700; padding: 0 8px; border-radius: 999px; border: 1px solid #ddd6fe; }
@@ -141,6 +152,12 @@ body { touch-action: manipulation; padding-bottom: env(safe-area-inset-bottom); 
 .word-row-h:hover { background: rgba(37,99,235,.45); }
 .word-row-h::after { content: ''; position: absolute; inset: 3px 4px; border-top: 2px solid rgba(37,99,235,.35); }
 .word-drop-line { position: fixed; height: 4px; background: #2563eb; border-radius: 2px; z-index: 9999; pointer-events: none; opacity: .85; box-shadow: 0 0 0 3px rgba(37,99,235,.18); }
+@media (hover: none), (pointer: coarse) {
+  .word-tbl-move { width: 44px; height: 30px; font-size: 14px; }
+  .word-col-h { width: 24px; margin-left: -12px; }
+  .word-row-h { height: 24px; margin-top: -12px; width: 44px; }
+  .word-col-h, .word-row-h, .word-tbl-move { background: rgba(37,99,235,.55); touch-action: none; }
+}
 .word-page th { background: rgba(148,163,184,.18); font-weight: 700; }
 /* Фермер Бала: живая анимация */
 .fb-hop { display: inline-block; animation: fbhop .35s ease; }

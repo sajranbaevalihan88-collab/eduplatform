@@ -616,7 +616,7 @@ export default function WordSearch() {
             <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 shadow-2xl w-full max-w-lg space-y-3" data-testid="ws-ready-card">
               <div className="flex items-center justify-between">
                 <div className="font-display font-bold text-lg dark:text-white">🏫 {t('gsel_ready')}</div>
-                <button onClick={() => setEntry(null)} aria-label="×" className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white"><X size={18} /></button>
+                <button onClick={() => setEntry(null)} aria-label="×" className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white inline-flex items-center justify-center"><X size={18} /></button>
               </div>
               <div className="grid gap-2">
                 {(PRESETS[lang] || PRESETS.ru).map(pr => (
@@ -650,7 +650,7 @@ export default function WordSearch() {
             <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 shadow-2xl w-full max-w-lg space-y-3" data-testid="ws-builder-card">
               <div className="flex items-center justify-between">
                 <div className="font-display font-bold text-lg dark:text-white">✏️ {t('ws_build')}</div>
-                <button onClick={() => setPanel(null)} aria-label="×" className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white"><X size={18} /></button>
+                <button onClick={() => setPanel(null)} aria-label="×" className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white inline-flex items-center justify-center"><X size={18} /></button>
               </div>
               <input value={cName} onChange={e => setCName(e.target.value)} placeholder={t('ws_name_ph')}
                 className="w-full px-4 py-2.5 min-h-[48px] rounded-xl border bg-slate-50 dark:bg-slate-700 dark:text-white font-bold" />

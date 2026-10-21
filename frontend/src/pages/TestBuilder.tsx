@@ -175,7 +175,8 @@ export default function TestBuilder(){
       )}
       {showGen && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-16 p-4" onClick={()=>setShowGen(false)}>
-          <div onClick={e=>e.stopPropagation()} className="w-[560px] max-w-full bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-5 space-y-3 animate-scaleIn">
+          <div onClick={e=>e.stopPropagation()} className="relative w-[560px] max-w-full bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-5 space-y-3 animate-scaleIn modal-safe">
+            <button onClick={()=>setShowGen(false)} aria-label={t('close')} title={t('close')} className="absolute top-2 right-2 inline-flex items-center justify-center w-11 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-white text-lg font-bold">✕</button>
             <div className="font-bold dark:text-white">{t('tb_gen_title')}</div>
             <textarea value={genPrompt} onChange={e=>setGenPrompt(e.target.value)} placeholder={t('tb_gen_ph')} className="w-full h-28 px-3 py-2 rounded-xl border bg-blue-50/50 dark:bg-slate-700 dark:text-white text-sm" aria-label={t('tb_gen_aria')}/>
             <div className="flex items-center gap-3">

@@ -179,7 +179,7 @@ export default function Profile(){
             </div>
             {me.bio && <p className="mt-3 text-white/90 bg-white/10 rounded-xl p-3 text-sm">{me.bio}</p>}
           </div>
-          <button onClick={logout} className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-blue-700 font-semibold"><LogOut size={16}/> {t('logout')}</button>
+          <button onClick={logout} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-blue-700 font-semibold"><LogOut size={16}/> {t('logout')}</button>
         </div>
       </div>
 

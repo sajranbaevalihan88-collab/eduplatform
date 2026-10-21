@@ -427,7 +427,7 @@ export default function LessonBuilder(){
             setBlocks([{ id: '1', type: 'text', data: { title: 'Введение', content: '' } }])
             setDraftBanner(null); toast(t('lb_draft_deleted'), 'info')
           }} className="px-3 py-2 rounded-xl bg-amber-500 text-slate-900 text-xs font-bold hover:bg-amber-400 shrink-0" data-testid="lb-draft-clear">{t('lb_start_fresh')}</button>
-          <button onClick={() => setDraftBanner(null)} className="w-8 h-8 rounded-lg bg-white/10 text-white text-sm font-bold hover:bg-white/20 shrink-0" data-testid="lb-draft-hide" title={t('fb_hide') || '✕'}>✕</button>
+          <button onClick={() => setDraftBanner(null)} className="w-11 h-11 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/20 shrink-0" data-testid="lb-draft-hide" title={t('fb_hide') || '✕'} aria-label="Скрыть предупреждение">✕</button>
         </div>
       )}
 
@@ -517,10 +517,10 @@ export default function LessonBuilder(){
                     {b.type==='text' && <span className={`text-xs px-2 py-1 rounded-full ${!b.data.title?.trim() && !b.data.content?.trim() ? 'bg-amber-100 text-amber-700' : 'bg-slate-100'}`}>{b.data.title||'без заголовка'}</span>}
                     {errors.blocks?.[b.id] && <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">⚠ ошибка</span>}
                   </div>
-                  <div className="flex gap-1">
-                    <button onClick={()=>move(idx,-1)} className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-sm">↑</button>
-                    <button onClick={()=>move(idx,1)} className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-sm">↓</button>
-                    <button onClick={()=>setBlocks(bl=>bl.filter(x=>x.id!==b.id))} className="w-7 h-7 rounded-lg bg-red-50 text-red-600 flex items-center justify-center"><Trash2 size={14}/></button>
+                  <div className="flex gap-1.5">
+                    <button onClick={()=>move(idx,-1)} aria-label="Блок выше" title="Блок выше" className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center text-lg active:bg-slate-200">↑</button>
+                    <button onClick={()=>move(idx,1)} aria-label="Блок ниже" title="Блок ниже" className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center text-lg active:bg-slate-200">↓</button>
+                    <button onClick={()=>setBlocks(bl=>bl.filter(x=>x.id!==b.id))} aria-label="Удалить блок" title="Удалить блок" className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center active:bg-red-100"><Trash2 size={18}/></button>
                   </div>
                 </div>
                 {b.type==='text' && (
@@ -664,7 +664,7 @@ export default function LessonBuilder(){
                       <div className="p-3 rounded-xl bg-slate-50 border space-y-3">
                         <div className="flex items-center justify-between">
                           <div className="text-sm font-bold">Новый тест для урока</div>
-                          <button onClick={()=>setTestInlineOpen(p=>({...p,[b.id]:false}))} className="text-xs px-2 py-1 rounded-full bg-white border">✕ Свернуть</button>
+                          <button onClick={()=>setTestInlineOpen(p=>({...p,[b.id]:false}))} className="min-h-[44px] px-3 py-2 text-sm font-semibold rounded-full bg-white border active:bg-slate-100">✕ Свернуть</button>
                         </div>
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 space-y-2" data-testid="lb-ai">
                           <button onClick={()=>setLtAiOpen(p=>({...p,[b.id]:!p[b.id]}))}

@@ -137,6 +137,7 @@ export default function VSCodeEditor(){
   const [search,setSearch]=useState('')
   const [searchContent,setSearchContent]=useState('')
   const [activeView,setActiveView]=useState<'explorer'|'search'>('explorer')
+  const [filesOpen,setFilesOpen]=useState(false)
   const [showOutput,setShowOutput]=useState(false)
   const [panelHeight,setPanelHeight]=useState(200)
   const dragRef=useRef<{startY:number, startH:number}|null>(null)
@@ -370,7 +371,8 @@ export default function VSCodeEditor(){
         {!isAuth && <Link to="/login" className="px-2 py-0.5 rounded bg-[#007acc] text-white text-xs flex items-center gap-1"><LogIn size={10}/> {t('login')}</Link>}
       </div>
 
-      <div className="flex flex-1 min-h-0">
+      <div className="relative flex flex-1 min-h-0">
+        {filesOpen && <div className="fixed inset-0 bg-black/40 z-20 md:hidden" onClick={()=>setFilesOpen(false)} />}
         {/* Activity Bar — только рабочие панели */}
         <div className="w-12 bg-[#333333] flex flex-col items-center py-1 gap-0.5 border-r border-[#2d2d2d] shrink-0 hidden sm:flex">
           <button title="Explorer (Ctrl+Shift+E)" onClick={()=>setActiveView('explorer')} className={`w-12 h-12 flex items-center justify-center border-l-2 ${activeView==='explorer'?'border-[#007acc] text-white bg-[#252526]':'border-transparent text-slate-500 hover:text-white'}`}><Files size={18}/></button>
@@ -378,7 +380,7 @@ export default function VSCodeEditor(){
         </div>
 
         {/* Sidebar — меняется по activeView */}
-        <div className="w-[240px] bg-[#252526] flex flex-col border-r border-[#2d2d2d] shrink-0 hidden md:flex">
+        <div className={`w-[240px] bg-[#252526] flex-col border-r border-[#2d2d2d] shrink-0 ${filesOpen?'absolute inset-y-0 left-0 z-30 flex shadow-2xl':'hidden md:flex'}`}>
           {activeView==='explorer' && (
             <>
               <div className="h-8 flex items-center justify-between px-3 text-[11px] font-bold tracking-widest text-slate-400">
@@ -475,6 +477,7 @@ export default function VSCodeEditor(){
               <button onClick={downloadFile} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs hidden sm:flex items-center justify-center gap-1" title={t('vsc_download_title')}><Download size={11}/><span className="hidden lg:inline">{t('vsc_download')}</span></button>
               <button onClick={()=>{setShareUrl(''); setShowShare(v=>!v)}} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs hidden sm:flex items-center justify-center gap-1" title={t('vsc_share_title')}><Share2 size={11}/><span className="hidden lg:inline">{t('vsc_share')}</span></button>
               <button onClick={()=>setIsFull(v=>!v)} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs flex items-center justify-center gap-1" title={isFull?t('vsc_exit_full'):t('vsc_fullscreen')}><Maximize2 size={11}/><span className="hidden xl:inline">{isFull?t('vsc_min'):t('vsc_maximize')}</span></button>
+              <button onClick={()=>setFilesOpen(v=>!v)} className="h-9 w-9 rounded hover:bg-white/10 text-slate-300 text-xs md:hidden flex items-center justify-center" title="Файлы"><Files size={13}/></button>
               <button onClick={handleSave} disabled={saving} className="h-9 sm:h-6 px-2.5 rounded bg-[#0e639c] hover:bg-[#1177bb] text-white text-xs flex items-center gap-1"><Save size={10}/><span className="hidden sm:inline">{saving?'..':'Save'}</span></button>
               <button onClick={run} disabled={running} title={t('vsc_run_title')} className="h-9 sm:h-7 px-3 sm:px-4 rounded-lg bg-[#16825d] hover:bg-[#1a9c6e] text-white text-sm font-bold flex items-center gap-1.5 shadow"><Play size={12}/>{running?'...':'Run ▶'}</button>
             </div>

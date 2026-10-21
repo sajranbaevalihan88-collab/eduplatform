@@ -94,6 +94,7 @@ export default function PresentationEditor(){
   const bgImageRef=useRef<HTMLInputElement>(null)
   const pptxInputRef=useRef<HTMLInputElement>(null)
   const [importing,setImporting]=useState(false)
+  const [propsOpen,setPropsOpen]=useState(false)
   const canvasRef=useRef<HTMLDivElement>(null)
   const fullscreenRef=useRef<HTMLDivElement>(null)
   const [isEditFullscreen,setIsEditFullscreen]=useState(false)
@@ -247,19 +248,23 @@ export default function PresentationEditor(){
   },[])
   useEffect(()=>{
     if(!dragging) return
-    const mm=(e:MouseEvent)=> handleDragMove(e as any)
+    const mm=(e:PointerEvent)=> handleDragMove(e as any)
     const mu=()=> handleDragEnd()
-    window.addEventListener('mousemove', mm)
-    window.addEventListener('mouseup', mu)
-    return ()=>{ window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu)}
+    const mc=()=> handleDragEnd()
+    window.addEventListener('pointermove', mm)
+    window.addEventListener('pointerup', mu)
+    window.addEventListener('pointercancel', mc)
+    return ()=>{ window.removeEventListener('pointermove', mm); window.removeEventListener('pointerup', mu); window.removeEventListener('pointercancel', mc)}
   },[dragging, cur, zoom])
   useEffect(()=>{
     if(!resizing) return
-    const mm=(e:MouseEvent)=> handleResizeMove(e as any)
+    const mm=(e:PointerEvent)=> handleResizeMove(e as any)
     const mu=()=> handleResizeEnd()
-    window.addEventListener('mousemove', mm)
-    window.addEventListener('mouseup', mu)
-    return ()=>{ window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu)}
+    const mc=()=> handleResizeEnd()
+    window.addEventListener('pointermove', mm)
+    window.addEventListener('pointerup', mu)
+    window.addEventListener('pointercancel', mc)
+    return ()=>{ window.removeEventListener('pointermove', mm); window.removeEventListener('pointerup', mu); window.removeEventListener('pointercancel', mc)}
   },[resizing, cur, zoom, showGrid])
 
   const addSlide=(layout='blank')=>{
@@ -336,6 +341,52 @@ export default function PresentationEditor(){
     setSlides(sl=>sl.map((s,i)=>i!==active?s:{...s, content:{...s.content, blocks:s.content.blocks.filter(b=>b.id!==selectedBlock)}}))
     setSelectedBlock(null)
   }
+  const PropsContent=()=>(
+    <>
+      <div className="p-3 border-b">
+        <h3 className="font-bold text-sm flex items-center gap-1"><Wand2 size={14}/> Свойства</h3>
+        {selectedBlock ? <div className="text-xs text-slate-500">{curSelected?.type} • анимация: {curSelected?.animation||'нет'}</div> : <div className="text-xs text-slate-500">Выдели блок на слайде</div>}
+      </div>
+      <div className="flex-1 p-3 space-y-3 overflow-auto">
+        {selectedBlock && curSelected?.type==='text' && (
+          <div className="space-y-2">
+            <label className="text-xs font-semibold">Текст</label>
+            <textarea value={curSelected.content} onChange={e=>updateSelected({content:e.target.value})} rows={3} className="w-full px-2 py-1.5 rounded border text-sm"/>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-xs">Шрифт <select value={curSelected.style?.fontFamily||'Inter'} onChange={e=>updateSelectedStyle({fontFamily:e.target.value})} className="w-full px-1 py-1 rounded border text-xs">{FONTS.map(f=><option key={f} value={f}>{f}</option>)}</select></label>
+              <label className="text-xs">Размер <input type="range" min={10} max={54} value={curSelected.style?.fontSize||18} onChange={e=>updateSelectedStyle({fontSize:parseInt(e.target.value)})} className="w-full"/></label>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-xs">Цвет <input type="color" value={curSelected.style?.color||'#1e293b'} onChange={e=>updateSelectedStyle({color:e.target.value})} className="w-full h-9 rounded border"/></label>
+              <label className="text-xs">Маркер <input type="color" value={curSelected.style?.highlightColor||'#fef08a'} onChange={e=>updateSelectedStyle({highlight:true, highlightColor:e.target.value})} className="w-full h-9 rounded border"/></label>
+            </div>
+            <label className="text-xs flex items-center gap-1"><input type="checkbox" checked={!!curSelected.style?.shadow} onChange={e=>updateSelectedStyle({shadow:e.target.checked})} className="w-5 h-5"/> Тень</label>
+          </div>
+        )}
+        {selectedBlock && curSelected?.type==='shape' && (
+          <div className="space-y-2">
+            <label className="text-xs">Фигура <select value={curSelected.shape} onChange={e=>updateSelected({shape:e.target.value})} className="w-full px-2 py-1.5 rounded border text-sm">{SHAPES.map(s=><option key={s.k} value={s.k}>{s.label}</option>)}</select></label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-xs">Заливка <input type="color" value={curSelected.style?.fill||'#3B82F6'} onChange={e=>updateSelectedStyle({fill:e.target.value})} className="w-full h-9 rounded"/></label>
+              <label className="text-xs">Контур <input type="color" value={curSelected.style?.stroke||'#1e40af'} onChange={e=>updateSelectedStyle({stroke:e.target.value})} className="w-full h-9 rounded"/></label>
+            </div>
+          </div>
+        )}
+        {selectedBlock && curSelected?.type==='image' && (
+          <div className="space-y-2">
+            <label className="text-xs">Скругление <input type="range" min={0} max={24} value={curSelected.style?.borderRadius||8} onChange={e=>updateSelectedStyle({borderRadius:parseInt(e.target.value)})} className="w-full"/></label>
+          </div>
+        )}
+        <div className="pt-3 border-t">
+          <label className="text-xs font-semibold">Заметки к слайду</label>
+          <textarea value={cur.notes||''} onChange={e=>setSlides(sl=>sl.map((s,i)=>i===active?{...s, notes:e.target.value}:s))} placeholder="Подсказки докладчику..." rows={3} className="w-full mt-1 px-2 py-1.5 rounded border text-sm"/>
+        </div>
+      </div>
+      <div className="p-3 border-t space-y-2">
+        <button onClick={deleteSelected} disabled={!selectedBlock} className="w-full py-3 min-h-[44px] rounded-lg bg-red-50 text-red-600 border border-red-200 text-sm flex items-center justify-center gap-1 disabled:opacity-50"><Trash2 size={14}/> Удалить блок</button>
+      </div>
+    </>
+  )
 
   const handleImageUpload=(e:any)=>{
     const file=e.target.files?.[0]
@@ -691,10 +742,10 @@ export default function PresentationEditor(){
       </div>
 
       <div className="flex-1 flex min-h-0 bg-[#e9e9e9]">
-        <div className="w-[200px] bg-[#f5f5f5] border-r p-2 flex flex-col gap-2 overflow-auto">
+        <div className="w-[132px] sm:w-[200px] bg-[#f5f5f5] border-r p-2 flex flex-col gap-2 overflow-auto">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-bold tracking-widest text-slate-500">СЛАЙДЫ {slides.length}</span>
-            <button onClick={()=>addSlide('blank')} className="p-1 rounded bg-white border"><Plus size={14}/></button>
+            <button onClick={()=>addSlide('blank')} className="p-2 rounded bg-white border" aria-label="Новый слайд"><Plus size={14}/></button>
           </div>
           <div className="grid gap-2">
             {slides.map((s,i)=>{
@@ -726,7 +777,7 @@ export default function PresentationEditor(){
                     <span className="text-[11px] font-medium">{i+1} {s.transition!=='нет' && s.transition ? `• ${s.transition}` : ''}</span>
                     <span className="text-[10px] text-slate-500">{s.layout}</span>
                   </div>
-                  <button onClick={(e)=>{e.stopPropagation(); if(slides.length<=1){ alert('Должен остаться хотя бы один слайд'); return; } if(!confirm(`Удалить слайд ${i+1}?`)) return; pushHistory(); setSlides(s=>s.filter((_,idx)=>idx!==i)); setActive(prev=> i<=prev ? Math.max(0, prev-1) : prev); if(active===i) setSelectedBlock(null)}} disabled={slides.length<=1} title={slides.length<=1? 'Минимум один слайд':'Удалить слайд'} className={`absolute top-1 right-1 w-6 h-6 rounded-full bg-white border shadow flex items-center justify-center ${slides.length<=1? 'opacity-30 cursor-not-allowed' : 'opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:border-red-200 hover:text-red-600'} transition-opacity`}><Trash2 size={12}/></button>
+                  <button onClick={(e)=>{e.stopPropagation(); if(slides.length<=1){ alert('Должен остаться хотя бы один слайд'); return; } if(!confirm(`Удалить слайд ${i+1}?`)) return; pushHistory(); setSlides(s=>s.filter((_,idx)=>idx!==i)); setActive(prev=> i<=prev ? Math.max(0, prev-1) : prev); if(active===i) setSelectedBlock(null)}} disabled={slides.length<=1} title={slides.length<=1? 'Минимум один слайд':'Удалить слайд'} className={`absolute top-0.5 right-0.5 w-9 h-9 sm:w-6 sm:h-6 rounded-full bg-white border shadow flex items-center justify-center ${slides.length<=1? 'opacity-30 cursor-not-allowed' : 'opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:border-red-200 hover:text-red-600'} transition-opacity`}><Trash2 size={14}/></button>
                 </div>
               )
             })}
@@ -774,11 +825,11 @@ export default function PresentationEditor(){
                     if(b.type==='text'){
                       const edParas = (b.paragraphs && b.paragraphs.length) || 1
                       return (
-                        <FitBox key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e:any)=>handleDragStart(e,b.id)} boxStyle={{...common, height: s.h!=null? `${s.h}%`:'auto', overflow:'visible', display:'block', padding: needCard ? '8px 10px' : s.background?'6px 8px': '2px 7px', background: needCard ? '#ffffff' : s.background&& !['#FFE66D','#FF8C69','#FFE600'].includes(s.background) ? s.background : 'transparent', borderRadius: needCard ? '8px' : s.background?'6px':0, boxShadow: needCard ? '0 2px 10px rgba(0,0,0,0.06)' as any : undefined, border: needCard ? '1px solid #f1f5f9' as any : (s.stroke ? `${s.strokeWidth||1}px ${s.dash||'solid'} ${s.stroke}` as any : undefined), cursor:'move'}} innerStyle={anchoredInner(s)} hasH={s.h!=null} paras={edParas} className={`group p-1 border-2 ${selCls} rounded-lg ${animCls}`}
+                        <FitBox key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e:any)=>handleDragStart(e,b.id)} onPointerDown={(e:any)=>handleDragStart(e,b.id)} boxStyle={{...common, height: s.h!=null? `${s.h}%`:'auto', overflow:'visible', display:'block', padding: needCard ? '8px 10px' : s.background?'6px 8px': '2px 7px', background: needCard ? '#ffffff' : s.background&& !['#FFE66D','#FF8C69','#FFE600'].includes(s.background) ? s.background : 'transparent', borderRadius: needCard ? '8px' : s.background?'6px':0, boxShadow: needCard ? '0 2px 10px rgba(0,0,0,0.06)' as any : undefined, border: needCard ? '1px solid #f1f5f9' as any : (s.stroke ? `${s.strokeWidth||1}px ${s.dash||'solid'} ${s.stroke}` as any : undefined), cursor:'move', touchAction:'none'}} innerStyle={anchoredInner(s)} hasH={s.h!=null} paras={edParas} className={`group p-1 border-2 ${selCls} rounded-lg ${animCls}`}
                           overlay={<>
                           <button onClick={(e)=>{e.stopPropagation(); setSelectedBlock(b.id); deleteSelected()}} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100"><Trash2 size={9}/></button>
                           {isSelected && ['nw','n','ne','e','se','s','sw','w'].map((h:any)=>(
-                            <div key={h} onMouseDown={(e)=>handleResizeStart(e,b.id,h)} className="absolute w-2.5 h-2.5 bg-white border border-[#d24726] rounded-sm" style={{
+                            <div key={h} onMouseDown={(e)=>handleResizeStart(e,b.id,h)} onPointerDown={(e:any)=>handleResizeStart(e,b.id,h)} className="absolute w-9 h-9 sm:w-2.5 sm:h-2.5 bg-white border border-[#d24726] rounded-sm touch-none" style={{
                               cursor: h==='nw'||h==='se' ? 'nwse-resize' : h==='ne'||h==='sw' ? 'nesw-resize' : h==='n'||h==='s' ? 'ns-resize' : 'ew-resize',
                               left: h.includes('w') ? -5 : h.includes('e') ? '100%' : '50%',
                               top: h.includes('n') ? -5 : h.includes('s') ? '100%' : '50%',
@@ -798,11 +849,11 @@ export default function PresentationEditor(){
                     }
                     if(b.type==='image'){
                       return (
-                        <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} style={{...common, cursor:'move'}} className={`group border-2 ${selCls} rounded-lg overflow-hidden bg-transparent ${animCls}`}>
+                        <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} onPointerDown={(e:any)=>handleDragStart(e,b.id)} style={{...common, cursor:'move', touchAction:'none'}} className={`group border-2 ${selCls} rounded-lg overflow-hidden bg-transparent ${animCls}`}>
                           {b.unrenderable ? <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 border border-dashed border-slate-300 text-slate-500 text-xs p-2 text-center">{b.brokenLink ? '🖼 Картинка повреждена в исходном файле' : <>🖼 Картинка .{b.origExt||'emf'} не поддерживается браузером</>}</div> : <img onError={imgMissing} src={resolveSrc(b.src)} style={{width:'100%', height:'100%', objectFit:(b.style?.objectFit)||'contain'}} alt=""/>}
                           <button onClick={(e)=>{e.stopPropagation(); deleteSelected()}} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-600 text-white hidden group-hover:flex items-center justify-center"><Trash2 size={9}/></button>
                           {isSelected && ['nw','n','ne','e','se','s','sw','w'].map((h:any)=>(
-                            <div key={h} onMouseDown={(e)=>handleResizeStart(e,b.id,h)} className="absolute w-2.5 h-2.5 bg-white border border-[#d24726] rounded-sm" style={{
+                            <div key={h} onMouseDown={(e)=>handleResizeStart(e,b.id,h)} onPointerDown={(e:any)=>handleResizeStart(e,b.id,h)} className="absolute w-9 h-9 sm:w-2.5 sm:h-2.5 bg-white border border-[#d24726] rounded-sm touch-none" style={{
                               cursor: h==='nw'||h==='se' ? 'nwse-resize' : h==='ne'||h==='sw' ? 'nesw-resize' : h==='n'||h==='s' ? 'ns-resize' : 'ew-resize',
                               left: h.includes('w') ? -5 : h.includes('e') ? '100%' : '50%',
                               top: h.includes('n') ? -5 : h.includes('s') ? '100%' : '50%',
@@ -827,10 +878,10 @@ export default function PresentationEditor(){
                       else if(b.shape==='parallelogram') shapeStyle.transform=(shapeStyle.transform? shapeStyle.transform+' ' : '')+'skew(-12deg)'
                       else if(b.shape==='trapezoid') shapeStyle.clipPath='polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)'
                       else if(b.shape==='rounded') shapeStyle.borderRadius='12px'
-                      return <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} style={{...common, ...shapeStyle}} className={`group flex items-center justify-center border-2 ${selCls} ${animCls}`}>
+                      return <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} onPointerDown={(e:any)=>handleDragStart(e,b.id)} style={{...common, ...shapeStyle}} className={`group flex items-center justify-center border-2 ${selCls} ${animCls}`}>
                         {s.svgPath ? (<SvgShape st={s} gid={`ed-canvas-${b.id}`} svgStyle={{pointerEvents:'none'}}/>) : null}
                         {isSelected && ['nw','n','ne','e','se','s','sw','w'].map((h:any)=>(
-                          <div key={h} onMouseDown={(e)=>handleResizeStart(e,b.id,h)} className="absolute w-2.5 h-2.5 bg-white border border-[#d24726] rounded-sm" style={{
+                          <div key={h} onMouseDown={(e)=>handleResizeStart(e,b.id,h)} onPointerDown={(e:any)=>handleResizeStart(e,b.id,h)} className="absolute w-9 h-9 sm:w-2.5 sm:h-2.5 bg-white border border-[#d24726] rounded-sm touch-none" style={{
                             cursor: h==='nw'||h==='se' ? 'nwse-resize' : h==='ne'||h==='sw' ? 'nesw-resize' : h==='n'||h==='s' ? 'ns-resize' : 'ew-resize',
                             left: h.includes('w') ? -5 : h.includes('e') ? '100%' : '50%',
                             top: h.includes('n') ? -5 : h.includes('s') ? '100%' : '50%',
@@ -849,7 +900,7 @@ export default function PresentationEditor(){
                         setSlides(sl=>sl.map((s,i)=> i!==active ? s : {...s, content:{...s.content, blocks:s.content.blocks.map(bb=> bb.id===b.id ? {...bb, table:{rows:newRows, cols:newCols, cells:newCells}} : bb)}}))
                       }
                       return (
-                        <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} style={{...common, borderRadius:8, overflow:'hidden', border:'1px solid #e2e8f0', cursor:'move'}} className={`group border-2 ${selCls} ${getAnimationClass(b.animation||'нет')}`}>
+                        <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} onPointerDown={(e:any)=>handleDragStart(e,b.id)} style={{...common, borderRadius:8, overflow:'hidden', border:'1px solid #e2e8f0', cursor:'move', touchAction:'none'}} className={`group border-2 ${selCls} ${getAnimationClass(b.animation||'нет')}`}>
                           <div className={`grid gap-px w-full h-full ${((cells||[]).some((row:any)=>row.some((c:any)=>c?.style?.background)))?'bg-slate-200':'bg-transparent'}`} style={{gridTemplateColumns:`repeat(${cols},1fr)`, gridTemplateRows:`repeat(${rows},1fr)`}}>
                             {(cells||[]).flatMap((row:any[],ri:number)=>row.filter((cell:any)=>!cell?.merged).map((cell:any,ki:number)=>{
                               const k=`${ri}-${ki}`
@@ -857,16 +908,16 @@ export default function PresentationEditor(){
                             }))}
                           </div>
                           <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 hidden group-hover:flex gap-1 bg-white border rounded-full shadow px-1 py-1">
-                            <button onMouseDown={e=>e.stopPropagation()} onClick={(e)=>{e.stopPropagation(); const nr=rows+1; const newCells=cells? [...cells, Array.from({length:cols},()=>({text:'',style:{}}))] : Array.from({length:nr},()=>Array.from({length:cols},()=>({text:'',style:{}}))); setSlides(sl=>sl.map((s,i)=> i!==active? s: {...s, content:{...s.content, blocks:s.content.blocks.map(bb=> bb.id===b.id? {...bb, table:{rows:nr, cols, cells:newCells}}:bb)}}))}} className="px-2 py-0.5 text-xs bg-slate-100 rounded-full hover:bg-slate-200">+ Строка</button>
-                            <button onMouseDown={e=>e.stopPropagation()} onClick={(e)=>{e.stopPropagation(); const nc=cols+1; const newCells=(cells||Array.from({length:rows},()=>Array.from({length:cols},()=>({text:'',style:{}})))).map((row:any)=>[...row, {text:'',style:{}}]); setSlides(sl=>sl.map((s,i)=> i!==active? s: {...s, content:{...s.content, blocks:s.content.blocks.map(bb=> bb.id===b.id? {...bb, table:{rows, cols:nc, cells:newCells}}:bb)}}))}} className="px-2 py-0.5 text-xs bg-slate-100 rounded-full hover:bg-slate-200">+ Столбец</button>
-                            <button onMouseDown={e=>e.stopPropagation()} onClick={(e)=>{e.stopPropagation(); if(rows<=1) return; const newCells=cells?.slice(0,rows-1); setSlides(sl=>sl.map((s,i)=> i!==active? s: {...s, content:{...s.content, blocks:s.content.blocks.map(bb=> bb.id===b.id? {...bb, table:{rows:rows-1, cols, cells:newCells}}:bb)}}))}} className="px-2 py-0.5 text-xs bg-red-50 text-red-600 rounded-full">- Строка</button>
+                            <button onMouseDown={e=>e.stopPropagation()} onClick={(e)=>{e.stopPropagation(); const nr=rows+1; const newCells=cells? [...cells, Array.from({length:cols},()=>({text:'',style:{}}))] : Array.from({length:nr},()=>Array.from({length:cols},()=>({text:'',style:{}}))); setSlides(sl=>sl.map((s,i)=> i!==active? s: {...s, content:{...s.content, blocks:s.content.blocks.map(bb=> bb.id===b.id? {...bb, table:{rows:nr, cols, cells:newCells}}:bb)}}))}} className="px-3 py-2 text-sm bg-slate-100 rounded-full hover:bg-slate-200 touch-none">+ Строка</button>
+                            <button onMouseDown={e=>e.stopPropagation()} onClick={(e)=>{e.stopPropagation(); const nc=cols+1; const newCells=(cells||Array.from({length:rows},()=>Array.from({length:cols},()=>({text:'',style:{}})))).map((row:any)=>[...row, {text:'',style:{}}]); setSlides(sl=>sl.map((s,i)=> i!==active? s: {...s, content:{...s.content, blocks:s.content.blocks.map(bb=> bb.id===b.id? {...bb, table:{rows, cols:nc, cells:newCells}}:bb)}}))}} className="px-3 py-2 text-sm bg-slate-100 rounded-full hover:bg-slate-200 touch-none">+ Столбец</button>
+                            <button onMouseDown={e=>e.stopPropagation()} onClick={(e)=>{e.stopPropagation(); if(rows<=1) return; const newCells=cells?.slice(0,rows-1); setSlides(sl=>sl.map((s,i)=> i!==active? s: {...s, content:{...s.content, blocks:s.content.blocks.map(bb=> bb.id===b.id? {...bb, table:{rows:rows-1, cols, cells:newCells}}:bb)}}))}} className="px-3 py-2 text-sm bg-red-50 text-red-600 rounded-full touch-none">- Строка</button>
                           </div>
                         </div>
                       )
                     }
                     if(b.type==='chart'){
                       const chartType=b.style?.chartType||'bar'
-                      return <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} style={{...common, cursor:'move'}} className={`group border-2 ${selCls} rounded-lg bg-white flex flex-col items-center justify-center p-2 overflow-hidden ${getAnimationClass(b.animation||'нет')}`}>
+                      return <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} onPointerDown={(e:any)=>handleDragStart(e,b.id)} style={{...common, cursor:'move', touchAction:'none'}} className={`group border-2 ${selCls} rounded-lg bg-white flex flex-col items-center justify-center p-2 overflow-hidden ${getAnimationClass(b.animation||'нет')}`}>
                         <div className="flex items-center gap-1 text-xs font-bold text-blue-700"><BarChart3 size={14}/> {chartType}</div>
                         <div className="mt-1 w-full flex-1 flex items-end justify-center gap-1 min-h-[60px]">
                           {chartType==='pie' ? (
@@ -887,10 +938,10 @@ export default function PresentationEditor(){
                             setSlides(sl=>sl.map((s,i)=> i!==active? s: {...s, content:{...s.content, blocks:s.content.blocks.map(bb=> bb.id===b.id? {...bb, chartData:{labels: vals.map((_,i)=>'A'+(i+1)), values: vals}}:bb)}}))
                           }} onMouseDown={e=>e.stopPropagation()} onClick={e=>e.stopPropagation()} className="w-full mt-1 px-2 py-1 rounded border text-xs" placeholder="40,70,50,80,60"/>
                         </div>
-                        {isSelected && ['nw','n','ne','e','se','s','sw','w'].map((h:any)=>(<div key={h} onMouseDown={(e)=>handleResizeStart(e,b.id,h)} className="absolute w-2.5 h-2.5 bg-white border border-[#d24726] rounded-sm" style={{cursor: h==='nw'||h==='se' ? 'nwse-resize' : h==='ne'||h==='sw' ? 'nesw-resize' : h==='n'||h==='s' ? 'ns-resize' : 'ew-resize', left: h.includes('w') ? -5 : h.includes('e') ? '100%' : '50%', top: h.includes('n') ? -5 : h.includes('s') ? '100%' : '50%', transform: h==='n'||h==='s' ? 'translateX(-50%)' : h==='e'||h==='w' ? 'translateY(-50%)' : h==='nw' ? 'translate(0,0)' : h==='ne' ? 'translate(-100%,0)' : h==='sw' ? 'translate(0,-100%)' : 'translate(-100%,-100%)'}}/>))}
+                        {isSelected && ['nw','n','ne','e','se','s','sw','w'].map((h:any)=>(<div key={h} onMouseDown={(e)=>handleResizeStart(e,b.id,h)} onPointerDown={(e:any)=>handleResizeStart(e,b.id,h)} className="absolute w-9 h-9 sm:w-2.5 sm:h-2.5 bg-white border border-[#d24726] rounded-sm touch-none" style={{cursor: h==='nw'||h==='se' ? 'nwse-resize' : h==='ne'||h==='sw' ? 'nesw-resize' : h==='n'||h==='s' ? 'ns-resize' : 'ew-resize', left: h.includes('w') ? -5 : h.includes('e') ? '100%' : '50%', top: h.includes('n') ? -5 : h.includes('s') ? '100%' : '50%', transform: h==='n'||h==='s' ? 'translateX(-50%)' : h==='e'||h==='w' ? 'translateY(-50%)' : h==='nw' ? 'translate(0,0)' : h==='ne' ? 'translate(-100%,0)' : h==='sw' ? 'translate(0,-100%)' : 'translate(-100%,-100%)'}}/>))}
                       </div>
                     }
-                    return <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} style={{...common, cursor:'move'}} className={`group border-2 ${selCls} p-1`}>{b.content||''}</div>
+                    return <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} onPointerDown={(e:any)=>handleDragStart(e,b.id)} style={{...common, cursor:'move', touchAction:'none'}} className={`group border-2 ${selCls} p-1`}>{b.content||''}</div>
                   })})()}
                   {cur.content.blocks.length===0 && <div className="absolute inset-0 flex items-center justify-center text-slate-400 border-2 border-dashed m-4 rounded-xl">Пустой слайд</div>}
                 </div>
@@ -954,7 +1005,7 @@ export default function PresentationEditor(){
                     )}
                     {b.type==='video' && <div className="aspect-video rounded-xl bg-black flex items-center justify-center text-white text-sm">🎥 {b.src||'Видео'}</div>}
                     {b.type==='icon' && <div className="text-4xl text-center" style={{fontSize:b.style?.fontSize||32}}>{b.content}</div>}
-                    <button onClick={(e)=>{e.stopPropagation(); deleteSelected()}} className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100"><Trash2 size={10}/></button>
+                     <button onClick={(e)=>{e.stopPropagation(); deleteSelected()}} className="absolute -top-2 -right-2 w-9 h-9 sm:w-6 sm:h-6 rounded-full bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100"><Trash2 size={14}/></button>
                   </div>
                 ))}
                 {cur.content.blocks.length===0 && <div className="flex-1 flex items-center justify-center text-slate-400 border-2 border-dashed rounded-xl p-12">Пустой слайд — добавь блок из ленты Вставка</div>}
@@ -967,57 +1018,31 @@ export default function PresentationEditor(){
           )}
 
           <div className="mt-3 flex gap-2">
-            <button onClick={()=>setActive(a=>Math.max(0,a-1))} disabled={active===0} className="px-3 py-1.5 rounded-lg bg-white border text-sm disabled:opacity-50">‹ Назад</button>
-            <button onClick={()=>setActive(a=>Math.min(slides.length-1,a+1))} disabled={active===slides.length-1} className="px-3 py-1.5 rounded-lg bg-white border text-sm disabled:opacity-50">Вперед ›</button>
-            <button onClick={()=>setSlideshow(true)} className="ml-auto px-4 py-1.5 rounded-lg bg-[#d24726] text-white text-sm flex items-center gap-1"><Maximize2 size={14}/> Слайд-шоу</button>
+            <button onClick={()=>setActive(a=>Math.max(0,a-1))} disabled={active===0} className="px-3 py-2.5 min-h-[44px] rounded-lg bg-white border text-sm disabled:opacity-50">‹ Назад</button>
+            <button onClick={()=>setActive(a=>Math.min(slides.length-1,a+1))} disabled={active===slides.length-1} className="px-3 py-2.5 min-h-[44px] rounded-lg bg-white border text-sm disabled:opacity-50">Вперед ›</button>
+            <button onClick={()=>setSlideshow(true)} className="ml-auto px-4 py-2.5 min-h-[44px] rounded-lg bg-[#d24726] text-white text-sm flex items-center gap-1"><Maximize2 size={16}/> Слайд-шоу</button>
+            <button onClick={()=>setPropsOpen(true)} className="xl:hidden px-4 py-2.5 min-h-[44px] rounded-lg bg-slate-900 text-white text-sm flex items-center gap-1" data-testid="pe-props-open"><Wand2 size={16}/> Свойства</button>
           </div>
         </div>
 
         <div className="w-[300px] bg-white border-l hidden xl:flex flex-col">
-          <div className="p-3 border-b">
-            <h3 className="font-bold text-sm flex items-center gap-1"><Wand2 size={14}/> Свойства</h3>
-            {selectedBlock ? <div className="text-xs text-slate-500">{curSelected?.type} • анимация: {curSelected?.animation||'нет'}</div> : <div className="text-xs text-slate-500">Выдели блок на слайде</div>}
-          </div>
-          <div className="flex-1 p-3 space-y-3 overflow-auto">
-            {selectedBlock && curSelected?.type==='text' && (
-              <div className="space-y-2">
-                <label className="text-xs font-semibold">Текст</label>
-                <textarea value={curSelected.content} onChange={e=>updateSelected({content:e.target.value})} rows={3} className="w-full px-2 py-1.5 rounded border text-sm"/>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="text-xs">Шрифт <select value={curSelected.style?.fontFamily||'Inter'} onChange={e=>updateSelectedStyle({fontFamily:e.target.value})} className="w-full px-1 py-1 rounded border text-xs">{FONTS.map(f=><option key={f} value={f}>{f}</option>)}</select></label>
-                  <label className="text-xs">Размер <input type="range" min={10} max={54} value={curSelected.style?.fontSize||18} onChange={e=>updateSelectedStyle({fontSize:parseInt(e.target.value)})} className="w-full"/></label>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="text-xs">Цвет <input type="color" value={curSelected.style?.color||'#1e293b'} onChange={e=>updateSelectedStyle({color:e.target.value})} className="w-full h-7 rounded border"/></label>
-                  <label className="text-xs">Маркер <input type="color" value={curSelected.style?.highlightColor||'#fef08a'} onChange={e=>updateSelectedStyle({highlight:true, highlightColor:e.target.value})} className="w-full h-7 rounded border"/></label>
-                </div>
-                <label className="text-xs flex items-center gap-1"><input type="checkbox" checked={!!curSelected.style?.shadow} onChange={e=>updateSelectedStyle({shadow:e.target.checked})}/> Тень</label>
-              </div>
-            )}
-            {selectedBlock && curSelected?.type==='shape' && (
-              <div className="space-y-2">
-                <label className="text-xs">Фигура <select value={curSelected.shape} onChange={e=>updateSelected({shape:e.target.value})} className="w-full px-2 py-1.5 rounded border text-sm">{SHAPES.map(s=><option key={s.k} value={s.k}>{s.label}</option>)}</select></label>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="text-xs">Заливка <input type="color" value={curSelected.style?.fill||'#3B82F6'} onChange={e=>updateSelectedStyle({fill:e.target.value})} className="w-full h-7 rounded"/></label>
-                  <label className="text-xs">Контур <input type="color" value={curSelected.style?.stroke||'#1e40af'} onChange={e=>updateSelectedStyle({stroke:e.target.value})} className="w-full h-7 rounded"/></label>
-                </div>
-              </div>
-            )}
-            {selectedBlock && curSelected?.type==='image' && (
-              <div className="space-y-2">
-                <label className="text-xs">Скругление <input type="range" min={0} max={24} value={curSelected.style?.borderRadius||8} onChange={e=>updateSelectedStyle({borderRadius:parseInt(e.target.value)})} className="w-full"/></label>
-              </div>
-            )}
-            <div className="pt-3 border-t">
-              <label className="text-xs font-semibold">Заметки к слайду</label>
-              <textarea value={cur.notes||''} onChange={e=>setSlides(sl=>sl.map((s,i)=>i===active?{...s, notes:e.target.value}:s))} placeholder="Подсказки докладчику..." rows={3} className="w-full mt-1 px-2 py-1.5 rounded border text-sm"/>
-            </div>
-          </div>
-          <div className="p-3 border-t space-y-2">
-            <button onClick={deleteSelected} disabled={!selectedBlock} className="w-full py-2 rounded-lg bg-red-50 text-red-600 border border-red-200 text-sm flex items-center justify-center gap-1 disabled:opacity-50"><Trash2 size={14}/> Удалить блок</button>
-          </div>
+          <PropsContent/>
         </div>
       </div>
+      {propsOpen && (
+        <div className="fixed inset-0 z-50 xl:hidden" data-testid="pe-props-sheet">
+          <div className="absolute inset-0 bg-black/40" onClick={()=>setPropsOpen(false)} />
+          <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl animate-enterUp flex flex-col max-h-[62dvh]">
+            <div className="p-3 border-b dark:border-slate-700 flex items-center justify-between shrink-0">
+              <span className="font-bold text-sm dark:text-white flex items-center gap-1"><Wand2 size={14}/> Свойства</span>
+              <button onClick={()=>setPropsOpen(false)} aria-label="Скрыть свойства" className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-700 dark:text-white text-lg font-bold">✕</button>
+            </div>
+            <div className="overflow-y-auto modal-safe dark:text-white">
+              <PropsContent/>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
