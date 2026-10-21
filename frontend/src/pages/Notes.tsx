@@ -261,7 +261,7 @@ export default function Notes() {
         {!online && <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700">{t('notes_offline')}</span>}
         <button
           onClick={() => speak(t('notes_speak_intro'))}
-          className="ml-auto p-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white"
+          className="ml-auto p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white flex items-center justify-center"
           title={t('notes_speak_section')}
           aria-label={t('notes_speak_section_aria')}
         ><Volume2 size={16} /></button>
@@ -307,10 +307,10 @@ export default function Notes() {
                 className="w-14 px-2 py-2 rounded-xl border dark:bg-slate-700 dark:text-white text-center" />
             </label>
           </fieldset>
-          <div className="flex gap-1" role="group" aria-label={t('notes_preset_aria')}>
+          <div className="flex gap-2" role="group" aria-label={t('notes_preset_aria')}>
             {[{ l: '1:00', s: 60 }, { l: '5:00', s: 300 }, { l: '15:00', s: 900 }, { l: '25:00', s: 1500 }].map(p => (
               <button key={p.l} onClick={() => setPreset(p.s)}
-                className={`px-2 py-1 rounded-lg text-xs font-bold ${timerTotal === p.s ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 dark:text-white'}`}>{p.l}</button>
+                className={`px-3 py-2 min-h-[36px] min-w-[48px] rounded-lg text-xs font-bold ${timerTotal === p.s ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 dark:text-white'}`}>{p.l}</button>
             ))}
           </div>
           <button onClick={create} className="ml-auto px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-600 text-white font-semibold flex items-center gap-2">
@@ -375,7 +375,7 @@ export default function Notes() {
             <div className="flex items-start gap-3">
               <button onClick={() => toggleDone(n)}
                 aria-label={n.done ? `${t('notes_back_note')} ${n.title}` : `${t('notes_done_mark')} ${n.title}`}
-                className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${n.done ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${n.done ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-700'}`}>
                 {n.done && <Check size={14} />}
               </button>
               <div className="flex-1 min-w-0">
@@ -401,14 +401,14 @@ export default function Notes() {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 {(n.timer_sec || 0) > 0 && (
                   n._running
-                    ? <button onClick={() => stopTimer(n)} className="p-2 rounded-xl bg-amber-100 text-amber-700" title={t('notes_pause_title')} aria-label={`${t('notes_pause_aria')} ${n.title}`}><Pause size={16} /></button>
-                    : <button onClick={() => startTimer(n)} className="p-2 rounded-xl bg-emerald-100 text-emerald-700" title={t('notes_start_title')} aria-label={`${t('notes_start_aria')} ${n.title}`}><Play size={16} /></button>
+                    ? <button onClick={() => stopTimer(n)} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center" title={t('notes_pause_title')} aria-label={`${t('notes_pause_aria')} ${n.title}`}><Pause size={16} /></button>
+                    : <button onClick={() => startTimer(n)} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center" title={t('notes_start_title')} aria-label={`${t('notes_start_aria')} ${n.title}`}><Play size={16} /></button>
                 )}
-                <button onClick={() => n.text && speak(`${n.title}. ${n.text}`)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-700 dark:text-white" title={t('notes_speak_all')} aria-label={`${t('notes_speak_note')} ${n.title}`}><Volume2 size={16} /></button>
-                <button onClick={() => remove(n.id)} className="p-2 rounded-xl bg-red-50 text-red-600" title={t('delete')} aria-label={`${t('notes_delete_aria')} ${n.title}`}><Trash2 size={16} /></button>
+                <button onClick={() => n.text && speak(`${n.title}. ${n.text}`)} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-700 dark:text-white flex items-center justify-center" title={t('notes_speak_all')} aria-label={`${t('notes_speak_note')} ${n.title}`}><Volume2 size={16} /></button>
+                <button onClick={() => remove(n.id)} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-red-50 text-red-600 flex items-center justify-center" title={t('delete')} aria-label={`${t('notes_delete_aria')} ${n.title}`}><Trash2 size={16} /></button>
               </div>
             </div>
           </article>

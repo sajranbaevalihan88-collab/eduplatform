@@ -351,7 +351,7 @@ export default function Sprint() {
       )}
 
       <div className="bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-5 sm:p-8 relative"
-        onClick={() => inputRef.current?.focus()}>
+        onClick={() => { if (started) inputRef.current?.focus() }}>
         {loading ? (
           <div className="text-center text-slate-400 py-10">{t('sprint_preparing')}</div>
         ) : (

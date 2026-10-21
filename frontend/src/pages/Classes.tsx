@@ -52,14 +52,14 @@ export default function Classes(){
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h1 className="text-2xl font-bold flex items-center gap-2 dark:text-white"><GraduationCap/>{t('classes')}</h1>
-        <div className="flex gap-2">
-          <div className="flex rounded-xl border dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900">
-            <input value={code} onChange={e=>setCode(e.target.value.toUpperCase())} placeholder={t('cls_code_ph')} className="px-3 py-2 text-sm uppercase font-mono w-32 outline-none bg-transparent dark:text-white dark:placeholder-slate-500"/>
-            <button onClick={join} className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold">{t('cls_join')}</button>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+          <div className="flex rounded-xl border dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900 w-full sm:w-auto">
+            <input value={code} onChange={e=>setCode(e.target.value.toUpperCase())} inputMode="text" autoCapitalize="characters" placeholder={t('cls_code_ph')} className="flex-1 min-w-0 px-3 py-3 sm:py-2 text-sm uppercase font-mono outline-none bg-transparent dark:text-white dark:placeholder-slate-500"/>
+            <button onClick={join} className="px-5 py-3 sm:py-2 bg-emerald-600 text-white text-sm font-semibold flex items-center justify-center min-h-[44px]">{t('cls_join')}</button>
           </div>
-          {teach && <button onClick={()=>setCreating(v=>!v)} className="px-4 py-2 rounded-xl bg-blue-700 text-white text-sm font-semibold flex items-center gap-1"><Plus size={16}/>{t('cls_new')}</button>}
+          {teach && <button onClick={()=>setCreating(v=>!v)} className="w-full sm:w-auto px-4 py-3 sm:py-2 sm:min-h-[44px] rounded-xl bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-1"><Plus size={16}/>{t('cls_new')}</button>}
         </div>
       </div>
 
@@ -68,7 +68,7 @@ export default function Classes(){
           <input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder={t('cls_title_ph')} className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-blue-400"/>
           <textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder={t('cls_desc_ph')} rows={2} className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-blue-400"/>
           <div className="flex items-center gap-2">
-            {COLORS.map(c=><button key={c} onClick={()=>setForm({...form,color:c})} className={`w-8 h-8 rounded-full ${form.color===c?'ring-2 ring-offset-2 ring-slate-400':''}`} style={{background:c}}/>)}
+            {COLORS.map(c=><button key={c} onClick={()=>setForm({...form,color:c})} className={`w-9 h-9 rounded-full ${form.color===c?'ring-2 ring-offset-2 ring-slate-400':''}`} style={{background:c}}/>)}
             <button onClick={create} className="ml-auto px-5 py-2 rounded-xl bg-blue-700 text-white font-semibold">{t('create')}</button>
           </div>
         </div>
@@ -92,10 +92,10 @@ export default function Classes(){
                 </button>
               )}
               <div className="mt-3 flex gap-2">
-                <Link to={`/classes/${r.id}`} className="flex-1 text-center px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm font-semibold">{t('open')}</Link>
+                <Link to={`/classes/${r.id}`} className="flex-1 text-center px-3 py-2.5 min-h-[44px] rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm font-semibold flex items-center justify-center">{t('open')}</Link>
                 {String(r.owner)===String(meId)
-                  ? <button onClick={()=>remove(r.id)} className="px-3 py-2 rounded-xl bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm">✕</button>
-                  : <button onClick={()=>leave(r.id)} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 text-sm flex items-center gap-1"><LogOut size={14}/></button>}
+                  ? <button onClick={()=>remove(r.id)} className="px-3 py-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm" aria-label={t('delete')}>✕</button>
+                  : <button onClick={()=>leave(r.id)} className="px-3 py-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 text-sm flex items-center justify-center gap-1" aria-label={t('cls_leave')}><LogOut size={14}/></button>}
               </div>
             </div>
           </div>

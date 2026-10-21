@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { Camera, Trash2, RotateCcw, Box, Circle, Cylinder, Triangle, Square } from 'lucide-react'
+import { Camera, Trash2, RotateCcw, Box, Circle, Cylinder, Triangle, Square, Shapes, X } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 import { compressDataUrl } from '../board/legacy'
 
@@ -17,6 +17,7 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
   const itemsRef = useRef<SItem[]>([])
   const idRef = useRef(1)
   const [sel, setSel] = useState<number | null>(null)
+  const [hudOpen, setHudOpen] = useState(true)
   const [type, setType] = useState<ShapeType>('cube')
   const [color, setColor] = useState('#3B82F6')
   const [size, setSize] = useState(1)
@@ -334,29 +335,40 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
   return (
     <div className="relative w-full h-full select-none">
       <div ref={hostRef} className="w-full h-full" />
+      {!hudOpen && (
+        <button onClick={() => setHudOpen(true)} title={t('bd3_panel_title')} aria-label={t('bd3_panel_title')}
+          className="absolute top-2 left-2 z-10 w-12 h-12 rounded-2xl bg-white/95 dark:bg-slate-800/95 backdrop-blur border shadow-lg flex items-center justify-center">
+          <Shapes size={22} className="text-blue-600" />
+        </button>
+      )}
+      {hudOpen && (
       <div className="absolute top-2 left-2 z-10 flex flex-col gap-2 bg-white/95 dark:bg-slate-800/95 backdrop-blur rounded-2xl border p-2 shadow-lg max-w-[210px]">
-        <div className="text-[11px] font-bold text-slate-500 px-1">{t('bd3_panel_title')}</div>
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] font-bold text-slate-500 px-1">{t('bd3_panel_title')}</div>
+          <button onClick={() => setHudOpen(false)} title={t('a11y_close')} aria-label={t('a11y_close')} className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"><X size={16} /></button>
+        </div>
         <div className="grid grid-cols-5 gap-1">
           {shapeBtns.map(([ty, label, Icon]) => (
-            <button key={ty} onClick={() => setType(ty)} title={label} className={`h-10 rounded-xl border flex items-center justify-center ${type === ty ? 'bg-blue-600 text-white border-blue-600' : 'bg-white hover:bg-slate-50'}`}><Icon size={17} /></button>
+            <button key={ty} onClick={() => setType(ty)} title={label} aria-label={label} className={`h-11 rounded-xl border flex items-center justify-center ${type === ty ? 'bg-blue-600 text-white border-blue-600' : 'bg-white hover:bg-slate-50'}`}><Icon size={18} /></button>
           ))}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           {COLORS.map(c => (
-            <button key={c} onClick={() => setColor(c)} className={`w-6 h-6 rounded-full border ${color === c ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`} style={{ background: c }} />
+            <button key={c} onClick={() => setColor(c)} className={`w-7 h-7 rounded-full border ${color === c ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`} style={{ background: c }} />
           ))}
-          <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-7 h-7 rounded-lg border" title={t('bd3_color')} />
+          <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-9 h-9 rounded-lg border" title={t('bd3_color')} />
         </div>
         <label className="flex items-center gap-2 px-1 text-xs text-slate-500">
           {t('bd3_size')} <input type="range" min={0.4} max={2.6} step={0.1} value={size} onChange={e => setSize(parseFloat(e.target.value))} className="flex-1 w-20" />
         </label>
         <div className="flex gap-1">
-          <button onClick={del} disabled={sel == null} className="flex-1 px-2 py-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-40"><Trash2 size={14} /> {t('bd3_del')}</button>
-          <button onClick={reset} className="px-2 py-2 rounded-xl bg-slate-100 text-slate-600 text-xs flex items-center justify-center" title={t('bd3_reset')}><RotateCcw size={14} /></button>
+          <button onClick={del} disabled={sel == null} title={t('bd3_del')} className="flex-1 px-2 py-2.5 min-h-[44px] rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-40"><Trash2 size={14} /> {t('bd3_del')}</button>
+          <button onClick={reset} className="px-2 py-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center" title={t('bd3_reset')}><RotateCcw size={16} /></button>
         </div>
-        <button onClick={snap} className="px-2 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-1"><Camera size={14} /> {t('bd3_snap')}</button>
+        <button onClick={snap} className="px-2 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-1 min-h-[44px]"><Camera size={14} /> {t('bd3_snap')}</button>
         <div className="text-[10px] text-slate-400 px-1 text-center">{count ? `${count}` : ''} {sel != null ? `• ${t('bd3_sel')}` : t('bd3_none')}</div>
       </div>
+      )}
     </div>
   )
 } 

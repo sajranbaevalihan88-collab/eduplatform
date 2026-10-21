@@ -704,8 +704,8 @@ export default function Board() {
           <span className="font-bold">{t('board_fullscreen')}</span>
           <span className="text-xs text-white/70 hidden sm:inline">{title} • {mode === '2d' ? '2D' : '3D'}</span>
           <div className="ml-auto flex gap-2">
-            <button onClick={save} className="px-4 py-1.5 rounded-lg bg-blue-600 text-white font-bold flex items-center gap-1"><Save size={14} /> {t('save')}</button>
-            <button onClick={() => setIsFullscreen(false)} className="px-4 py-1.5 rounded-lg bg-white text-slate-900 font-bold">{t('board_exit_esc')}</button>
+            <button onClick={save} className="px-4 py-2.5 min-h-[44px] rounded-lg bg-blue-600 text-white font-bold flex items-center gap-1"><Save size={16} /> {t('save')}</button>
+            <button onClick={() => setIsFullscreen(false)} className="px-4 py-2.5 min-h-[44px] rounded-lg bg-white text-slate-900 font-bold">{t('board_exit_esc')}</button>
           </div>
         </div>
         <div className="flex-1 min-h-0 p-2 flex flex-col">{tldrawArea}</div>
@@ -720,23 +720,23 @@ export default function Board() {
         <input value={title} onChange={e => setTitle(e.target.value)} className="px-3 py-1.5 rounded-lg border bg-white dark:bg-slate-800 dark:text-white text-sm font-medium min-w-[120px] max-w-[200px]" />
         {draft && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-bold" title={t('board_draft_hint')}>{t('board_draft_chip')}</span>}
         <div className="flex p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800">
-          <button onClick={() => { flushDraft(); setMode('2d') }} className={`px-3 py-1.5 rounded-md text-xs font-bold ${mode === '2d' ? 'bg-white dark:bg-slate-700 shadow' : 'text-slate-500'}`}>{t('board_2d')}</button>
-          <button onClick={() => { flushDraft(); setMode('3d') }} className={`px-3 py-1.5 rounded-md text-xs font-bold ${mode === '3d' ? 'bg-white dark:bg-slate-700 shadow' : 'text-slate-500'}`}>{t('board_3d')}</button>
+          <button onClick={() => { flushDraft(); setMode('2d') }} className={`px-3 py-2 min-h-[44px] min-w-[56px] rounded-md text-sm font-bold ${mode === '2d' ? 'bg-white dark:bg-slate-700 shadow' : 'text-slate-500'}`}>{t('board_2d')}</button>
+          <button onClick={() => { flushDraft(); setMode('3d') }} className={`px-3 py-2 min-h-[44px] min-w-[56px] rounded-md text-sm font-bold ${mode === '3d' ? 'bg-white dark:bg-slate-700 shadow' : 'text-slate-500'}`}>{t('board_3d')}</button>
         </div>
-        <div className="ml-auto flex items-center gap-1.5 flex-wrap">
+        <div className="ml-auto flex items-center gap-2 flex-wrap">
           <span className="md:hidden text-xs text-slate-400">{boards.length}</span>
-          <button onClick={() => { setHideSidebarLocal(v => !v); window.dispatchEvent(new CustomEvent('toggle-sidebar')) }} className="px-2 py-1.5 rounded-lg border text-xs font-medium bg-white dark:bg-slate-800 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center" title={hideSidebarLocal ? t('board_show_menu') : t('board_hide_tabs')}><PanelLeft size={14} /></button>
-          <button onClick={() => { flushDraft(); setIsFullscreen(true) }} className="px-2.5 py-1.5 rounded-lg bg-slate-900 dark:bg-white dark:text-slate-900 text-white flex items-center gap-1 text-xs font-medium"><Maximize2 size={14} /> {t('board_fullscreen_btn')}</button>
-          <button onClick={newBoard} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold flex items-center gap-1 text-xs min-h-[36px]"><Plus size={14} /> {t('board_new')}</button>
-          <button onClick={download} className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 dark:text-white border flex items-center gap-1 text-xs min-h-[36px]"><Download size={14} /> {t('board_download')}</button>
-          <button onClick={clearPage} className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 dark:text-white border text-amber-700 dark:text-amber-400 flex items-center gap-1 text-xs min-h-[36px]"><Trash2 size={14} /></button>
-          <button onClick={() => setShowBoards(v => !v)} className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 dark:text-white border text-xs font-medium flex items-center gap-1.5 min-h-[36px]">🗂 {t('board_mine')} <span className="px-1.5 rounded-full bg-slate-900 text-white text-[10px]">{boards.length}</span></button>
-          <button onClick={save} className="px-4 py-1.5 rounded-lg bg-blue-600 text-white font-bold flex items-center gap-1.5 text-xs min-h-[36px]"><Save size={14} /> {t('save')}</button>
+          <button onClick={() => { setHideSidebarLocal(v => !v); window.dispatchEvent(new CustomEvent('toggle-sidebar')) }} className="p-2.5 min-h-[44px] min-w-[44px] rounded-lg border text-sm bg-white dark:bg-slate-800 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-center" title={hideSidebarLocal ? t('board_show_menu') : t('board_hide_tabs')}><PanelLeft size={18} /></button>
+          <button onClick={() => { flushDraft(); setIsFullscreen(true) }} className="px-3 py-2 min-h-[44px] rounded-lg bg-slate-900 dark:bg-white dark:text-slate-900 text-white flex items-center gap-1.5 text-sm font-medium"><Maximize2 size={16} /> {t('board_fullscreen_btn')}</button>
+          <button onClick={newBoard} className="px-3.5 py-2 min-h-[44px] rounded-lg bg-emerald-600 text-white font-bold flex items-center gap-1.5 text-sm"><Plus size={16} /> {t('board_new')}</button>
+          <button onClick={download} className="px-3 py-2 min-h-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border flex items-center gap-1.5 text-sm"><Download size={16} /> {t('board_download')}</button>
+          <button onClick={clearPage} className="p-2.5 min-h-[44px] min-w-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border text-amber-700 dark:text-amber-400 flex items-center justify-center"><Trash2 size={16} /></button>
+          <button onClick={() => setShowBoards(v => !v)} className="px-3 py-2 min-h-[44px] rounded-lg bg-slate-100 dark:bg-slate-800 dark:text-white border text-sm font-medium flex items-center gap-1.5">🗂 {t('board_mine')} <span className="px-1.5 py-0.5 rounded-full bg-slate-900 text-white text-[10px]">{boards.length}</span></button>
+          <button onClick={save} className="px-4 py-2 min-h-[44px] rounded-lg bg-blue-600 text-white font-bold flex items-center gap-1.5 text-sm"><Save size={16} /> {t('save')}</button>
         </div>
       </div>
       {mode === '2d' && !isFullscreen && (
         <div className="shrink-0 flex flex-wrap gap-1.5 items-center bg-white dark:bg-slate-800 border-b border-slate-200/60 dark:border-slate-700/60 px-3 py-1.5">
-          <button data-clipbtn onClick={() => { setClipTool(clipTool === 'axes' ? null : 'axes'); setAxesOpen(o => !o) }} title={t('bd2_axes')} className={`px-2.5 py-1.5 rounded-lg text-xs font-medium min-h-[32px] border ${clipTool === 'axes' ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-amber-50 dark:bg-slate-900 dark:hover:bg-slate-700 text-amber-700 dark:text-amber-300 border-amber-200'}`}>{t('bd2_axes')}</button>
+          <button data-clipbtn onClick={() => { setClipTool(clipTool === 'axes' ? null : 'axes'); setAxesOpen(o => !o) }} title={t('bd2_axes')} className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium border ${clipTool === 'axes' ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-amber-50 dark:bg-slate-900 dark:hover:bg-slate-700 text-amber-700 dark:text-amber-300 border-amber-200'}`}>{t('bd2_axes')}</button>
         </div>
       )}
 
@@ -745,30 +745,30 @@ export default function Board() {
           <span className="text-xs font-bold text-slate-500">{t('bd2_axes')}</span>
           <label className="flex items-center gap-2 text-xs font-medium dark:text-slate-200">
             {t('bd2_axes_range')}
-            <select value={axesCfg.range} onChange={e => setAxes({ range: Number(e.target.value) })} className="px-2 py-1 rounded-md border bg-white dark:bg-slate-900 dark:text-white min-h-[34px]">
+            <select value={axesCfg.range} onChange={e => setAxes({ range: Number(e.target.value) })} className="px-2 py-1.5 rounded-md border bg-white dark:bg-slate-900 dark:text-white min-h-[40px]">
               {[5, 10, 15, 20, 30, 50].map(r => <option key={r} value={r}>±{r}</option>)}
             </select>
           </label>
           <label className="flex items-center gap-2 text-xs font-medium dark:text-slate-200">
             {t('bd2_axes_step')}
-            <select value={axesCfg.step} onChange={e => setAxes({ step: Number(e.target.value) })} className="px-2 py-1 rounded-md border bg-white dark:bg-slate-900 dark:text-white min-h-[34px]">
+            <select value={axesCfg.step} onChange={e => setAxes({ step: Number(e.target.value) })} className="px-2 py-1.5 rounded-md border bg-white dark:bg-slate-900 dark:text-white min-h-[40px]">
               {[0.5, 1, 2, 5].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </label>
           <label className="flex items-center gap-1.5 text-xs font-medium dark:text-slate-200">
-            <input type="checkbox" checked={axesCfg.labels} onChange={e => setAxes({ labels: e.target.checked })} className="w-4 h-4" />
+            <input type="checkbox" checked={axesCfg.labels} onChange={e => setAxes({ labels: e.target.checked })} className="w-5 h-5" />
             {t('bd2_axes_labels')}
           </label>
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-medium dark:text-slate-200">{t('bd3_color')}:</span>
-            <div className="flex flex-wrap gap-1 max-w-[220px]">
+            <div className="flex flex-wrap gap-1.5 max-w-[260px]">
               {PALETTE.map(cc => (
-                <button key={cc} onClick={() => setClipColor(cc)} className={`w-5 h-5 rounded border ${clipColor === cc ? 'border-2 border-slate-900 dark:border-white' : 'border-slate-300'}`} style={{ background: cc }} />
+                <button key={cc} onClick={() => setClipColor(cc)} className={`w-9 h-9 rounded border ${clipColor === cc ? 'border-2 border-slate-900 dark:border-white' : 'border-slate-300'}`} style={{ background: cc }} />
               ))}
             </div>
-            <input type="color" value={clipColor} onChange={e => setClipColor(e.target.value)} title={t('bd2_custom_color')} className="w-7 h-7 rounded border cursor-pointer bg-white p-0.5" />
+            <input type="color" value={clipColor} onChange={e => setClipColor(e.target.value)} title={t('bd2_custom_color')} className="w-10 h-10 rounded border cursor-pointer bg-white p-0.5" />
           </div>
-          <button onClick={() => setClipTool('axes')} className="px-3 py-1.5 rounded-lg bg-amber-500 text-white font-bold min-h-[34px] text-xs">{t('bd2_axes_place')}</button>
+          <button onClick={() => setClipTool('axes')} className="px-4 py-2.5 rounded-lg bg-amber-500 text-white font-bold min-h-[44px] text-sm">{t('bd2_axes_place')}</button>
         </div>
       )}
       <div className="flex-1 min-h-0 p-2">{tldrawArea}</div>
@@ -777,7 +777,7 @@ export default function Board() {
         <div className="absolute top-2 right-2 z-40 w-80 max-w-[calc(100vw-16px)] max-h-[80vh] bg-white dark:bg-slate-900 rounded-2xl border shadow-2xl overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 dark:border-slate-700 shrink-0">
             <h3 className="font-bold text-sm dark:text-white">{t('board_mine')}</h3>
-            <button onClick={() => setShowBoards(false)} className="text-xs px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 dark:text-white">{t('board_hide')}</button>
+            <button onClick={() => setShowBoards(false)} className="min-h-[44px] px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 dark:text-white text-sm">{t('board_hide')}</button>
           </div>
           <div className="p-3 space-y-2 overflow-auto">
             <div className="text-xs text-slate-500">{t('board_private_hint')}</div>

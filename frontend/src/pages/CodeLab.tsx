@@ -121,6 +121,7 @@ export default function CodeLab(){
                 <button onClick={run} disabled={running} className="px-4 py-1.5 min-h-[40px] rounded-xl bg-emerald-600 text-white text-sm font-semibold flex items-center gap-1 disabled:opacity-50"><Play size={14}/>{running?'...':t('run')}</button>
               </div>
               <Editor height="380px" language={active.language==='python'?'python':active.language==='html'?'html':'javascript'} value={code} onChange={v=>setCode(v||'')} options={{minimap:{enabled:false},fontSize:14}}/>
+              <div className="px-4 py-2 text-xs text-slate-500 bg-slate-50 border-t dark:bg-slate-800 dark:text-slate-400">⌨ На телефоне код удобнее набирать на ноутбуке/ПК — клавиатура устройства открывается по тапу на строку.</div>
             </div>
             {active.language==='python' && code.includes('input(') && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">

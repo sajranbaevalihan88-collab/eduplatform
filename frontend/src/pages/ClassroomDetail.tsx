@@ -406,14 +406,14 @@ export default function ClassroomDetail(){
                 <table className="w-full text-sm min-w-[560px] dark:text-slate-100">
                   <thead>
                     <tr>
-                      <th className="text-left p-2 border-b dark:border-slate-700">{t('cls_student')}</th>
+                      <th className="text-left p-2 border-b dark:border-slate-700 sticky left-0 z-10 min-w-[132px] bg-white dark:bg-slate-900">{t('cls_student')}</th>
                       {gb.assignments.map((a:any)=>(
                         <th key={a.id} className="p-2 border-b dark:border-slate-700 text-center" title={a.title}>
                           <div className="flex items-center justify-center gap-1">
                             <span>{a.title.slice(0,14)}{a.title.length>14?'…':''}</span>
                             {a.kind==='manual' && (
                               <button onClick={()=>delCol(a.id,a.title)} data-testid={`gb-delcol-${a.id}`}
-                                title={t('cls_g_del')} className="text-red-400 hover:text-red-600 leading-none">✕</button>
+                                title={t('cls_g_del')} aria-label={`${t('cls_g_del')}: ${a.title}`} className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 leading-none text-base">✕</button>
                             )}
                           </div>
                           <div className="font-normal text-xs text-slate-400">max {a.max_score}</div>
@@ -425,7 +425,7 @@ export default function ClassroomDetail(){
                   <tbody>
                     {gb.students.map((s:any)=>(
                       <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                        <td className="p-2 border-b dark:border-slate-700 font-semibold">{s.username}</td>
+                        <td className="p-2 border-b dark:border-slate-700 font-semibold sticky left-0 z-10 bg-white dark:bg-slate-900 shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]">{s.username}</td>
                         {gb.assignments.map((a:any)=>{
                           const c = gb.cells.find((x:any)=>x.assignment===a.id && x.student===s.id)
                           const isEdit = !!(editCell && editCell.a===a.id && editCell.s===s.id)
@@ -456,7 +456,7 @@ export default function ClassroomDetail(){
                       </tr>
                     ))}
                     <tr className="bg-slate-50/70 dark:bg-slate-800/60">
-                      <td className="p-2 font-semibold text-slate-500 dark:text-slate-300">{t('cls_g_avg_class')}</td>
+                      <td className="p-2 font-semibold text-slate-500 dark:text-slate-300 sticky left-0 z-10 bg-slate-50 dark:bg-slate-900">{t('cls_g_avg_class')}</td>
                       {gb.assignments.map((a:any)=>(
                         <td key={'avg'+a.id} data-testid={`gb-avgcol-${a.id}`} className="p-2 text-center text-xs font-bold text-slate-600 dark:text-slate-300">
                           {gb.avg_assignment?.[String(a.id)]!=null? gb.avg_assignment[String(a.id)] : '—'}

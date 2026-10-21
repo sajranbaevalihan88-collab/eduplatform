@@ -15,7 +15,7 @@ export function ToastContainer(){
     return ()=>{ push=null }
   },[])
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-[360px]" role="status" aria-live="polite">
+    <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 z-50 flex flex-col gap-2 max-w-full sm:max-w-[360px]" role="status" aria-live="polite">
       {toasts.map(t=>(
         <div key={t.id} className={`px-4 py-3 rounded-xl shadow-lg border text-sm font-medium ${t.type==='error'?'bg-red-50 border-red-200 text-red-700': t.type==='success'?'bg-emerald-50 border-emerald-200 text-emerald-700':'bg-white border-slate-200 text-slate-700'}`}>
           {t.msg}
