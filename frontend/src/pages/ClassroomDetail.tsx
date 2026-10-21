@@ -44,7 +44,8 @@ export default function ClassroomDetail(){
   const [akind,setAkind]=useState<'lesson'|'test'>('test')
   const [objs,setObjs]=useState<any[]>([])
   const [aobj,setAobj]=useState('')
-  const [adl,setAdl]=useState('')
+  const [adlDate,setAdlDate]=useState('')
+  const [adlTime,setAdlTime]=useState('')
   const [ainstr,setAinstr]=useState('')
   const [creating,setCreating]=useState(false)
   // комментарии к объявлениям (как в Google Classroom)
@@ -93,10 +94,21 @@ export default function ClassroomDetail(){
     if(!aobj){ toast(t('cls_pick_obj'),'error'); return }
     try{
       await client.post('/assignments/', {classroom:id, kind:akind, [akind]:Number(aobj),
-        deadline: adl? new Date(adl).toISOString(): null, instructions: ainstr})
-      setAobj(''); setAdl(''); setAinstr(''); setCreating(false); load()
+        deadline: adlDate? new Date(`${adlDate}T${adlTime||'23:59'}`).toISOString(): null, instructions: ainstr})
+      setAobj(''); setAdlDate(''); setAdlTime(''); setAinstr(''); setCreating(false); load()
       toast(t('cls_task_created'),'success')
     }catch(e:any){ toast(e?.response?.data?.detail||JSON.stringify(e?.response?.data)||'err','error') }
+  }
+  const dlPreset=(kind:'none'|'today'|'tomorrow'|'week')=>{
+    const d=new Date()
+    if(kind==='none'){ setAdlDate(''); setAdlTime(''); return }
+    let target=new Date()
+    if(kind==='today') target=new Date(d.getFullYear(), d.getMonth(), d.getDate(), 21, 0)
+    if(kind==='tomorrow') target=new Date(d.getFullYear(), d.getMonth(), d.getDate()+1, 21, 0)
+    if(kind==='week'){ const add=(7-d.getDay())%7||7; target=new Date(d.getFullYear(), d.getMonth(), d.getDate()+add, 21, 0) }
+    const pad=(n:number)=>String(n).padStart(2,'0')
+    setAdlDate(`${target.getFullYear()}-${pad(target.getMonth()+1)}-${pad(target.getDate())}`)
+    setAdlTime(`${pad(target.getHours())}:${pad(target.getMinutes())}`)
   }
   const submit=async(aid:number)=>{
     try{ await client.post(`/assignments/${aid}/submit/`, {}); load(); toast(t('cls_submitted'),'success') }
@@ -206,34 +218,34 @@ export default function ClassroomDetail(){
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
-      <div className="rounded-2xl p-6 text-white flex flex-wrap items-end justify-between gap-3" style={{background:`linear-gradient(135deg, ${room.color}, ${room.color}99)`}}>
-        <div>
-          <div className="flex items-center gap-2 text-white/80 text-sm"><GraduationCap size={16}/>{room.owner_name} • {room.subject_name||t('cls_no_subject')}</div>
-          <h1 className="text-2xl font-bold mt-1">{room.title}</h1>
-          {room.description && <p className="text-white/85 text-sm mt-1">{room.description}</p>}
+      <div className="rounded-2xl p-4 sm:p-6 text-white flex flex-wrap items-end justify-between gap-3" style={{background:`linear-gradient(135deg, ${room.color}, ${room.color}99)`}}>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-white/80 text-xs sm:text-sm"><GraduationCap size={16} className="shrink-0"/>{room.owner_name} • {room.subject_name||t('cls_no_subject')}</div>
+          <h1 className="text-xl sm:text-2xl font-bold mt-1 break-words">{room.title}</h1>
+          {room.description && <p className="text-white/85 text-xs sm:text-sm mt-1">{room.description}</p>}
         </div>
-        <button onClick={copy} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 border border-white/30 font-mono tracking-[0.2em] font-bold" title={t('cls_copy_code')}>
+        <button onClick={copy} className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-white/15 border border-white/30 font-mono font-bold text-sm" title={t('cls_copy_code')} aria-label={t('cls_copy_code')}>
           {room.invite_code} {copied? <Check size={16}/> : <Copy size={16}/>}
         </button>
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 overflow-hidden">
-        <div className="flex border-b dark:border-slate-700 overflow-auto">
+        <div className="grid grid-flow-col auto-cols-fr border-b dark:border-slate-700">
           {tabs.map(tb=>(
-            <button key={tb.k} onClick={()=>setTab(tb.k)} className={`flex-1 min-w-[130px] py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab===tb.k?'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600':'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-              <tb.icon size={16}/> {tb.label}
+            <button key={tb.k} onClick={()=>setTab(tb.k)} className={`py-3 min-h-[46px] px-1 text-[13px] sm:text-sm font-semibold flex items-center justify-center gap-1.5 truncate ${tab===tb.k?'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600':'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+              <tb.icon size={15} className="shrink-0"/> <span className="truncate">{tb.label}</span>
             </button>
           ))}
         </div>
 
-        <div className="p-5">
+        <div className="p-4 sm:p-5">
           {tab==='stream' && (
             <div className="space-y-4">
               {isOwner && (
-                <div className="flex gap-2">
-                  <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&post()} placeholder={t('cls_announce_ph')} className="flex-1 px-4 py-2.5 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-blue-400"/>
-                  <button onClick={post} className="px-5 py-2.5 rounded-xl bg-blue-700 text-white font-semibold">{t('cls_publish')}</button>
-                </div>
+                  <div className="flex gap-2">
+                    <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&post()} placeholder={t('cls_announce_ph')} className="flex-1 min-w-0 px-4 py-2.5 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-blue-400"/>
+                    <button onClick={post} className="px-5 py-2.5 min-h-[44px] rounded-xl bg-blue-700 text-white font-semibold">{t('cls_publish')}</button>
+                  </div>
               )}
               {notes.map(n=>(
                 <div key={n.id} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 border dark:border-slate-700">
@@ -254,7 +266,7 @@ export default function ClassroomDetail(){
                             <div className="text-xs break-words dark:text-slate-200">{c.text}</div>
                           </div>
                           {(String(c.author)===String(meId) || isOwner) && (
-                            <button onClick={()=>delComment(n.id, c.id)} className="text-xs text-slate-400 hover:text-red-500">✕</button>
+                            <button onClick={()=>delComment(n.id, c.id)} className="text-xs text-slate-400 hover:text-red-500 p-2 min-w-[32px] min-h-[32px]" aria-label={t('delete')}>✕</button>
                           )}
                         </div>
                       ))}
@@ -274,7 +286,7 @@ export default function ClassroomDetail(){
 
           {tab==='tasks' && (
             <div className="space-y-3">
-              {isOwner && !creating && <button onClick={()=>setCreating(true)} className="px-4 py-2 rounded-xl bg-blue-700 text-white text-sm font-semibold flex items-center gap-1"><Plus size={15}/>{t('cls_new_task')}</button>}
+              {isOwner && !creating && <button onClick={()=>setCreating(true)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-700 text-white text-sm font-semibold flex items-center gap-1"><Plus size={15}/>{t('cls_new_task')}</button>}
               {isOwner && creating && (
                 <div className="p-4 rounded-xl border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 space-y-3">
                   <div className="flex rounded-xl border dark:border-slate-700 overflow-hidden w-fit bg-white dark:bg-slate-900">
@@ -285,15 +297,24 @@ export default function ClassroomDetail(){
                     <option value="">{t('cls_pick_obj')}</option>
                     {objs.map((o:any)=><option key={o.id} value={o.id}>{o.title}</option>)}
                   </select>
-                  <div className="flex flex-wrap gap-2">
-                    <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"><Clock size={15}/>{t('cls_deadline')}
-                      <input type="datetime-local" value={adl} onChange={e=>setAdl(e.target.value)} className="px-3 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white outline-none"/>
-                    </label>
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5"><Clock size={14}/>{t('cls_deadline')}</div>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={()=>dlPreset('none')} className={`px-3 py-2 min-h-[38px] rounded-xl text-xs font-semibold border ${!adlDate?'bg-slate-800 dark:bg-white text-white dark:text-slate-900 border-slate-800 dark:border-white':'bg-white dark:bg-slate-900 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}>{t('cls_dl_none')}</button>
+                      {[{k:'today', l:t('cls_dl_today')},{k:'tomorrow', l:t('cls_dl_tomorrow')},{k:'week', l:t('cls_dl_week')}].map(p=>(
+                        <button key={(p as any).k} type="button" onClick={()=>dlPreset((p as any).k)} className="px-3 py-2 min-h-[38px] rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-slate-300">{(p as any).l}</button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input type="date" value={adlDate} onChange={e=>setAdlDate(e.target.value)} aria-label={t('cls_dl_date')} className="flex-1 min-w-0 px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white outline-none"/>
+                      <input type="time" value={adlTime} onChange={e=>setAdlTime(e.target.value)} aria-label={t('cls_dl_time')} className={`px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white outline-none ${adlDate?'':'opacity-60'}`}/>
+                    </div>
+                    <p className="text-[11px] text-slate-400">{t('cls_dl_hint')}</p>
                   </div>
                   <textarea value={ainstr} onChange={e=>setAinstr(e.target.value)} placeholder={t('cls_instr_ph')} rows={2} className="w-full px-3 py-2.5 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none"/>
                   <div className="flex gap-2">
-                    <button onClick={mkTask} className="px-5 py-2 rounded-xl bg-blue-700 text-white font-semibold">{t('cls_assign')}</button>
-                    <button onClick={()=>setCreating(false)} className="px-5 py-2 rounded-xl bg-slate-200 font-semibold">{t('cancel')}</button>
+                    <button onClick={mkTask} className="px-5 py-2.5 min-h-[44px] rounded-xl bg-blue-700 text-white font-semibold">{t('cls_assign')}</button>
+                    <button onClick={()=>setCreating(false)} className="px-5 py-2.5 min-h-[44px] rounded-xl bg-slate-200 font-semibold dark:bg-slate-700 dark:text-white">{t('cancel')}</button>
                   </div>
                 </div>
               )}
@@ -317,8 +338,8 @@ export default function ClassroomDetail(){
                       </div>
                     </div>
                     <span className={`text-xs px-2 py-1 rounded-full border ${ST_CLS[st]}`}>{ST_TXT[st]} {my?.score!=null? `${my.score}`:''}</span>
-                    {!isOwner && (a.lesson||a.test) && <Link to={openTo} className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14}/></Link>}
-                    {!isOwner && st!=='submitted' && st!=='late' && <button onClick={()=>submit(a.id)} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold">{t('cls_submit')}</button>}
+                    {!isOwner && (a.lesson||a.test) && <Link to={openTo} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-50 text-blue-700 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14}/></Link>}
+                    {!isOwner && st!=='submitted' && st!=='late' && <button onClick={()=>submit(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-semibold">{t('cls_submit')}</button>}
                   </div>
                 )
               })}
