@@ -163,25 +163,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       <div className={`flex-1 min-w-0 ${loc.pathname.startsWith('/board') ? 'flex flex-col h-screen' : ''}`}>
         {!loc.pathname.startsWith('/board') && !isGameFull && (
-        <header className="h-[64px] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2 px-4 lg:px-8 sticky top-0 z-10 shadow-sm overflow-hidden">
+        <header className="h-[64px] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2 px-4 lg:px-8 sticky top-0 z-40 shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
             <button className="lg:hidden shrink-0 p-2 rounded-xl bg-slate-100 hover:bg-white hover:shadow-md transition-all" onClick={()=>setOpen(true)}><Menu size={18}/></button>
             <h1 className="font-display font-bold text-lg hidden md:block gradient-text truncate">{t('platform_title')}</h1>
             {hideSidebar && <button onClick={toggleSidebar} className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-white border border-slate-200 text-xs font-medium btn-hover"><PanelLeft size={14}/> {t('menu')}</button>}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            <button onClick={toggleTheme} aria-label={theme==='dark' ? t('theme_light') : t('theme_dark')} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 hover:shadow-md transition-all" title={theme==='dark'?t('light'):t('dark')}>{theme==='dark'?<Sun size={16}/>:<Moon size={16}/>}</button>
+            <button onClick={toggleTheme} aria-label={theme==='dark' ? t('theme_light') : t('theme_dark')} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 hover:shadow-md transition-all flex items-center justify-center" title={theme==='dark'?t('light'):t('dark')}>{theme==='dark'?<Sun size={16}/>:<Moon size={16}/>}</button>
             <div className="relative">
-              <button onClick={()=>setShowLang(v=>!v)} aria-label={t('change_lang')} aria-expanded={showLang} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 flex items-center gap-1 text-xs font-bold">{lang.toUpperCase()} <Languages size={12}/></button>
+              <button onClick={()=>setShowLang(v=>!v)} aria-label={t('change_lang')} aria-expanded={showLang} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 flex items-center justify-center gap-1 text-xs font-bold">{lang.toUpperCase()} <Languages size={12}/></button>
               {showLang && (
-                <div className="absolute right-0 top-full mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl p-1 z-20 min-w-[140px]">
+                <div className="absolute right-0 top-full mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl p-1 z-50 min-w-[160px]">
                   {(['ru','en','kg'] as const).map(l=>(
-                    <button key={l} onClick={()=>{setLang(l); setShowLang(false); setTimeout(()=>window.location.reload(), 150)}} className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between ${lang===l?'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold':'hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-white'}`}>{l==='ru'?'🇷🇺 Русский':l==='en'?'🇬🇧 English':'🇰🇬 Кыргызча'} {lang===l && '✓'}</button>
+                    <button key={l} onClick={()=>{setLang(l); setShowLang(false); setTimeout(()=>window.location.reload(), 150)}} className={`w-full text-left px-3 py-2.5 min-h-[44px] rounded-lg text-sm flex items-center justify-between ${lang===l?'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold':'hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-white'}`}>{l==='ru'?'🇷🇺 Русский':l==='en'?'🇬🇧 English':'🇰🇬 Кыргызча'} {lang===l && '✓'}</button>
                   ))}
                 </div>
               )}
             </div>
-            <button onClick={()=>setShowA11y(true)} className={`p-2 rounded-xl border flex items-center gap-1 text-xs font-bold ${(poor||speech)?'bg-amber-400 border-amber-500 text-slate-900':'bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border-transparent hover:border-slate-200 dark:border-slate-600'}`} title={t('a11y_settings')}><Accessibility size={16}/><span className="hidden lg:inline">{t('a11y')}{(poor||speech)?' •':' '}</span></button>
+            <button onClick={()=>setShowA11y(true)} className={`p-2.5 min-w-[44px] min-h-[44px] rounded-xl border flex items-center justify-center gap-1 text-xs font-bold ${(poor||speech)?'bg-amber-400 border-amber-500 text-slate-900':'bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border-transparent hover:border-slate-200 dark:border-slate-600'}`} title={t('a11y_settings')}><Accessibility size={16}/><span className="hidden lg:inline">{t('a11y')}{(poor||speech)?' •':' '}</span></button>
             <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"/>
             {!student && (
             <Link to="/lessons/new" className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white text-sm font-semibold shadow-md hover:shadow-lg btn-hover hidden sm:flex items-center gap-1.5">✨ {t('create_lesson')}</Link>

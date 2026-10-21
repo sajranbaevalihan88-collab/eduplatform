@@ -426,6 +426,8 @@ const dict:Record<Lang,Record<string,string>>={
     cls_no_subject:'Без предмета', cls_owner:'Учитель',
     cls_announce_ph:'Объявление для класса…', cls_publish:'Опубликовать', cls_no_news:'Пока тихо — объявлений нет',
     cls_new_task:'Новое задание', cls_pick_obj:'Выбери…', cls_deadline:'Дедлайн:',
+    cls_dl_none:'Без дедлайна', cls_dl_today:'Сегодня до 21:00', cls_dl_tomorrow:'Завтра до 21:00', cls_dl_week:'Конец недели 21:00',
+    cls_dl_date:'Дата дедлайна', cls_dl_time:'Время дедлайна', cls_dl_hint:'Время можно не ставить — тогда дедлайн до 23:59 выбранного дня. Ученики увидят дату и точное время.',
     cls_instr_ph:'Инструкция ученикам (необязательно)', cls_assign:'Задать', cls_submitted:'Сдано!',
     cls_added:'Ученик добавлен', cls_no_tasks:'Заданий пока нет', cls_overdue:'просрочено',
     cls_g_addcol:'Добавить колонку', cls_g_col_name:'Название колонки (например, «Устный ответ»)', cls_g_col_max:'Макс. балл', cls_g_create:'Создать', cls_g_cancel:'Отмена',
