@@ -255,6 +255,13 @@ def run_project(files, entry='main.py', requirements='', stdin_data='', timeout=
     if not entry or entry not in [p for p,_ in norm]:
         entry = next((p for p,_ in norm if p.endswith('.py')), norm[0][0])
 
+    # HTML/CSS проект не запускается как python — он рендерится в превью фронтенда
+    if entry.endswith(('.html', '.htm', '.css')):
+        if not any(p.endswith('.py') for p,_ in norm):
+            return ("HTML/CSS-проект показывается в браузерном превью: открой вкладку Preview и нажми Запустить. "
+                    "style.css подхватывается автоматически (inline), index.html — точка входа.", True)
+        entry = next((p for p,_ in norm if p.endswith('.py')))
+
     tmpdir = tempfile.mkdtemp(prefix='edu_proj_')
     try:
         # 1. Создаем дерево файлов
