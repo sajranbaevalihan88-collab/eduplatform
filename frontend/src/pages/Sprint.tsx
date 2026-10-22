@@ -97,6 +97,7 @@ export default function Sprint() {
     setShiftY(0); setGhostPos(null)
     startRef.current = 0
     setLoading(false)
+    inputRef.current?.focus()
     setTimeout(() => inputRef.current?.focus(), 60)
   }
 
@@ -316,7 +317,7 @@ export default function Sprint() {
       </a>
       <div className="flex flex-wrap items-center gap-2">
         {[15, 30, 60].map(m => (
-          <button key={m} onClick={() => { setMode(m); start(m) }}
+          <button key={m} onClick={() => { setMode(m); start(m); }}
             className={`px-4 py-2.5 min-h-[48px] rounded-xl font-bold ${mode === m ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-800 dark:text-white border dark:border-slate-700'}`}>{m}{t('sprint_sec')}</button>
         ))}
         <select value={src} onChange={e => setSrc(e.target.value as Src)} aria-label={t('sprint_words_aria')}
@@ -350,8 +351,8 @@ export default function Sprint() {
         </select>
       )}
 
-      <div className="bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-5 sm:p-8 relative"
-        onClick={() => { if (started) inputRef.current?.focus() }}>
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-5 sm:p-8 relative"
+        onClick={() => inputRef.current?.focus()}>
         {loading ? (
           <div className="text-center text-slate-400 py-10">{t('sprint_preparing')}</div>
         ) : (
@@ -375,10 +376,10 @@ export default function Sprint() {
               autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false}
               aria-label={t('sprint_type_aria')}
               className="absolute opacity-0 pointer-events-none w-px h-px" />
-            {!focused && started && (
+            {!focused && (
               <button onClick={() => inputRef.current?.focus()}
                 className="absolute inset-0 rounded-2xl bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm flex items-center justify-center gap-2 font-bold text-lg dark:text-white">
-                <MousePointerClick size={22} /> {t('sprint_click_continue')}
+                <MousePointerClick size={22} /> {started ? t('sprint_click_continue') : t('sprint_tap_start_ph')}
               </button>
             )}
           </>

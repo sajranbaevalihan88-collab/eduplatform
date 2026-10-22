@@ -40,6 +40,57 @@ function getLang(name:string){
   return 'plaintext'
 }
 function getLabel(lang:string){ return LANGS.find(l=>l.lang===lang)?.label || lang }
+
+// Собирает «проект» из файлов в одном документе: inline <link>/<script> подменяются
+// на содержимое одноимённых файлов, остальные css/js файлы добавляются в хвост —
+// так index.html + style.css реально работают в превью (раньше css игнорировался).
+function buildPreviewDoc(files: VFile[], entryName?: string){
+  const find = (n:string)=> files.find(f=>f.name.toLowerCase()===n.toLowerCase())
+  let entry = (entryName && entryName.toLowerCase().endsWith('.html') && find(entryName)) || find('index.html') || find('main.html') || files.find(f=>getLang(f.name)==='html')
+  let html = entry?.content || '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body></body></html>'
+  // <link rel=stylesheet href="style.css"> → <style>…
+  html = html.replace(/<link\b[^>]*href=["']([^"']+\.css)["'][^>]*>/gi, (m, href: string)=>{
+    const name = decodeURIComponent(href.split('/').pop() || '')
+    const f = find(name)
+    return f ? `<style>\n${f.content}\n</style>` : m
+  })
+  // <script src="app.js"></script> → inline
+  html = html.replace(/<script\b[^>]*src=["']([^"']+\.js)["'][^>]*>\s*<\/script>/gi, (m, src: string)=>{
+    const name = decodeURIComponent(src.split('/').pop() || '')
+    const f = find(name)
+    return f ? `<script>\n${f.content}\n\n</script>` : m
+  })
+  // куда вставлять: перед </head> для css и перед </body> для js
+  const headCssSet = files.filter(f=>getLang(f.name)==='css' && !f.name.toLowerCase().startsWith('_'))
+  let headCss = headCssSet.map(f=>`<style>/* ${f.name} */\n${f.content}\n</style>\n`).join('')
+  let bodyJs = files.filter(f=>getLang(f.name)==='javascript' && !new RegExp(`<script\\b[^>]*src=["'][^"']*${encodeURIComponent(f.name).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}`).test(html) && !new RegExp(`<script\\b[^>]*src=["'][^"']*/${f.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}`).test(html)).map(f=>`<script>/* ${f.name} */\n${f.content}\n\n</script>`).join('\n')
+  // файлы, для которых уже был явный <link>/<script> не дублируем
+  for(const f of headCssSet){
+    if(new RegExp(`<style>\\s*/\\* ${f.name}`).test(html)){
+      headCss = headCss.split(`<style>/* ${f.name} */\n${f.content}\n</style>\n`).join('')
+    }
+  }
+  // одиночный css без html: рисуем демо-разметку по найденным селекторам
+  if(!entry){
+    const css = files.filter(f=>getLang(f.name)==='css').map(f=>f.content).join('\n')
+    const cls = [...new Set([...css.matchAll(/\.([A-Za-z][\w-]*)/g)].map(m=>m[1]))].slice(0,8)
+    const tags = [...new Set([...css.matchAll(/(?:^|\n|,|\})\s*(h1|h2|h3|p|a|button|ul|li|table)\s*(?:\{|\[|,|$)/gm)].map(m=>m[1]))]
+    let demo = cls.map(c=>`<div class="${c}">.${c}</div>`).join('\n')
+    if(tags.includes('h1')) demo = '<h1>Заголовок</h1>\n' + demo
+    if(tags.includes('p')) demo += '\n<p>Абзац текста для проверки стилей.</p>'
+    if(tags.includes('button')) demo += '\n<button>Кнопка</button>'
+    html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;padding:16px">\n${demo}\n${bodyJs}</body></html>`
+    html = html.replace('</head>', (headCss || '') + '\n</head>')
+    return html
+  }
+  if(headCss){
+    if(/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, `${headCss}</head>`)
+    else if(/<body[^>]*>/i.test(html)) html = html.replace(/<body([^>]*)>/i, (m, attrs: string)=>`<head>${headCss}</head>${m}`)
+    else html = `${headCss}\n${html}`
+  }
+  if(bodyJs) html = html.replace(/<\/body>/i, `${bodyJs}\n</body>`)
+  return html
+}
 function FileIcon({name}:{name:string}){
   const lang=getLang(name)
   if(lang==='python') return <span className="text-[11px]">🐍</span>
@@ -172,10 +223,12 @@ export default function VSCodeEditor(){
   },[files])
   useEffect(()=>{ if(!entry || !files.find(f=>f.name===entry)) setEntry(active.name) },[active.name, files])
   useEffect(()=>{
-    if(active.lang==='html' && iframeRef.current){
+    if((active.lang==='html' || active.lang==='css') && files.some(f=>getLang(f.name)==='html') && iframeRef.current){
+      iframeRef.current.srcdoc = buildPreviewDoc(files, active.name)
+    } else if(active.lang==='html' && iframeRef.current){
       iframeRef.current.srcdoc = active.content
     }
-  },[active.content, active.lang, activeId])
+  },[active.content, active.lang, activeId, files])
 
   useEffect(()=>{
     const onMove=(e:MouseEvent)=>{
@@ -241,6 +294,19 @@ export default function VSCodeEditor(){
   const runProject=async(entryOverride?:string)=>{
     if(files.length===0) return
     const usedEntry = entryOverride || entry || active.name
+    // Проект без Python (html/css/js) — собираем локально и показываем в превью;
+    // бэкенд-раннер умеет только .py (раньше html-проект падал «Entry main.py не найден»).
+    if(!files.some(f=>f.name.toLowerCase().endsWith('.py'))){
+      setUseLive(false); live.close()
+      setShowOutput(true); setRunning(true)
+      const doc = buildPreviewDoc(files, usedEntry)
+      if(iframeRef.current) iframeRef.current.srcdoc = doc
+      if(window.innerWidth < 1024) setMobPrev(true)
+      setOutput('▶ '+(usedEntry||'index.html')+'\n'+t('vsc_html_preview'))
+      toast(t('vsc_proj_done'),'success')
+      setRunning(false)
+      return
+    }
     setUseLive(false); live.close()
     setShowOutput(true)
     setRunning(true); setOutput(`${t('vsc_run_project_a')}${files.length}${t('vsc_run_project_b')}${usedEntry}${t('vsc_run_project_c')}`)
@@ -298,13 +364,21 @@ export default function VSCodeEditor(){
     const withFile=(out:string)=> '▶ '+active.name+'\n'+((out||'').trim()?out:t('vsc_empty_out'))
     try{
       if(active.lang==='html'){
-        if(iframeRef.current) iframeRef.current.srcdoc=code
+        if(iframeRef.current) iframeRef.current.srcdoc=buildPreviewDoc(files, active.name)
         if(window.innerWidth < 1024) setMobPrev(true)
         setOutput('▶ '+active.name+'\n'+t('vsc_html_preview'))
         toast(t('vsc_preview_upd'),'success')
       } else if(active.lang==='css'){
-        setOutput(withFile(t('vsc_css_preview')+code.slice(0,1000)))
-        toast(t('vsc_css_ok'),'info')
+        if(files.some(f=>getLang(f.name)==='html')){
+          if(iframeRef.current) iframeRef.current.srcdoc=buildPreviewDoc(files)
+          if(window.innerWidth < 1024) setMobPrev(true)
+          setOutput(withFile(t('vsc_html_preview')))
+          toast(t('vsc_preview_upd'),'success')
+        } else {
+          if(iframeRef.current) iframeRef.current.srcdoc=buildPreviewDoc(files)
+          setOutput(withFile(t('vsc_css_ok')))
+          toast(t('vsc_css_ok'),'info')
+        }
       } else if(active.lang==='javascript'){
         // Безопасно: JS всегда через бэкенд-раннер, без new Function в origin страницы
         // (new Function давал коду доступ к localStorage с JWT).
@@ -468,7 +542,7 @@ export default function VSCodeEditor(){
               <button onClick={()=>setFontSize(f=>Math.max(10,f-1))} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs flex items-center justify-center" title={t('vsc_font_down')}>A-</button>
               <button onClick={()=>setFontSize(f=>Math.min(24,f+1))} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs flex items-center justify-center" title={t('vsc_font_up')}>A+</button>
               <button onClick={()=>setEditorTheme(t=>t==='vs-dark'?'light':'vs-dark')} className="h-9 w-9 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs flex items-center justify-center" title={t('vsc_theme')}>{editorTheme==='vs-dark'?'☀':'🌙'}</button>
-              {active.lang==='html' && (
+              {(active.lang==='html' || active.lang==='css') && (
                 <button onClick={()=>setMobPrev(v=>!v)} className="h-9 px-2 lg:h-6 lg:px-1.5 rounded text-xs flex items-center justify-center gap-1 font-bold shrink-0 bg-[#007acc] text-white" title={t('vsc_prev_title')}>
                   {mobPrev ? `◂ ${t('vsc_code')}` : `${t('vsc_preview')} ▸`}
                 </button>
@@ -536,15 +610,15 @@ export default function VSCodeEditor(){
               loading={<div className="flex items-center justify-center h-full bg-[#1e1e1e] text-slate-500 text-xs">{t('vsc_monaco_loading')}</div>}
             />
             </div>
-            {active.lang==='html' && (
+            {(active.lang==='html' || active.lang==='css') && (
               <div className={`${mobPrev?'flex':'hidden lg:flex'} w-full lg:w-1/2 border-l border-[#2d2d2d] bg-white flex-col shrink-0`}>
                 <div className="px-2 py-1 bg-[#f3f3f3] border-b text-xs font-semibold text-slate-600 flex items-center justify-between shrink-0">
                   <span>Preview — live</span>
                   <div className="flex gap-1">
-                    <button onClick={()=>{ if(iframeRef.current) iframeRef.current.srcdoc=active.content }} className="px-2 py-0.5 rounded bg-[#007acc] text-white text-xs">{t('vsc_refresh')}</button>
+                    <button onClick={()=>{ if(iframeRef.current) iframeRef.current.srcdoc=buildPreviewDoc(files, active.lang==='css'?undefined:active.name) }} className="px-2 py-0.5 rounded bg-[#007acc] text-white text-xs">{t('vsc_refresh')}</button>
                   </div>
                 </div>
-                <iframe ref={iframeRef} srcDoc={active.content} className="flex-1 w-full border-0" sandbox="allow-scripts allow-modals allow-forms" allow="fullscreen"/>
+                <iframe ref={iframeRef} srcDoc={active.lang==='css'? buildPreviewDoc(files) : active.content} className="flex-1 w-full border-0" sandbox="allow-scripts allow-modals allow-forms" allow="fullscreen"/>
               </div>
             )}
             {showCmd && (
