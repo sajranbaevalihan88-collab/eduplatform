@@ -35,6 +35,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { to: '/editor', label: t('editor'), icon: Code2 },
     { to: '/about', label: t('ab_menu'), icon: Info },
   ]
+  // Нижняя навигация телефона: 5 самых нужных разделов крупным тапом
+  const bottomItems = [
+    { to: '/dashboard', label: t('dashboard'), icon: LayoutDashboard },
+    { to: '/lessons', label: t('lessons'), icon: Layers },
+    { to: '/tests', label: t('tests'), icon: FlaskConical },
+    { to: '/classes', label: t('classes'), icon: GraduationCap },
+    { to: '/games', label: t('games'), icon: Gamepad2 },
+  ]
   useEffect(()=>{
     const token=localStorage.getItem('token')
     if(token){
@@ -163,7 +171,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       <div className={`flex-1 min-w-0 ${loc.pathname.startsWith('/board') ? 'flex flex-col h-screen' : ''}`}>
         {!loc.pathname.startsWith('/board') && !isGameFull && (
-        <header className="h-[64px] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2 px-4 lg:px-8 sticky top-0 z-40 shadow-sm">
+        <header className="h-[calc(64px+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2 px-4 lg:px-8 sticky top-0 z-40 shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
             <button className="lg:hidden shrink-0 p-2 rounded-xl bg-slate-100 hover:bg-white hover:shadow-md transition-all" onClick={()=>setOpen(true)}><Menu size={18}/></button>
             <h1 className="font-display font-bold text-lg hidden md:block gradient-text truncate">{t('platform_title')}</h1>
@@ -197,7 +205,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         )}
-        <main id="main-content" tabIndex={-1} key={loc.pathname} className={loc.pathname.startsWith('/board') ? 'flex-1 min-h-0 w-full page-enter' : isGameFull ? 'w-full min-h-screen page-enter relative' : 'p-4 lg:p-8 max-w-[1400px] mx-auto page-enter'}>{children}</main>
+        <main id="main-content" tabIndex={-1} key={loc.pathname} className={loc.pathname.startsWith('/board') ? 'flex-1 min-h-0 w-full page-enter' : isGameFull ? 'w-full min-h-screen pb-24 lg:pb-0 page-enter relative' : 'p-4 pb-28 lg:p-8 max-w-[1400px] mx-auto page-enter'}>{children}</main>
+        {!loc.pathname.startsWith('/board') && !isGameFull && (
+          <nav aria-label="Основная навигация" className="lg:hidden fixed bottom-0 inset-x-0 z-30 flex items-stretch justify-around bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200/60 dark:border-slate-700/60 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(0,0,0,0.06)]">
+            {bottomItems.map(it => (
+              <Link key={it.to} to={it.to} aria-current={isActive(it.to) ? 'page' : undefined}
+                className={`flex-1 min-h-[56px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${isActive(it.to) ? 'text-blue-600 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-800'}`}>
+                <it.icon size={22} />
+                {it.label}
+              </Link>
+            ))}
+          </nav>
+        )}
         {isGameFull && (
           <button onClick={() => nav('/games')} aria-label={t('games')}
             className="fixed left-3 bottom-3 z-30 p-3 rounded-full bg-slate-900/80 dark:bg-white/90 text-white dark:text-slate-900 shadow-xl hover:scale-110 active:scale-95 transition-transform backdrop-blur-sm">

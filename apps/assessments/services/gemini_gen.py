@@ -1,11 +1,15 @@
-"""Генерация вопросов через Google Gemini (настоящая нейросеть).
+"""Автогенерация вопросов (REST без SDK).
 
 Используется, только если задан GEMINI_API_KEY. Иначе views.py падает
-на офлайн-генератор (generator.py) — честный фолбэк без выдумок.
+на встроенный генератор (generator.py) — честный фолбэк без выдумок.
 """
 import json
 import random
 import re
+
+import requests
+
+API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={k}'
 
 ALLOWED_TYPES = {'single', 'multiple', 'true_false'}
 MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-3-flash-preview']
@@ -97,25 +101,35 @@ def _normalize(items, count):
     return out
 
 
+def _extract_text(data):
+    cands = data.get('candidates') or [{}]
+    parts = (cands[0].get('content') or {}).get('parts') or []
+    return ''.join(p.get('text', '') for p in parts if isinstance(p, dict))
+
+
 def generate_with_gemini(text, count=5, api_key='', preferred_model='', instruction=''):
     """Возвращает (questions, model_name) или (None, None) при любой ошибке."""
     if not api_key:
-        return None, None
-    try:
-        import google.generativeai as genai
-    except Exception:
         return None, None
     models = [m for m in [preferred_model] + MODEL_FALLBACKS if m]
     last_err = None
     for model_name in models:
         try:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(model_name)
-            resp = model.generate_content(
-                _prompt(text, count, instruction),
-                generation_config={'temperature': 0.7, 'max_output_tokens': 16384},
+            r = requests.post(
+                API_URL.format(m=model_name, k=api_key),
+                json={
+                    'contents': [{'parts': [{'text': _prompt(text, count, instruction)}]}],
+                    'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 16384},
+                },
+                timeout=60,
             )
-            raw = getattr(resp, 'text', '') or ''
+            if not r.ok:
+                last_err = f'HTTP {r.status_code}: {str(r.text)[:180]}'
+                continue
+            raw = _extract_text(r.json())
+            if not raw:
+                last_err = 'empty response'
+                continue
             items = json.loads(_strip_fences(raw))
             if not isinstance(items, list):
                 raise ValueError('not a list')
