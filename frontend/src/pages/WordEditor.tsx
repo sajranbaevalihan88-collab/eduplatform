@@ -1321,8 +1321,12 @@ export default function WordEditor() {
         if (best) { tops.push({ top: best.mid, slot: best.space }); continue }
         break
       }
-      // низ последнего листа — с запасом, чтобы его было видно, когда лист почти пустой
-      const bottom = Math.max(contentEnd, pageVH, tops[tops.length - 1].top + 350)
+      // Низ последнего листа — по фактическому концу контента, но не короче
+      // разумного минимума. Полную высоту листа (pageVH) даём только одиночному
+      // (пустому) листу: иначе после разрыва страницы последний лист растягивается
+      // в огромное белое полотно, вылезающее за контейнер редактора.
+      const minBottom = tops.length === 1 ? pageVH : tops[tops.length - 1].top + 350
+      const bottom = Math.max(contentEnd, minBottom)
       const prev = layoutRef.current
       const same =
         prev.bottom === bottom &&
@@ -1503,7 +1507,9 @@ export default function WordEditor() {
   return (
     <div className="word-editor max-w-6xl mx-auto space-y-4 page-enter">
       <div className="flex flex-wrap items-center gap-3 animate-fadeIn">
-        <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white"><FileText size={20}/></span> Word <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{docs.length}</span></h1>
+        {/* счётчик — вне h1: из h1 собирается заголовок вкладки браузера («Word 0» смотрелся как баг) */}
+        <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white"><FileText size={20}/></span> Word</h1>
+        <span className="text-sm font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-300 px-2.5 py-1 rounded-full" aria-label="Количество документов">{docs.length}</span>
       </div>
       <div className="flex flex-col lg:flex-row gap-4">
       {/* список документов */}

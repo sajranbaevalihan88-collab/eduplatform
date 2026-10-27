@@ -1,7 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info, Database } from 'lucide-react'
 import A11yPanel from './A11yPanel'
-import InstallPWA from './InstallPWA'
 import { useState, useEffect, useRef } from 'react'
 import client from '../api/client'
 import { useTheme, useAccessibility } from '../context/UIContext'
@@ -301,8 +300,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Панель доступности — вне шапки: родитель с backdrop-blur создаёт containing block
           для position:fixed и overflow-hidden режет панель до 64px (казалось «не нажимается») */}
       <A11yPanel open={showA11y} onClose={()=>setShowA11y(false)} items={items.map(({to,label})=>({to,label}))} />
-      {/* PWA: карточка «Установить приложение», когда браузер это разрешает */}
-      <InstallPWA />
     </div>
   )
 }
