@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { BookOpen, Layers, Presentation, FlaskConical, PenTool, Sparkles, ArrowRight, Play, Shield, Globe, Zap } from 'lucide-react'
+import { BookOpen, Layers, Presentation, FlaskConical, PenTool, Sparkles, ArrowRight, Play, Shield, Globe, Zap, FileText } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 
 export default function Landing(){
@@ -13,9 +13,9 @@ export default function Landing(){
         <div className="absolute top-40 right-10 w-96 h-96 bg-cyan-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-floatSubtle" style={{animationDelay:'1s'}}/>
         <div className="max-w-6xl mx-auto px-6 pt-16 pb-12 relative">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-200 text-xs font-semibold">{t('new_board_anim')}</div>
-          <div className="mt-4 flex items-center gap-4">
-            <img src="/logo.svg" alt="EduPlatform AI — логотип" className="w-20 h-20 md:w-24 md:h-24 shrink-0 drop-shadow-xl animate-floatSubtle" />
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-extrabold leading-tight">
+          <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <img src="/logo.svg" alt="EduPlatform AI — логотип" className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 shrink-0 drop-shadow-xl animate-floatSubtle" />
+            <h1 className="text-[32px] sm:text-4xl md:text-5xl lg:text-6xl font-display font-extrabold leading-tight">
               <span className="text-slate-900 dark:text-white">EduPlatform </span><span className="brand-ai">AI</span> <span className="text-slate-900 dark:text-white">{t('hero_title1')}<br/>{t('hero_title2')}</span>
             </h1>
           </div>
@@ -57,6 +57,11 @@ export default function Landing(){
             <h3 className="font-bold mt-3 text-slate-900 dark:text-white">{t('tests_auto')}</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('tests_desc')}</p>
           </div>
+          <Link to="/word" className="bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-6 card-hover block">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 flex items-center justify-center text-white"><FileText size={20}/></div>
+            <h3 className="font-bold mt-3 text-slate-900 dark:text-white">Word — документы онлайн</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Форматирование, таблицы, картинки, импорт и скачивание .docx. Черновик сохраняется даже офлайн.</p>
+          </Link>
           <div className="bg-white dark:bg-slate-800 rounded-2xl border p-6 card-hover">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white"><BookOpen size={20}/></div>
             <h3 className="font-bold mt-3 text-slate-900 dark:text-white">{t('subjects_title')}</h3>

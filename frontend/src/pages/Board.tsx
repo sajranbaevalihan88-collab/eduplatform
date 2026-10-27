@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react'
+import { useNavigate } from 'react-router-dom'
 import client from '../api/client'
 import { useLang } from '../context/LangContext'
 import { Tldraw, AssetRecordType, exportToBlob } from 'tldraw'
 import 'tldraw/tldraw.css'
-import { Save, Plus, Maximize2, Download, Trash2, PenTool, PanelLeft } from 'lucide-react'
+import { Save, Plus, Maximize2, Download, Trash2, PenTool, PanelLeft, MoreHorizontal, X, Home } from 'lucide-react'
 import { extractPages, isLegacyBoardMeta, importLegacyPages } from '../board/legacy'
 
 const Board3D = lazy(() => import('../components/Board3D'))
@@ -25,6 +26,7 @@ function readDraft2(): { snap: any; title: string } | null {
 
 export default function Board() {
   const { t, lang } = useLang()
+  const nav = useNavigate()
   const [boards, setBoards] = useState<any[]>([])
   const [title, setTitle] = useState<string>(() => readDraft2()?.title || t('board_new'))
   const [boardId, setBoardId] = useState<null | number>(null)
@@ -36,9 +38,12 @@ export default function Board() {
   const lastDrawRef = useRef(0)
   const [resetKey, setResetKey] = useState(0)
   const [mode, setMode] = useState<'2d' | '3d'>('2d')
-  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(() => {
+    try { return window.matchMedia('(max-width: 639px)').matches } catch { return false }
+  })
   const [hideSidebarLocal, setHideSidebarLocal] = useState(false)
   const [showBoards, setShowBoards] = useState(false)
+  const [showActions, setShowActions] = useState(false)
   const [toast, setToast] = useState('')
   const toastTimer = useRef<any>(null)
   const langRef = useRef(lang)
@@ -117,7 +122,7 @@ export default function Board() {
     client.get('/boards/').then((r: any) => setBoards(Array.isArray(r.data) ? r.data : r.data.results || [])).catch(() => {})
     const iv = setInterval(flushDraft, 30000)
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isFullscreen) setIsFullscreen(false)
+      if (e.key === 'Escape' && isFullscreen) { setShowActions(false); setIsFullscreen(false) }
       if (e.key === 'Escape') {
         clipToolRef.current = null; setClipToolS(null); setAxesOpen(false)
         partToolRef.current = false; setPartToolS(false)
@@ -700,15 +705,56 @@ export default function Board() {
   if (isFullscreen) {
     return (
       <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col">
-        <div className="h-12 shrink-0 bg-slate-900 text-white flex items-center gap-3 px-4">
-          <span className="font-bold">{t('board_fullscreen')}</span>
+        <div className="h-14 sm:h-12 shrink-0 bg-slate-900 text-white flex items-center gap-2 sm:gap-3 px-2 sm:px-4">
+          <span className="font-bold hidden sm:inline">{t('board_fullscreen')}</span>
           <span className="text-xs text-white/70 hidden sm:inline">{title} • {mode === '2d' ? '2D' : '3D'}</span>
-          <div className="ml-auto flex gap-2">
-            <button onClick={save} className="px-4 py-2.5 min-h-[44px] rounded-lg bg-blue-600 text-white font-bold flex items-center gap-1"><Save size={16} /> {t('save')}</button>
-            <button onClick={() => setIsFullscreen(false)} className="px-4 py-2.5 min-h-[44px] rounded-lg bg-white text-slate-900 font-bold">{t('board_exit_esc')}</button>
+          <button onClick={() => nav('/')} aria-label={t('home')} title={t('home')}
+            className="shrink-0 w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center">
+            <Home size={20} />
+          </button>
+          <button onClick={() => { setShowActions(false); setIsFullscreen(false) }} aria-label={t('board_exit_esc')}
+            className="sm:hidden shrink-0 w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center">
+            <X size={20} />
+          </button>
+          <input value={title} onChange={e => setTitle(e.target.value)} aria-label={t('board_title')}
+            className="sm:hidden flex-1 min-w-0 px-3 py-2 rounded-xl bg-white/10 text-white text-sm font-medium placeholder:text-white/50" />
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={save} aria-label={t('save')} className="px-3 sm:px-4 py-2.5 min-h-[44px] min-w-[44px] rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center gap-1">
+              <Save size={17} /> <span className="hidden sm:inline">{t('save')}</span>
+            </button>
+            <button onClick={() => setShowActions(v => !v)} aria-label={t('board_actions')} aria-expanded={showActions}
+              className="sm:hidden w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center">
+              <MoreHorizontal size={21} />
+            </button>
+            <button onClick={() => nav('/')} className="hidden sm:flex px-4 py-2.5 min-h-[44px] rounded-lg bg-white text-slate-900 font-bold">{t('home')}</button>
+            <button onClick={() => setIsFullscreen(false)} className="hidden sm:flex px-4 py-2.5 min-h-[44px] rounded-lg bg-white text-slate-900 font-bold">{t('board_exit_esc')}</button>
           </div>
         </div>
         <div className="flex-1 min-h-0 p-2 flex flex-col">{tldrawArea}</div>
+
+        {showActions && (
+          <div className="absolute inset-0 z-[1100] sm:hidden">
+            <button onClick={() => setShowActions(false)} aria-label={t('board_hide')} className="absolute inset-0 bg-slate-950/45" />
+            <div className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-white dark:bg-slate-900 p-4 pb-[calc(16px+env(safe-area-inset-bottom))] shadow-2xl">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-bold dark:text-white">{t('board_actions')}</span>
+                <button onClick={() => setShowActions(false)} aria-label={t('board_hide')} className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white flex items-center justify-center"><X size={19} /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 p-1 mb-3 rounded-xl bg-slate-100 dark:bg-slate-800">
+                <button onClick={() => { flushDraft(); setMode('2d'); setShowActions(false) }} className={`min-h-[44px] rounded-lg text-sm font-bold ${mode === '2d' ? 'bg-white dark:bg-slate-700 dark:text-white shadow' : 'text-slate-500'}`}>{t('board_2d')}</button>
+                <button onClick={() => { flushDraft(); setMode('3d'); setShowActions(false) }} className={`min-h-[44px] rounded-lg text-sm font-bold ${mode === '3d' ? 'bg-white dark:bg-slate-700 dark:text-white shadow' : 'text-slate-500'}`}>{t('board_3d')}</button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => { flushDraft(); setShowActions(false); setIsFullscreen(false); setShowBoards(true) }} className="min-h-[52px] px-3 rounded-xl border dark:border-slate-700 dark:text-white text-sm font-bold">🗂 {t('board_mine_short')}</button>
+                <button onClick={() => { setMode('2d'); setClipTool('axes'); setShowActions(false) }} className={`min-h-[52px] px-3 rounded-xl border text-sm font-bold ${clipTool === 'axes' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>{t('bd2_axes')}</button>
+                <button onClick={() => { newBoard(); setShowActions(false) }} className="min-h-[52px] px-3 rounded-xl bg-emerald-600 text-white text-sm font-bold flex items-center justify-center gap-1.5"><Plus size={17} />{t('board_new')}</button>
+                <button onClick={() => { download(); setShowActions(false) }} className="min-h-[52px] px-3 rounded-xl border dark:border-slate-700 dark:text-white text-sm font-bold flex items-center justify-center gap-1.5"><Download size={17} />{t('board_download')}</button>
+                <button onClick={() => { clearPage(); setShowActions(false) }} className="col-span-2 min-h-[48px] px-3 rounded-xl border text-amber-700 border-amber-200 bg-amber-50 text-sm font-bold flex items-center justify-center gap-1.5"><Trash2 size={17} />{t('board_clear_sheet')}</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {toast && <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[1200] px-4 py-3 rounded-xl bg-slate-900 text-white text-sm shadow-xl">{toast}</div>}
       </div>
     )
   }
@@ -716,6 +762,10 @@ export default function Board() {
   return (
     <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950 relative overflow-hidden">
       <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200/60 dark:border-slate-700/60">
+        <button onClick={() => nav('/')} aria-label={t('home')} title={t('home')}
+          className="p-2.5 min-h-[44px] min-w-[44px] rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center">
+          <Home size={18} />
+        </button>
         <span className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 text-white inline-flex"><PenTool size={16} /></span>
         <input value={title} onChange={e => setTitle(e.target.value)} className="px-3 py-1.5 rounded-lg border bg-white dark:bg-slate-800 dark:text-white text-sm font-medium min-w-[120px] max-w-[200px]" />
         {draft && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-bold" title={t('board_draft_hint')}>{t('board_draft_chip')}</span>}

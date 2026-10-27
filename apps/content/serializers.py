@@ -116,7 +116,7 @@ class PresentationSerializer(serializers.ModelSerializer):
         except Exception:
             pass
         return ''
-    subject = serializers.PrimaryKeyRelatedField(queryset=__import__('apps.catalog.models', fromlist=['Subject']).Subject.objects.all(), required=True, allow_null=False)
+    subject = serializers.PrimaryKeyRelatedField(queryset=__import__('apps.catalog.models', fromlist=['Subject']).Subject.objects.all(), required=False, allow_null=True)
     subject_name = serializers.CharField(source='subject.name', read_only=True, default='')
     subject_slug = serializers.CharField(source='subject.slug', read_only=True, default='')
     lesson = serializers.PrimaryKeyRelatedField(queryset=__import__('apps.lessons.models', fromlist=['Lesson']).Lesson.objects.all(), required=False, allow_null=True, default=None)
@@ -126,8 +126,6 @@ class PresentationSerializer(serializers.ModelSerializer):
         read_only_fields = ['id','created_at','updated_at','owner']
 
     def validate_subject(self, value):
-        if not value:
-            raise serializers.ValidationError("Выбери предмет — без него презентация не сохранится")
         return value
 
     def validate_lesson(self, value):

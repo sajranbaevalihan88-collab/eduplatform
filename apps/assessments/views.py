@@ -188,13 +188,31 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                 passed=passed,
                 answers=answers
             )
+            # Класс-рум: тест назначен заданием — отметка «Сдано» происходит сразу здесь,
+            # а не отдельным кликом в классе. Счётчик отдаём фронту для тоста.
+            assigned_done = 0
+            if request.user.is_authenticated:
+                try:
+                    from apps.classroom.models import Assignment, Submission
+                    from django.utils import timezone as _tz
+                    for a in Assignment.objects.filter(kind='test', test=test,
+                                                       classroom__enrollments__student=request.user).only('id', 'deadline'):
+                        late = bool(a.deadline and _tz.now() > a.deadline)
+                        Submission.objects.update_or_create(
+                            assignment=a, student=request.user,
+                            defaults={'status': 'late' if late else 'submitted',
+                                      'score': attempt.score, 'attempt': attempt})
+                        assigned_done += 1
+                except Exception:
+                    logger.exception('classroom auto-submit failed for test %s', test.id)
         return Response({
             'attempt_id': attempt.id,
             'score': attempt.score,
             'earned': earned,
             'total': total,
             'passed': passed,
-            'details': details
+            'details': details,
+            'assignments_done': assigned_done
         })
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny], throttle_classes=[throttling.AnonRateThrottle, throttling.UserRateThrottle])

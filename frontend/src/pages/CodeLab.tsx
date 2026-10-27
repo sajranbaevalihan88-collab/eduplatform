@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import client from '../api/client'
-import { useAccessibility } from '../context/UIContext'
 import Editor from '@monaco-editor/react'
 import { Play, Plus, Save, Sparkles } from 'lucide-react'
 import { isStudent } from '../utils/role'
@@ -16,11 +15,6 @@ export default function CodeLab(){
   const [explanation,setExplanation]=useState<any>(null)
   const [explaining,setExplaining]=useState(false)
   const [stdinInput,setStdinInput]=useState('')
-  const {speech,autoRead,speak}=useAccessibility()
-  useEffect(()=>{
-    if(speech && autoRead && output) speak(t('codelab_speak_out')+output)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[speech, autoRead, output])
   const [showNew,setShowNew]=useState(false)
   const [newTask,setNewTask]=useState({title:'',language:'python',description:'',starter_code:'print("Hello")'})
 
@@ -137,9 +131,6 @@ export default function CodeLab(){
               <div className="flex items-center justify-between mb-2">
                 <div className="text-xs font-bold tracking-widest text-slate-400">{t('codelab_output')}</div>
                 <div className="flex gap-2">
-                {output && (
-                  <button onClick={()=>speak(output)} className="px-3 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold" title={t('codelab_listen_title')}>{t('codelab_listen')}</button>
-                )}
                 {output && (active.language==='python'||active.language==='javascript') && (
                   <button onClick={explain} disabled={explaining} className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1 disabled:opacity-50"><Sparkles size={12}/>{explaining?t('codelab_thinking'):t('codelab_explain')}</button>
                 )}

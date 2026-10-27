@@ -15,7 +15,7 @@ export function ToastContainer(){
     return ()=>{ push=null }
   },[])
   return (
-    <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 z-50 flex flex-col gap-2 max-w-full sm:max-w-[360px]" role="status" aria-live="polite">
+    <div className="fixed bottom-[calc(72px+env(safe-area-inset-bottom))] lg:bottom-4 left-4 right-4 sm:left-auto sm:right-4 z-[70] flex flex-col gap-2 max-w-full sm:max-w-[360px]" role="status" aria-live="polite">
       {toasts.map(t=>(
         <div key={t.id} className={`px-4 py-3 rounded-xl shadow-lg border text-sm font-medium ${t.type==='error'?'bg-red-50 border-red-200 text-red-700': t.type==='success'?'bg-emerald-50 border-emerald-200 text-emerald-700':'bg-white border-slate-200 text-slate-700'}`}>
           {t.msg}
@@ -90,9 +90,16 @@ export function AccessibilityProvider({children}:{children:React.ReactNode}){
     document.documentElement.style.fontSize=`${v}%`
   }
   const toggleSpeech=()=>{
-    // при включении сразу говорим — иначе тишина, и кажется, что «не работает»
-    if(!speech) setTimeout(()=>speak('Озвучка включена. Нажимайте значок динамика у текста, чтобы слушать.'),250)
-    setSpeech(v=>!v)
+    const next=!speech
+    if(next){
+      // Слепой/слабовидящий ученик не должен ещё раз искать «авто-чтение».
+      if(!autoRead){
+        setAutoReadState(true)
+        try{ localStorage.setItem('edu-auto-read','1') }catch{}
+      }
+      setTimeout(()=>speak('Озвучка включена. Страницы читаются автоматически.'),250)
+    }
+    setSpeech(next)
   }
   const setRate=(n:number)=>{
     const v=Math.max(0.5,Math.min(2,n))
@@ -108,11 +115,37 @@ export function AccessibilityProvider({children}:{children:React.ReactNode}){
     setVoiceLang(l)
     try{ localStorage.setItem('speech-lang',l) }catch{}
   }
-  const pickVoice=()=>{
+  // Синтез речи должен понимать контент на любом языке.
+  // Выбираем голос по скрипту текста: RU/KG кириллица -> русский/киргизский голос,
+  // английский текст -> английский. Если голоса нет, кириллицу читаем через латинскую транслитерацию.
+  const translitCyrillic=(input:string)=>{
+    const map:Record<string,string>={
+      'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'zh','з':'z','и':'i',
+      'й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t',
+      'у':'u','ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ъ':'','ы':'y',
+      'ь':'','э':'e','ю':'yu','я':'ya','ң':'ng','ө':'o','ү':'u','һ':'h','җ':'jh','ҥ':'ng'
+    }
+    return String(input||'').replace(/[\u0400-\u04FF]/g, ch=>{
+      const low=ch.toLowerCase()
+      const tr=map[low]
+      if(tr===undefined) return ch
+      return ch===low ? tr : tr.charAt(0).toUpperCase()+tr.slice(1)
+    })
+  }
+  const detectSpeechScript=(text:string)=>{
+    const s=String(text||'')
+    const cyr=(s.match(/[\u0400-\u04FF]/g)||[]).length
+    const lat=(s.match(/[A-Za-z]/g)||[]).length
+    if(cyr===0 && lat===0) return voiceLang==='kg'||voiceLang==='ky' ? 'cyr' : 'lat'
+    if(cyr>lat) return 'cyr'
+    if(lat>cyr) return 'lat'
+    return voiceLang==='en' ? 'lat' : 'cyr'
+  }
+  const pickVoiceForText=(text:string):{voice:SpeechSynthesisVoice|null, matched:boolean, script:'cyr'|'lat'}=>{
     try{
       const vs=window.speechSynthesis?.getVoices()||[]
-      if(!vs.length) return null
-      // рейт по качеству: Neural/Natural > Enhanced > Cloud/Google > Online > Server > базовые
+      const script=detectSpeechScript(text)
+      if(!vs.length) return {voice:null, matched:false, script}
       const rank=(v:SpeechSynthesisVoice)=>{
         const n=(v.name||'').toLowerCase()
         let s=0
@@ -125,23 +158,41 @@ export function AccessibilityProvider({children}:{children:React.ReactNode}){
         if(n.includes('compact')) s-=10
         return s
       }
-      const pref=[voiceLang,'ru','ky','kg','en']
-      for(const p of pref){
-        const cand=vs.filter(v=>v.lang&&v.lang.toLowerCase().startsWith(p))
-        if(cand.length) return cand.sort((a,b)=>rank(b)-rank(a))[0]
+      const byLang=(codes:string[])=>{
+        for(const code of codes){
+          const cand=vs.filter(v=>v.lang&&v.lang.toLowerCase().replace('_','-').startsWith(code))
+          if(cand.length) return cand.sort((a,b)=>rank(b)-rank(a))[0]
+        }
+        return null
       }
-      return vs.slice().sort((a,b)=>rank(b)-rank(a))[0]||null
-    }catch{ return null }
+      // Кыргызские тексты: сначала ky, потом русский голос (он хорошо читает кириллицу).
+      const cyrPref=voiceLang==='kg'||voiceLang==='ky'||/[\u04A3\u04E9\u04AF]/i.test(String(text||''))
+        ? ['ky','kg','ru','uk','bg','sr','mk','ba','kk']
+        : ['ru','ky','kg','uk','bg','sr','mk','ba','kk']
+      const voice=script==='cyr' ? byLang(cyrPref) : byLang(['en-US','en-GB','en'])
+      if(voice) return {voice, matched:true, script}
+      // Нет точного языка: берём другой кириллический голос; если его нет — английский голос + транслитерация.
+      const cyrCandidates=vs.filter(v=>{
+        const l=(v.lang||'').toLowerCase()
+        return ['ru','uk','bg','sr','mk','ba','kk','ky','kg'].some(code=>l.startsWith(code))
+      }).sort((a,b)=>rank(b)-rank(a))[0]
+      if(script==='cyr' && cyrCandidates) return {voice:cyrCandidates, matched:true, script}
+      return {voice:vs.slice().sort((a,b)=>rank(b)-rank(a))[0]||null, matched:false, script}
+    }catch{ return {voice:null, matched:false, script:'cyr'} }
   }
+
   const speakQueue=(parts:string[])=>{
     try{
       const s=window.speechSynthesis
       if(!s||!parts.length) return
-      const voice=pickVoice()
       // Chrome режет длинные фразы — бьём на куски и ставим в очередь
       for(const chunk of parts){
-        const u=new SpeechSynthesisUtterance(chunk)
-        if(voice){ u.voice=voice; u.lang=voice.lang } else { u.lang='ru-RU' }
+        const sel=pickVoiceForText(chunk)
+        const cyrillicWithoutVoice=sel.script==='cyr' && !sel.matched
+        const spoken=cyrillicWithoutVoice ? translitCyrillic(chunk) : chunk
+        const u=new SpeechSynthesisUtterance(spoken)
+        if(sel.voice){ u.voice=sel.voice; u.lang=sel.voice.lang }
+        else { u.lang=sel.script==='lat' ? 'en-US' : 'ru-RU' }
         u.rate=rate
         u.volume=volume
         s.speak(u)
@@ -152,27 +203,38 @@ export function AccessibilityProvider({children}:{children:React.ReactNode}){
     try{
       const s=window.speechSynthesis
       if(!s){ toast('В этом браузере нет голоса','error'); return }
-      try{ if((s as any).paused) (s as any).resume() }catch{}
       const clean=String(t||'').replace(/[<>{}[\]]/g,' ').replace(/\s+/g,' ').trim().slice(0,1500)
       if(!clean) return
-      if(!pickVoice()) toast('Голоса в системе нет — почитаю как смогу','info')
-      const parts=clean.match(/[^.!?…]+[.!?…]?/g)?.map(x=>x.trim()).filter(Boolean).slice(0,12) || [clean]
-      const say=()=>{ speakQueue(parts); watch(parts.join(' ').length) }
-      const watch=(len:number)=>{
-        // короткие фразы успевают прозвучать — проверяем только длинные
-        if(len < 14) return
-        setTimeout(()=>{
-          try{
-            if(!s.speaking && !s.pending){
-              if(!_retry){ try{ s.cancel() }catch{}; setTimeout(()=>speak(t, true), 200) }
-              else toast('Браузер молчит: проверь звук в системе и нажми ещё раз','error')
-            }
-          }catch{}
-        }, 900)
+      // Chrome/Android отдают список голосов асинхронно: иначе первый запуск может взять только English.
+      const start=()=>{
+        try{
+          if((s as any).paused) (s as any).resume()
+          if(!pickVoiceForText(clean).voice) toast('Голоса в системе нет — почитаю как смогу','info')
+          const parts=clean.match(/[^.!?…]+[.!?…]?/g)?.map(x=>x.trim()).filter(Boolean).slice(0,12) || [clean]
+          const say=()=>{ speakQueue(parts); watch(parts.join(' ').length) }
+          const watch=(len:number)=>{
+            // короткие фразы успевают прозвучать — проверяем только длинные
+            if(len < 14) return
+            setTimeout(()=>{
+              try{
+                if(!s.speaking && !s.pending){
+                  if(!_retry){ try{ s.cancel() }catch{}; setTimeout(()=>speak(t, true), 200) }
+                  else toast('Браузер молчит: проверь звук в системе и нажми ещё раз','error')
+                }
+              }catch{}
+            }, 900)
+          }
+          // cancel() вплотную перед speak() глушит фразу в Chrome — только если реально говорит, и с паузой
+          if(s.speaking||s.pending){ try{ s.cancel() }catch{}; setTimeout(say,150) }
+          else say()
+        }catch{}
       }
-      // cancel() вплотную перед speak() глушит фразу в Chrome — только если реально говорит, и с паузой
-      if(s.speaking||s.pending){ try{ s.cancel() }catch{}; setTimeout(say,150) }
-      else say()
+      const finish=()=>{ try{ s.removeEventListener('voiceschanged', finish) }catch{} }
+      if(s.getVoices().length){ start(); return }
+      let started=false
+      const ready=()=>{ if(started) return; started=true; finish(); start() }
+      s.addEventListener('voiceschanged', ready, {once:true})
+      setTimeout(ready, 850)
     }catch{}
   }
   const stopSpeak=()=>{ try{ window.speechSynthesis?.cancel() }catch{} }

@@ -131,6 +131,31 @@ body { touch-action: manipulation; padding-bottom: env(safe-area-inset-bottom); 
 .word-page img.sel { outline: 3px solid #2563eb; outline-offset: 2px; border-radius: 4px; }
 .word-page td:focus, .word-page th:focus { outline: 2px solid rgba(124,58,237,.4); }
 .word-page a { color: #4f46e5; text-decoration: underline; }
+
+/* поля страницы как у Word (SHEET_PAD — верх/низ, «2 см» слева/справа) */
+.word-page { padding: 40px 64px; overflow-wrap: break-word; }
+@media (max-width: 640px) {
+  .word-page { padding: 40px 20px; font-size: 16px; }
+  /* iOS не увеличивает страницу при фокусе: поля редактора остаются 16px+. */
+  .word-editor input, .word-editor select, .word-editor textarea { font-size: 16px !important; }
+}
+@media (hover: none), (pointer: coarse) {
+  .word-ribbon button, .word-ribbon select, .word-ribbon label { min-height: 44px; }
+  .word-ribbon button { min-width: 44px; }
+}
+
+/* типографика как в Word: отступ между абзацами, марки/номера, размеры заголовков
+   (Tailwind preflight сбрасывает их — без этого Word-функции выглядят как простой текст) */
+.word-page p { margin: 0 0 10px; display: block; }
+.word-page ul, .word-page ol { margin: 0 0 10px; padding-left: 26px; display: block; }
+.word-page ul { list-style: disc; }
+.word-page ol { list-style: decimal; }
+.word-page li { display: list-item; margin: 2px 0; }
+.word-page h1 { font-size: 2em; font-weight: 700; margin: 18px 0 10px; display: block; }
+.word-page h2 { font-size: 1.5em; font-weight: 700; margin: 16px 0 10px; display: block; }
+.word-page h3 { font-size: 1.17em; font-weight: 700; margin: 14px 0 8px; display: block; }
+.word-page blockquote { margin: 10px 0; padding: 4px 14px; border-left: 4px solid #94a3b8; color: #475569; }
+.word-page pre { margin: 10px 0; padding: 10px 12px; background: rgba(148,163,184,.16); border-radius: 8px; white-space: pre-wrap; }
 /* уголок размера фото */
 .img-handle { position: absolute; width: 16px; height: 16px; background: #2563eb; border: 3px solid #fff; border-radius: 5px; cursor: nwse-resize; z-index: 20; transform: translate(-50%,-50%); box-shadow: 0 2px 8px rgba(0,0,0,.35); }
 .word-page img[data-free="1"] { cursor: move; touch-action: none; }
@@ -140,8 +165,25 @@ body { touch-action: manipulation; padding-bottom: env(safe-area-inset-bottom); 
 /* границы листов как в Word */
 .page-guide { position: absolute; left: 0; right: 0; border-top: 2px dashed #c084fc; }
 .page-guide span { position: absolute; top: -11px; right: 12px; background: #f5f3ff; color: #2563eb; font-size: 11px; font-weight: 700; padding: 0 8px; border-radius: 999px; border: 1px solid #ddd6fe; }
-/* разрыв страницы */
-.word-page .page-break { border: 2px dashed #10b981; background: #ecfdf5; color: #047857; text-align: center; font-size: 12px; font-weight: 700; padding: 6px; border-radius: 8px; margin: 10px 0; user-select: none; }
+/* отдельные листы Word */
+.word-sheet { position: absolute; left: 0; right: 0; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; box-shadow: 0 6px 22px rgba(15, 23, 42, .10); overflow: hidden; }
+.word-sheet + .word-sheet { border-top-color: #94a3b8; }
+.word-sheet span { position: absolute; top: 8px; right: 8px; font-size: 11px; font-weight: 700; color: #64748b; }
+/* на телефоне номера страниц показывает нижняя панель «Стр. N/…» — чипы убираем,
+   иначе они залезают в узкую текстовую колонку */
+@media (max-width: 640px) {
+  .word-sheet span { display: none; }
+}
+.word-sheet-gap { position: absolute; left: -10px; right: -10px; z-index: 0; pointer-events: none; box-shadow: inset 0 1px 0 rgba(148,163,184,.65), inset 0 -1px 0 rgba(148,163,184,.65); }
+/* PowerPoint: ручки выделения не должны сжиматься вместе с канвасом */
+.pe-canvas [data-resize-handle] { width: calc(44px * var(--pe-inv, 1)); height: calc(44px * var(--pe-inv, 1)); left: calc(-22px * var(--pe-inv, 1)) !important; top: calc(-22px * var(--pe-inv, 1)) !important; }
+.pe-canvas [data-resize-handle] .resize-dot { width: calc(16px * var(--pe-inv, 1)); height: calc(16px * var(--pe-inv, 1)); left: calc(14px * var(--pe-inv, 1)) !important; top: calc(14px * var(--pe-inv, 1)) !important; border-width: calc(2px * var(--pe-inv, 1)); }
+@media (hover: none), (pointer: coarse) {
+  .pe-canvas [data-pe-overlay] { display: none !important; }
+  .pe-canvas [data-resize-handle] { width: calc(44px * var(--pe-inv, 1)); height: calc(44px * var(--pe-inv, 1)); }
+}
+/* разрыв страницы: служебный невидимый маркер, виден только при печати как разрыв */
+.word-page .page-break { height: 0; min-height: 0; border: 0; background: transparent; color: transparent; text-align: center; font-size: 0; padding: 0; margin: 0; user-select: none; break-after: page; }
 /* живой оверлей таблицы в Word: рамка + ручки */
 .word-tbl-box { position: absolute; border: 2px solid #2563eb; border-radius: 6px; pointer-events: none; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
 .word-tbl-move { position: absolute; width: 26px; height: 16px; border-radius: 5px; background: #2563eb; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 10px; line-height: 1; cursor: move; z-index: 7; pointer-events: auto; box-shadow: 0 2px 6px rgba(0,0,0,.3); user-select: none; }
@@ -236,11 +278,26 @@ body { touch-action: manipulation; padding-bottom: env(safe-area-inset-bottom); 
   .animate-floatSubtle, .animate-float { animation: none !important; }
 }
 
+/* iOS: текст полей меньше 16px вызывает неожиданный зум всей страницы. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select, textarea { font-size: 16px !important; }
+}
+
 /* Poor vision — база под скринридер (NVDA/JAWS/VoiceOver/TalkBack) + свои кнопки.
    Скринридер читает семантику сам; мы даём контраст, крупный шрифт, видимый фокус
    (Tab-навигация без мыши) и гасим анимации. Esc — стоп озвучки (см. UIContext). */
-.poor-vision { --poor-contrast:1; }
-.poor-vision body { font-size: 112%; line-height:1.7; letter-spacing:0.02em; }
+:root { --a11y-focus: #2563eb; }
+:focus-visible { outline: 3px solid var(--a11y-focus) !important; outline-offset: 3px; border-radius: 8px; }
+.poor-vision { --poor-contrast:1; color-scheme: light; }
+.poor-vision body { font-size: 112%; line-height:1.7; letter-spacing:0.02em; background:#fff !important; color:#000 !important; }
+.poor-vision.dark body,
+.poor-vision .dark body { background:#fff !important; color:#000 !important; }
+.poor-vision.dark [class*="dark:bg-slate"],
+.poor-vision.dark [class*="dark:bg-black"] { background-color:#fff !important; }
+.poor-vision.dark [class*="dark:text-white"],
+.poor-vision.dark [class*="dark:text-slate"] { color:#000 !important; }
+.poor-vision.dark [class*="dark:border-slate"] { border-color:#000 !important; }
 .poor-vision main { font-size: 1.125rem; }
 .poor-vision .card-hover, .poor-vision .btn-hover { transform:none !important; }
 .poor-vision * { border-color: #000 !important; }

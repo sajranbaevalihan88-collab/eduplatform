@@ -41,35 +41,61 @@ function getLang(name:string){
 }
 function getLabel(lang:string){ return LANGS.find(l=>l.lang===lang)?.label || lang }
 
-// Собирает «проект» из файлов в одном документе: inline <link>/<script> подменяются
-// на содержимое одноимённых файлов, остальные css/js файлы добавляются в хвост —
-// так index.html + style.css реально работают в превью (раньше css игнорировался).
+// Собирает «проект» из файлов в один документ: <link>/<script src> подменяются
+// на содержимое одноимённых файлов (поиск по имени файла, без пути и без учёта
+// регистра — файлы проекта плоские). Остальные css/js добавляются в хвост, поэтому
+// index.html + style.css + app.js реально работают вместе в превью.
+// В <head> ставится bootstrap-хук: он пересылает console.log/warn/error и
+// необработанные ошибки из песочницы-iframe в окно редактора — иначе console.log
+// невидим и скрипты «не работают» на глаз.
+const EDP_MISSING = 'файл не найден / file not found'
+
+function previewHookScript(missing: string[]){
+  const lines = missing.length
+    ? '<script>' + missing.map(m=>`console.error(${JSON.stringify(EDP_MISSING + ': ' + m)});`).join('') + '</'+'script>'
+    : ''
+  const hook = [
+    '<script>',
+    '(function(){',
+    '  var s=function(a){try{return [].slice.call(a).map(function(v){try{return typeof v==="string"?v:JSON.stringify(v)}catch(e){return String(v)}}).join(" ")}catch(e){return ""}}',
+    '  var snd=function(k,t){try{parent.postMessage({__edp_console:1,kind:k,text:t},"*")}catch(e){}};',
+    '  ;["log","info","warn","error"].forEach(function(m){var o=console[m];console[m]=function(){try{snd(m==="info"?"log":m,s(arguments))}catch(e){}try{o&&o.apply(console,arguments)}catch(e){}}});',
+    '  window.addEventListener("error",function(e){snd("error",(e.message||"Ошибка")+(e.lineno?("  [строка "+e.lineno+"]"):""))});',
+    '  window.addEventListener("unhandledrejection",function(e){var r=e&&e.reason;snd("error","Promise: "+((r&&r.message)||String(r)))});',
+    '})();',
+    '</'+'script>',
+  ].join('\n')
+  return hook + (lines ? '\n' + lines : '')
+}
+
 function buildPreviewDoc(files: VFile[], entryName?: string){
-  const find = (n:string)=> files.find(f=>f.name.toLowerCase()===n.toLowerCase())
+  const norm=(s:string)=> s.toLowerCase().replace(/^\.?\/?/,'').split('?')[0].split('#')[0]
+  const find=(ref?:string)=>{
+    const want=norm((ref||'').split('/').pop()||'')
+    if(!want) return undefined
+    return files.find(f=>norm(f.name)===want)
+  }
+  const inline=new Set<string>()
+  const missing:string[]=[]
   let entry = (entryName && entryName.toLowerCase().endsWith('.html') && find(entryName)) || find('index.html') || find('main.html') || files.find(f=>getLang(f.name)==='html')
   let html = entry?.content || '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body></body></html>'
   // <link rel=stylesheet href="style.css"> → <style>…
   html = html.replace(/<link\b[^>]*href=["']([^"']+\.css)["'][^>]*>/gi, (m, href: string)=>{
-    const name = decodeURIComponent(href.split('/').pop() || '')
-    const f = find(name)
-    return f ? `<style>\n${f.content}\n</style>` : m
+    const f = find(href)
+    if(f){ inline.add(f.name); return `<style>\n${f.content}\n</style>` }
+    missing.push(`${href} (CSS)`)
+    return m
   })
   // <script src="app.js"></script> → inline
   html = html.replace(/<script\b[^>]*src=["']([^"']+\.js)["'][^>]*>\s*<\/script>/gi, (m, src: string)=>{
-    const name = decodeURIComponent(src.split('/').pop() || '')
-    const f = find(name)
-    return f ? `<script>\n${f.content}\n\n</script>` : m
+    const f = find(src)
+    if(f){ inline.add(f.name); return `<script>\n${f.content}\n\n</script>` }
+    missing.push(`${src} (JS)`)
+    return m
   })
   // куда вставлять: перед </head> для css и перед </body> для js
-  const headCssSet = files.filter(f=>getLang(f.name)==='css' && !f.name.toLowerCase().startsWith('_'))
-  let headCss = headCssSet.map(f=>`<style>/* ${f.name} */\n${f.content}\n</style>\n`).join('')
-  let bodyJs = files.filter(f=>getLang(f.name)==='javascript' && !new RegExp(`<script\\b[^>]*src=["'][^"']*${encodeURIComponent(f.name).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}`).test(html) && !new RegExp(`<script\\b[^>]*src=["'][^"']*/${f.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}`).test(html)).map(f=>`<script>/* ${f.name} */\n${f.content}\n\n</script>`).join('\n')
-  // файлы, для которых уже был явный <link>/<script> не дублируем
-  for(const f of headCssSet){
-    if(new RegExp(`<style>\\s*/\\* ${f.name}`).test(html)){
-      headCss = headCss.split(`<style>/* ${f.name} */\n${f.content}\n</style>\n`).join('')
-    }
-  }
+  const headCss = files.filter(f=>getLang(f.name)==='css' && !f.name.toLowerCase().startsWith('_') && !inline.has(f.name)).map(f=>`<style>/* ${f.name} */\n${f.content}\n</style>`).join('\n')
+  const bodyJs = files.filter(f=>getLang(f.name)==='javascript' && !inline.has(f.name)).map(f=>`<script>/* ${f.name} */\n${f.content}\n\n</script>`).join('\n')
   // одиночный css без html: рисуем демо-разметку по найденным селекторам
   if(!entry){
     const css = files.filter(f=>getLang(f.name)==='css').map(f=>f.content).join('\n')
@@ -80,8 +106,8 @@ function buildPreviewDoc(files: VFile[], entryName?: string){
     if(tags.includes('p')) demo += '\n<p>Абзац текста для проверки стилей.</p>'
     if(tags.includes('button')) demo += '\n<button>Кнопка</button>'
     html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;padding:16px">\n${demo}\n${bodyJs}</body></html>`
-    html = html.replace('</head>', (headCss || '') + '\n</head>')
-    return html
+    html = html.replace('</head>', (headCss ? headCss + '\n' : '') + '</head>')
+    return html.replace(/<\/head>/i, m=>m + '\n' + previewHookScript(missing))
   }
   if(headCss){
     if(/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, `${headCss}</head>`)
@@ -89,7 +115,7 @@ function buildPreviewDoc(files: VFile[], entryName?: string){
     else html = `${headCss}\n${html}`
   }
   if(bodyJs) html = html.replace(/<\/body>/i, `${bodyJs}\n</body>`)
-  return html
+  return html.replace(/<head[^>]*>/i, m=>m + '\n' + previewHookScript(missing))
 }
 function FileIcon({name}:{name:string}){
   const lang=getLang(name)
@@ -198,6 +224,28 @@ export default function VSCodeEditor(){
   const [projectMode,setProjectMode]=useState(false)
   const iframeRef=useRef<HTMLIFrameElement>(null)
   const [mobPrev, setMobPrev] = useState(false)
+  // Консоль превью: bootstrap-хук в iframe постит console.* и ошибки сюда.
+  const [previewLogs,setPreviewLogs]=useState<{kind:string,text:string}[]>([])
+  const [previewNonce,setPreviewNonce]=useState(0)
+  useEffect(()=>{
+    const onMsg=(e:MessageEvent)=>{
+      const d=e.data as any
+      if(d && d.__edp_console===1){
+        setPreviewLogs(ls=>[...ls.slice(-200), {kind:String(d.kind||'log'), text:String(d.text||'')}])
+      }
+    }
+    window.addEventListener('message',onMsg)
+    return ()=>window.removeEventListener('message',onMsg)
+  },[])
+  // Ручное обновление превью (кнопка ⟳ и Run): именно так iframe перезагружается,
+  // даже если документ не изменился.
+  const refreshPreview=(entryName?:string)=>{
+    setPreviewLogs([])
+    setPreviewNonce(n=>n+1)
+    const doc=buildPreviewDoc(files, entryName)
+    if(iframeRef.current) iframeRef.current.srcdoc=doc
+    if(window.innerWidth < 1024) setMobPrev(true)
+  }
   const editorRef=useRef<any>(null)
   const runRef=useRef<()=>void>(()=>{})
   const [cursor,setCursor]=useState({line:1, col:1})
@@ -222,13 +270,15 @@ export default function VSCodeEditor(){
     catch{ /* переполнение localStorage при ~99 больших файлах — работаем без автосейва */ }
   },[files])
   useEffect(()=>{ if(!entry || !files.find(f=>f.name===entry)) setEntry(active.name) },[active.name, files])
-  useEffect(()=>{
-    if((active.lang==='html' || active.lang==='css') && files.some(f=>getLang(f.name)==='html') && iframeRef.current){
-      iframeRef.current.srcdoc = buildPreviewDoc(files, active.name)
-    } else if(active.lang==='html' && iframeRef.current){
-      iframeRef.current.srcdoc = active.content
+  // Стабильный srcDoc: раньше любое изменение state (Run, toast) ререндерило iframe
+  // и ОБНУЛЯЛО встроенные script.js/style.css — превью «не работало».
+  const previewSrcDoc=useMemo(()=>{
+    if(active.lang==='html' || active.lang==='css'){
+      return buildPreviewDoc(files, active.lang==='css'?undefined:active.name)
     }
-  },[active.content, active.lang, activeId, files])
+    if(files.some(f=>getLang(f.name)==='html')) return buildPreviewDoc(files)
+    return active.content
+  },[files, active.id, active.name, active.lang, active.content, previewNonce])
 
   useEffect(()=>{
     const onMove=(e:MouseEvent)=>{
@@ -299,9 +349,7 @@ export default function VSCodeEditor(){
     if(!files.some(f=>f.name.toLowerCase().endsWith('.py'))){
       setUseLive(false); live.close()
       setShowOutput(true); setRunning(true)
-      const doc = buildPreviewDoc(files, usedEntry)
-      if(iframeRef.current) iframeRef.current.srcdoc = doc
-      if(window.innerWidth < 1024) setMobPrev(true)
+      refreshPreview(usedEntry)
       setOutput('▶ '+(usedEntry||'index.html')+'\n'+t('vsc_html_preview'))
       toast(t('vsc_proj_done'),'success')
       setRunning(false)
@@ -364,21 +412,18 @@ export default function VSCodeEditor(){
     const withFile=(out:string)=> '▶ '+active.name+'\n'+((out||'').trim()?out:t('vsc_empty_out'))
     try{
       if(active.lang==='html'){
-        if(iframeRef.current) iframeRef.current.srcdoc=buildPreviewDoc(files, active.name)
-        if(window.innerWidth < 1024) setMobPrev(true)
+        refreshPreview(active.name)
         setOutput('▶ '+active.name+'\n'+t('vsc_html_preview'))
         toast(t('vsc_preview_upd'),'success')
       } else if(active.lang==='css'){
         if(files.some(f=>getLang(f.name)==='html')){
-          if(iframeRef.current) iframeRef.current.srcdoc=buildPreviewDoc(files)
-          if(window.innerWidth < 1024) setMobPrev(true)
+          refreshPreview()
           setOutput(withFile(t('vsc_html_preview')))
-          toast(t('vsc_preview_upd'),'success')
         } else {
-          if(iframeRef.current) iframeRef.current.srcdoc=buildPreviewDoc(files)
+          refreshPreview()
           setOutput(withFile(t('vsc_css_ok')))
-          toast(t('vsc_css_ok'),'info')
         }
+        toast(t('vsc_preview_upd'),'success')
       } else if(active.lang==='javascript'){
         // Безопасно: JS всегда через бэкенд-раннер, без new Function в origin страницы
         // (new Function давал коду доступ к localStorage с JWT).
@@ -615,10 +660,24 @@ export default function VSCodeEditor(){
                 <div className="px-2 py-1 bg-[#f3f3f3] border-b text-xs font-semibold text-slate-600 flex items-center justify-between shrink-0">
                   <span>Preview — live</span>
                   <div className="flex gap-1">
-                    <button onClick={()=>{ if(iframeRef.current) iframeRef.current.srcdoc=buildPreviewDoc(files, active.lang==='css'?undefined:active.name) }} className="px-2 py-0.5 rounded bg-[#007acc] text-white text-xs">{t('vsc_refresh')}</button>
+                    <button onClick={()=>refreshPreview(active.lang==='css'?undefined:active.name)} className="px-2 py-0.5 rounded bg-[#007acc] text-white text-xs">{t('vsc_refresh')}</button>
                   </div>
                 </div>
-                <iframe ref={iframeRef} srcDoc={active.lang==='css'? buildPreviewDoc(files) : active.content} className="flex-1 w-full border-0" sandbox="allow-scripts allow-modals allow-forms" allow="fullscreen"/>
+                <iframe ref={iframeRef} srcDoc={previewSrcDoc} className="flex-1 w-full border-0 min-h-0" sandbox="allow-scripts allow-modals allow-forms" allow="fullscreen"/>
+                {/* Консоль страницы: console.log, предупреждения и ошибки скриптов */}
+                <div className="h-28 border-t border-[#2d2d2d] bg-[#181818] text-[11px] font-mono flex flex-col shrink-0">
+                  <div className="h-6 px-2 bg-[#252526] border-b border-[#2d2d2d] flex items-center justify-between shrink-0">
+                    <span className="text-slate-300 font-semibold">{t('vsc_console_title')}</span>
+                    <button onClick={()=>setPreviewLogs([])} className="text-slate-500 hover:text-white text-[10px] font-bold">{t('vsc_console_clear')}</button>
+                  </div>
+                  <div className="flex-1 overflow-auto p-1.5 space-y-0.5">
+                    {previewLogs.length===0 ? <div className="text-slate-600">{t('vsc_console_empty')}</div> : previewLogs.map((l,i)=>(
+                      <div key={i} className={l.kind==='error'?'text-red-400 break-all':l.kind==='warn'?'text-amber-300 break-all':'text-emerald-200 break-all'}>
+                        {l.kind==='error'?'✖ ':l.kind==='warn'?'⚠ ':'› '}{l.text}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
             {showCmd && (

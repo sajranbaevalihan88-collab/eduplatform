@@ -3,13 +3,21 @@
   "short_name": "EduPlatform",
   "description": "Уроки, тесты, презентации, доска, редактор кода и игры: Аркан тартыш, спринт печати и другие. На кыргызском, русском и английском.",
   "lang": "ru",
+  "id": "/?source=pwa",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "any",
   "background_color": "#ffffff",
   "theme_color": "#2563eb",
   "categories": ["education"],
+  "shortcuts": [
+    { "name": "Уроки", "short_name": "Уроки", "url": "/lessons", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Тесты", "short_name": "Тесты", "url": "/tests", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Классы", "short_name": "Классы", "url": "/classes", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Игры", "short_name": "Игры", "url": "/games", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ],
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

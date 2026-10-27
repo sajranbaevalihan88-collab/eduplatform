@@ -54,6 +54,7 @@ const CodeLab = lazy(()=>import('./pages/CodeLab'))
 const SharedView = lazy(()=>import('./pages/SharedView'))
 const Board = lazy(()=>import('./pages/Board'))
 const VSCodeEditor = lazy(()=>import('./pages/VSCodeEditor'))
+const SqlLab = lazy(()=>import('./pages/SqlLab'))
 const WordEditor = lazy(()=>import('./pages/WordEditor'))
 import Tests from './pages/Tests'
 import Classes from './pages/Classes'
@@ -121,6 +122,7 @@ export default function App() {
                 <Route path="/games/farmer" element={<FarmerBala />} />
                 <Route path="/s/:token" element={<SharedView />} />
                 <Route path="/editor" element={<VSCodeEditor />} />
+                <Route path="/sql" element={<SqlLab />} />
                 <Route path="/board" element={<TeacherRoute><Board /></TeacherRoute>} />
                 <Route path="/board/:id" element={<TeacherRoute><Board /></TeacherRoute>} />
                 <Route path="*" element={<ErrorFallback/>} />

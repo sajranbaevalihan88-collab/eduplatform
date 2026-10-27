@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import client from '../api/client'
-import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles } from 'lucide-react'
+import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles, Share2, Video, PenLine, FlaskConical, BookOpen } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
 
 function fmtDl(s?: string){
   if(!s) return '—'
   try{ return new Date(s).toLocaleString() }catch{ return s }
+}
+function fmtCode(c?: string|null){
+  if(!c) return '—'
+  return c.length>3 ? c.slice(0,3)+'-'+c.slice(3) : c
 }
 function countdown(s?: string){
   if(!s) return ''
@@ -41,13 +45,18 @@ export default function ClassroomDetail(){
   const [addUser,setAddUser]=useState('')
   const [copied,setCopied]=useState(false)
   // assignment form
-  const [akind,setAkind]=useState<'lesson'|'test'>('test')
+  const [akind,setAkind]=useState<'lesson'|'test'|'link'|'write'>('test')
   const [objs,setObjs]=useState<any[]>([])
   const [aobj,setAobj]=useState('')
   const [adlDate,setAdlDate]=useState('')
   const [adlTime,setAdlTime]=useState('')
   const [ainstr,setAinstr]=useState('')
+  const [atitle,setAtitle]=useState('')
+  const [aurl,setAurl]=useState('')
   const [creating,setCreating]=useState(false)
+  // письменный ответ ученика (kind=write)
+  const [wOpen,setWOpen]=useState<number|null>(null)
+  const [wText,setWText]=useState('')
   // комментарии к объявлениям (как в Google Classroom)
   const [cmOpen,setCmOpen]=useState<Record<number,boolean>>({})
   const [cmList,setCmList]=useState<Record<number,any[]>>({})
@@ -91,13 +100,36 @@ export default function ClassroomDetail(){
     catch(e:any){ toast(e?.response?.data?.detail||'err','error') }
   }
   const mkTask=async()=>{
-    if(!aobj){ toast(t('cls_pick_obj'),'error'); return }
+    const dl = adlDate? new Date(`${adlDate}T${adlTime||'23:59'}`).toISOString(): null
     try{
-      await client.post('/assignments/', {classroom:id, kind:akind, [akind]:Number(aobj),
-        deadline: adlDate? new Date(`${adlDate}T${adlTime||'23:59'}`).toISOString(): null, instructions: ainstr})
-      setAobj(''); setAdlDate(''); setAdlTime(''); setAinstr(''); setCreating(false); load()
-      toast(t('cls_task_created'),'success')
-    }catch(e:any){ toast(e?.response?.data?.detail||JSON.stringify(e?.response?.data)||'err','error') }
+      if(akind==='link'){
+        if(!aurl.trim()){ toast(t('cls_need_url'),'error'); return }
+        await client.post('/assignments/', {classroom:id, kind:'link', manual_title: atitle.trim()||t('cls_k_link'), url:aurl.trim(), instructions:ainstr, deadline:dl})
+      } else if(akind==='write'){
+        if(!atitle.trim()){ toast(t('cls_need_task_title'),'error'); return }
+        await client.post('/assignments/', {classroom:id, kind:'write', manual_title: atitle.trim(), instructions:ainstr, deadline:dl})
+      } else {
+        if(!aobj){ toast(t('cls_pick_obj'),'error'); return }
+        await client.post('/assignments/', {classroom:id, kind:akind, [akind]:Number(aobj), deadline:dl, instructions: ainstr})
+      }
+      setAobj(''); setAdlDate(''); setAdlTime(''); setAinstr(''); setAtitle(''); setAurl(''); setCreating(false); load()
+      toast(t('cls_added'),'success')
+    }catch(e:any){ toast(e?.response?.data?.detail||e?.response?.data?.url||e?.response?.data?.manual_title||JSON.stringify(e?.response?.data)||'err','error') }
+  }
+  // письменная сдача задания (повторно — подставляем прежний ответ)
+  const startWrite=async(aid:number)=>{
+    setWOpen(aid); setWText('')
+    try{
+      const r=await client.get(`/submissions/?assignment=${aid}`)
+      const list = r.data.results||r.data||[]
+      const mine = list.find((x:any)=>x.answer)
+      if(mine) setWText(mine.answer)
+    }catch{}
+  }
+  const sendAnswer=async(aid:number)=>{
+    const v=wText.trim(); if(!v){ toast(t('cls_need_answer'),'error'); return }
+    try{ await client.post(`/assignments/${aid}/submit/`, {answer:v}); setWOpen(null); setWText(''); load(); toast(t('cls_submitted'),'success') }
+    catch(e:any){ toast(e?.response?.data?.answer||e?.response?.data?.detail||'err','error') }
   }
   const dlPreset=(kind:'none'|'today'|'tomorrow'|'week')=>{
     const d=new Date()
@@ -120,6 +152,13 @@ export default function ClassroomDetail(){
     catch(e:any){ toast(e?.response?.data?.detail||e?.response?.data?.username||'err','error') }
   }
   const copy=()=>{ try{ navigator.clipboard.writeText(room.invite_code); setCopied(true); setTimeout(()=>setCopied(false),1500) }catch{} }
+  const shareCode=async()=>{
+    const text=`${room.title} — код ${fmtCode(room.invite_code)}`
+    try{
+      if(navigator.share){ await navigator.share({title:'EduPlatform', text}); return }
+    }catch(e:any){ if(e?.name==='AbortError') return }
+    try{ navigator.clipboard.writeText(room.invite_code); setCopied(true); setTimeout(()=>setCopied(false),1500); toast(t('cls_copy_code'),'success') }catch{}
+  }
 
   // 📒 Журнал
   const addCol=async()=>{
@@ -134,13 +173,20 @@ export default function ClassroomDetail(){
   }
   const saveCell=async(aid:number,sid:number,val:string)=>{
     if(editCell && editCell.a===aid && editCell.s===sid) setEditCell(null)
-    const blank = val.trim()==='' 
+    const v=val.trim()
+    const blank = v===''
+    // число (запятая = десятичный разделитель) или текстовая пометка «нб» и т.п.
+    const isNum = v!=='' && !isNaN(Number(v.replace(',','.')))
+    const numVal = isNum? Number(v.replace(',','.')) : null
+    const mark = (!blank && !isNum)? v.slice(0,8) : ''
     try{
-      await client.post(`/classrooms/${id}/gradebook_score/`, {assignment:aid, student:sid, score: blank? null: Number(val)})
+      await client.post(`/classrooms/${id}/gradebook_score/`, {assignment:aid, student:sid, score:numVal, mark})
       setGb((g:any)=>{
         if(!g) return g
         const cells=g.cells.map((c:any)=> c.assignment===aid&&c.student===sid
-          ? (blank? {...c, score:null, status:'pending'} : {...c, score:Number(val), status:'submitted'}) : c)
+          ? (blank? {...c, score:null, mark:'', status:'pending'}
+            : mark? {...c, score:null, mark, status:'submitted'}
+            : {...c, score:numVal, mark:'', status:'submitted'}) : c)
         const sv=cells.filter((x:any)=>x.student===sid&&x.score!=null).map((x:any)=>x.score)
         const av=cells.filter((x:any)=>x.assignment===aid&&x.score!=null).map((x:any)=>x.score)
         return {...g, cells,
@@ -149,7 +195,7 @@ export default function ClassroomDetail(){
       })
       toast(t('cls_g_saved'),'success')
     }catch(e:any){
-      toast(e?.response?.data?.score||e?.response?.data?.detail||'err','error'); load()
+      toast(e?.response?.data?.mark||e?.response?.data?.score||e?.response?.data?.detail||'err','error'); load()
     }
   }
   const delCol=async(aid:number,title:string)=>{
@@ -166,7 +212,7 @@ export default function ClassroomDetail(){
       s.username,
       ...gb.assignments.map((a:any)=>{
         const c=gb.cells.find((x:any)=>x.assignment===a.id&&x.student===s.id)
-        return num(c?.score)
+        return c?.mark || num(c?.score)
       }),
       num(gb.avg_student?.[String(s.id)])
     ].map(q).join(';'))
@@ -224,16 +270,21 @@ export default function ClassroomDetail(){
           <h1 className="text-xl sm:text-2xl font-bold mt-1 break-words">{room.title}</h1>
           {room.description && <p className="text-white/85 text-xs sm:text-sm mt-1">{room.description}</p>}
         </div>
-        <button onClick={copy} className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-white/15 border border-white/30 font-mono font-bold text-sm" title={t('cls_copy_code')} aria-label={t('cls_copy_code')}>
-          {room.invite_code} {copied? <Check size={16}/> : <Copy size={16}/>}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={shareCode} className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-white/15 border border-white/30 flex items-center justify-center" title={t('cls_share')} aria-label={t('cls_share')}>
+            <Share2 size={16}/>
+          </button>
+          <button onClick={copy} className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-white/15 border border-white/30 font-mono font-bold text-sm" title={t('cls_copy_code')} aria-label={t('cls_copy_code')}>
+            {fmtCode(room.invite_code)} {copied? <Check size={16}/> : <Copy size={16}/>}
+          </button>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 overflow-hidden">
-        <div className="grid grid-flow-col auto-cols-fr border-b dark:border-slate-700">
+        <div className="flex overflow-x-auto sm:grid sm:grid-flow-col sm:auto-cols-fr border-b dark:border-slate-700">
           {tabs.map(tb=>(
-            <button key={tb.k} onClick={()=>setTab(tb.k)} className={`py-3 min-h-[46px] px-1 text-[13px] sm:text-sm font-semibold flex items-center justify-center gap-1.5 truncate ${tab===tb.k?'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600':'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-              <tb.icon size={15} className="shrink-0"/> <span className="truncate">{tb.label}</span>
+            <button key={tb.k} onClick={()=>setTab(tb.k)} className={`py-3 min-h-[46px] px-3 text-[13px] sm:text-sm font-semibold flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap ${tab===tb.k?'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600':'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+              <tb.icon size={15} className="shrink-0"/> <span>{tb.label}</span>
             </button>
           ))}
         </div>
@@ -289,14 +340,34 @@ export default function ClassroomDetail(){
               {isOwner && !creating && <button onClick={()=>setCreating(true)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-700 text-white text-sm font-semibold flex items-center gap-1"><Plus size={15}/>{t('cls_new_task')}</button>}
               {isOwner && creating && (
                 <div className="p-4 rounded-xl border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 space-y-3">
-                  <div className="flex rounded-xl border dark:border-slate-700 overflow-hidden w-fit bg-white dark:bg-slate-900">
-                    <button onClick={()=>setAkind('test')} className={`px-4 py-2 text-sm font-semibold ${akind==='test'?'bg-blue-700 text-white':'bg-white dark:bg-slate-900 dark:text-slate-300'}`}>{t('tests')}</button>
-                    <button onClick={()=>setAkind('lesson')} className={`px-4 py-2 text-sm font-semibold ${akind==='lesson'?'bg-blue-700 text-white':'bg-white dark:bg-slate-900 dark:text-slate-300'}`}>{t('lessons')}</button>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {([
+                      {k:'test', l:t('tests'), i:FlaskConical},
+                      {k:'lesson', l:t('lessons'), i:BookOpen},
+                      {k:'link', l:t('cls_k_link'), i:Video},
+                      {k:'write', l:t('cls_k_write'), i:PenLine},
+                    ] as any).map((kt:any)=>{
+                      const Ic = kt.i
+                      return (
+                        <button key={kt.k} onClick={()=>setAkind(kt.k)} className={`flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold border ${akind===kt.k?'bg-blue-700 text-white border-blue-700':'bg-white dark:bg-slate-900 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}><Ic size={15}/>{kt.l}</button>
+                      )
+                    })
+                  }
                   </div>
-                  <select value={aobj} onChange={e=>setAobj(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white outline-none">
-                    <option value="">{t('cls_pick_obj')}</option>
-                    {objs.map((o:any)=><option key={o.id} value={o.id}>{o.title}</option>)}
-                  </select>
+                  {akind==='link' ? (
+                    <>
+                      <input value={atitle} onChange={e=>setAtitle(e.target.value)} placeholder={t('cls_title_ph')} className="w-full px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white dark:placeholder-slate-500 outline-none"/>
+                      <input value={aurl} onChange={e=>setAurl(e.target.value)} onKeyDown={e=>e.key==='Enter'&&mkTask()} placeholder={t('cls_url_ph')} inputMode="url" className="w-full px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white dark:placeholder-slate-500 outline-none"/>
+                      <p className="text-[11px] text-slate-400">{t('cls_link_hint')}</p>
+                    </>
+                  ) : akind==='write' ? (
+                    <input value={atitle} onChange={e=>setAtitle(e.target.value)} placeholder={t('cls_write_title_ph')} className="w-full px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white dark:placeholder-slate-500 outline-none"/>
+                  ) : (
+                    <select value={aobj} onChange={e=>setAobj(e.target.value)} className="w-full px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white outline-none">
+                      <option value="">{t('cls_pick_obj')}</option>
+                      {objs.map((o:any)=><option key={o.id} value={o.id}>{o.title}</option>)}
+                    </select>
+                  )}
                   <div className="space-y-2">
                     <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5"><Clock size={14}/>{t('cls_deadline')}</div>
                     <div className="flex flex-wrap gap-2">
@@ -323,23 +394,35 @@ export default function ClassroomDetail(){
                 const st = my?.status || 'pending'
                 const openTo = a.kind==='lesson' ? `/lessons/${a.lesson}` : `/tests/${a.test}/take`
                 const cd = countdown(a.deadline)
+                const kindCls = a.kind==='test'? 'bg-rose-100 text-rose-700' : a.kind==='link'? 'bg-violet-100 text-violet-700' : a.kind==='write'? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                const kindLbl = a.kind==='test'? t('tests') : a.kind==='lesson'? t('lessons') : a.kind==='link'? t('cls_k_link') : t('cls_k_write')
                 return (
                   <div key={a.id} className="p-4 rounded-xl border dark:border-slate-700 flex flex-wrap items-center gap-3">
                     <div className="flex-1 min-w-[200px]">
                       <div className="font-bold flex items-center gap-2 dark:text-white">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${a.kind==='test'?'bg-rose-100 text-rose-700':'bg-blue-100 text-blue-700'}`}>{a.kind==='test'?t('tests'):t('lessons')}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${kindCls}`}>{kindLbl}</span>
                         {a.title}
                       </div>
-                      {a.instructions && <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">{a.instructions}</div>}
+                      {a.url && <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 underline break-all mt-1 inline-block max-w-full">{a.url}</a>}
+                      {a.instructions && <div className="text-sm text-slate-500 dark:text-slate-400 mt-1 whitespace-pre-wrap">{a.instructions}</div>}
                       <div className="text-xs text-slate-400 mt-1 flex items-center gap-2">
                         <span className="flex items-center gap-1"><Clock size={12}/>{fmtDl(a.deadline)}</span>
                         {cd && <span className="font-semibold text-blue-600">{cd}</span>}
                         {st==='overdue' && <span className="font-semibold text-red-600">{t('cls_overdue')}</span>}
                       </div>
+                      {!isOwner && wOpen===a.id && (
+                        <div className="mt-2 flex gap-2">
+                          <textarea autoFocus value={wText} onChange={e=>setWText(e.target.value)} rows={2} placeholder={t('cls_ans_ph')}
+                            className="flex-1 min-w-0 px-3 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white dark:placeholder-slate-500 outline-none"/>
+                          <button onClick={()=>sendAnswer(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-semibold shrink-0">{t('cls_submit')}</button>
+                        </div>
+                      )}
                     </div>
                     <span className={`text-xs px-2 py-1 rounded-full border ${ST_CLS[st]}`}>{ST_TXT[st]} {my?.score!=null? `${my.score}`:''}</span>
-                    {!isOwner && (a.lesson||a.test) && <Link to={openTo} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-50 text-blue-700 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14}/></Link>}
-                    {!isOwner && st!=='submitted' && st!=='late' && <button onClick={()=>submit(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-semibold">{t('cls_submit')}</button>}
+                    {!isOwner && a.kind==='link' && a.url && <a href={a.url} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 min-h-[44px] rounded-xl bg-violet-50 text-violet-700 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14}/></a>}
+                    {!isOwner && (a.kind==='lesson'||a.kind==='test') && <Link to={openTo} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-50 text-blue-700 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14}/></Link>}
+                    {!isOwner && st!=='submitted' && st!=='late' && a.kind==='write' && wOpen!==a.id && <button onClick={()=>startWrite(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-amber-500 text-white text-sm font-semibold">{t('cls_write_do')}</button>}
+                    {!isOwner && st!=='submitted' && st!=='late' && a.kind!=='write' && <button onClick={()=>submit(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-semibold">{t('cls_submit')}</button>}
                   </div>
                 )
               })}
@@ -403,6 +486,7 @@ export default function ClassroomDetail(){
                     {t('cls_g_csv')}
                   </button>
                 )}
+                {isOwner && gb && <span className="text-xs text-slate-400">{t('cls_g_mark_hint')}</span>}
                 {isOwner && gb && gb.assignments.some((a:any)=>a.kind==='manual') && (
                   <span className="text-xs text-slate-400">{t('cls_g_del_hint')}</span>
                 )}
@@ -452,21 +536,26 @@ export default function ClassroomDetail(){
                           const isEdit = !!(editCell && editCell.a===a.id && editCell.s===s.id)
                           if(isEdit) return (
                             <td key={a.id} className="p-2 border-b dark:border-slate-700 text-center">
-                              <input autoFocus value={editVal} onChange={e=>setEditVal(e.target.value)}
+                              <input autoFocus maxLength={8} value={editVal} onChange={e=>setEditVal(e.target.value)}
                                 onBlur={()=>saveCell(a.id,s.id,editVal)}
                                 onKeyDown={e=>{
                                   if(e.key==='Enter') saveCell(a.id,s.id,editVal)
                                   else if(e.key==='Escape') setEditCell(null)
                                 }}
                                 className="w-16 px-1 py-1 rounded-lg border-2 border-blue-500 text-center text-xs bg-white dark:bg-slate-800 dark:text-white"/>
+                              {a.kind==='write' && c?.answer && (
+                                <div className="mt-1 max-w-[230px] text-left text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-1.5 whitespace-pre-wrap" title={t('cls_g_answer')}>
+                                  <span className="font-semibold">{t('cls_g_answer')}: </span>{c.answer}
+                                </div>
+                              )}
                             </td>
                           )
                           return (
                             <td key={a.id} className="p-2 border-b dark:border-slate-700 text-center">
                               <button data-testid={`gb-cell-${s.id}-${a.id}`} title={a.title}
-                                onClick={()=>{ setEditCell({a:a.id,s:s.id}); setEditVal(c?.score!=null? String(Math.round(c.score*10)/10) : '') }}
-                                className={`inline-flex items-center justify-center min-w-[64px] px-2 py-1 rounded-lg border text-xs font-bold ${ST_CLS[c?.status||'pending']} hover:ring-2 hover:ring-blue-200 dark:hover:ring-blue-700 transition cursor-pointer`}>
-                                {c?.score!=null? Math.round(c.score*10)/10 : ST_TXT[c?.status||'pending']}
+                                onClick={()=>{ setEditCell({a:a.id,s:s.id}); setEditVal(c?.mark || (c?.score!=null? String(Math.round(c.score*10)/10) : '')) }}
+                                className={`inline-flex items-center justify-center min-w-[64px] px-2 py-1 rounded-lg border text-xs font-bold ${c?.mark? 'bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800' : ST_CLS[c?.status||'pending']} hover:ring-2 hover:ring-blue-200 dark:hover:ring-blue-700 transition cursor-pointer`}>
+                                {c?.mark || (c?.score!=null? Math.round(c.score*10)/10 : ST_TXT[c?.status||'pending'])}
                               </button>
                             </td>
                           )
