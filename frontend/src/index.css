@@ -325,3 +325,8 @@ body { touch-action: manipulation; padding-bottom: env(safe-area-inset-bottom); 
 /* Subtle hover for nav */
 .nav-item { transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1); }
 .nav-item:active { transform: scale(0.98); }
+
+/* Word-редактор: позицию фокуса показывает каретка, а глобальная рамка :focus-visible
+   вокруг contenteditable рисуется на всю высоту документа и выглядит как синие полосы. */
+[contenteditable="true"]:focus,
+[contenteditable="true"]:focus-visible { outline: none !important; }

@@ -1924,8 +1924,8 @@ export default function WordEditor() {
               onKeyDown={onEditorKeyDown}
               onClick={onEditorClick}
               onPointerDown={onFreeMouseDown}
-              className="word-page relative z-10 min-h-[500px] bg-transparent text-slate-900 focus:outline-none focus:ring-0 prose-sm"
-              style={{ lineHeight: 1.7, minHeight: page.pageH + SHEET_PAD * 2 }}
+              className="word-page relative z-10 min-h-[350px] bg-transparent text-slate-900 focus:outline-none focus:ring-0 prose-sm"
+              style={{ lineHeight: 1.7, minHeight: 350 }}
             />
             <div ref={tblOverlayRef} className="absolute inset-0 pointer-events-none z-[6]" aria-hidden="true" />
             {selImg && handle && (
