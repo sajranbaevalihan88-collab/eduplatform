@@ -109,14 +109,14 @@ export function PdfThumb({url, page}: any){
 // PowerPoint "shrink text on overflow": если текст не влезает в свой бокс —
 // ужимаем zoom так, чтобы влез (иначе строки наползают на соседние блоки).
 // Однострочным боксам подбираем ширину (nowrap-замер через класс), многострочным — высоту.
-export function FitBox({boxStyle, innerStyle, hasH, paras, className, children, overlay, ...rest}: any){
+export function FitBox({boxStyle, innerStyle, hasH, paras, className, children, overlay, fit=true, ...rest}: any){
   const o = useRef<HTMLDivElement|null>(null)
   const el = useRef<HTMLDivElement|null>(null)
   const [,bump] = useState(0)
   const refont = useRef(false)
   useLayoutEffect(()=>{
     const box = o.current, inner = el.current
-    if(!box || !inner || !hasH) return
+    if(!box || !inner || !hasH || !fit) return
     // веб-шрифт подменяется позже — пересчитать после его загрузки
     try{
       if(!refont.current && (document as any)?.fonts?.ready){

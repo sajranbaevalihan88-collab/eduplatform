@@ -62,7 +62,15 @@ class ClassroomViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def join(self, request):
-        code = str(request.data.get('code') or '').strip().upper()
+        """Вход по коду. Нормализуем дефисы (ABC-1234 -> ABC1234) и
+        ограничиваем перебор: не больше 15 попыток в час на пользователя."""
+        from django.core.cache import cache
+        key = f'cls-join:{request.user.id}'
+        used = cache.get(key, 0)
+        if used >= 15:
+            raise PermissionDenied('Слишком много попыток. Подожди час и попробуй снова.')
+        cache.set(key, used + 1, 3600)
+        code = str(request.data.get('code') or '').strip().upper().replace('-', '').replace(' ', '')
         if not code:
             raise ValidationError({'code': 'Введи код приглашения'})
         try:
@@ -147,7 +155,9 @@ class ClassroomViewSet(viewsets.ModelViewSet):
             {'assignment': a.id, 'student': e.student.id,
              'status': (sub_map[(a.id, e.student.id)].status if (a.id, e.student.id) in sub_map
                         else ('overdue' if (a.deadline and a.deadline < now) else 'pending')),
-             'score': (sub_map[(a.id, e.student.id)].score if (a.id, e.student.id) in sub_map else None)}
+             'score': (sub_map[(a.id, e.student.id)].score if (a.id, e.student.id) in sub_map else None),
+             'mark': (sub_map[(a.id, e.student.id)].mark if (a.id, e.student.id) in sub_map else ''),
+             'answer': ((sub_map[(a.id, e.student.id)].answer or '')[:300] if (a.id, e.student.id) in sub_map else '')}
             for a in assignments for e in students
         ]
         avgs_s = {}
@@ -182,11 +192,20 @@ class ClassroomViewSet(viewsets.ModelViewSet):
         except (Enrollment.DoesNotExist, TypeError, ValueError):
             raise NotFound('Ученик не найден')
         raw = request.data.get('score')
+        # Текстовая пометка («нб», «зч», «осв»…) — вместо цифры. score обнуляем, попытку не трогаем.
+        raw_mark = str(request.data.get('mark') or '').strip()
+        if raw_mark:
+            if len(raw_mark) > 8:
+                raise ValidationError({'mark': 'Не длиннее 8 символов'})
+            sub, _ = Submission.objects.update_or_create(
+                assignment=a, student=e.student,
+                defaults={'status': 'submitted', 'score': None, 'mark': raw_mark, 'attempt': None})
+            return Response(SubmissionSerializer(sub).data)
         if raw is None or raw == '':
             Submission.objects.filter(assignment=a, student=e.student).delete()
             return Response({'ok': True, 'assignment': a.id, 'student': e.student.id, 'score': None})
         try:
-            score = float(raw)
+            score = float(str(raw).replace(',', '.'))
         except (TypeError, ValueError):
             raise ValidationError({'score': 'Число'})
         if score < 0:
@@ -218,7 +237,8 @@ class ClassroomViewSet(viewsets.ModelViewSet):
             else:
                 st = 'pending'
             out.append({'id': a.id, 'title': a.title, 'kind': a.kind,
-                        'object_id': a.lesson_id if a.kind == 'lesson' else a.test_id,
+                        'object_id': (a.lesson_id if a.kind == 'lesson' else
+                                      a.test_id if a.kind == 'test' else a.id),
                         'deadline': a.deadline, 'status': st,
                         'score': s.score if s else None})
         return Response(out)
@@ -338,7 +358,8 @@ class AssignmentViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """Сдача задания учеником. Для теста баллы тянем из последней попытки."""
+        """Сдача задания учеником. Для теста баллы тянем из последней попытки,
+        для письменного задания нужен текст ответа."""
         a = self.get_object()
         u = request.user
         if not a.classroom.is_member(u):
@@ -346,6 +367,11 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         if a.classroom.owner_id == u.id:
             raise PermissionDenied('Владелец не сдаёт свои задания')
         score = request.data.get('score')
+        answer = str(request.data.get('answer') or '').strip()
+        if a.kind == 'write' and not answer:
+            raise ValidationError({'answer': 'Напиши ответ — задание сдается текстом'})
+        if answer:
+            answer = answer[:5000]
         attempt = None
         if a.kind == 'test' and a.test_id:
             from apps.assessments.models import TestAttempt
@@ -361,7 +387,7 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         sub, _ = Submission.objects.update_or_create(
             assignment=a, student=u,
             defaults={'status': 'late' if late else 'submitted',
-                      'score': score, 'attempt': attempt})
+                      'score': score, 'attempt': attempt, 'answer': answer})
         return Response(SubmissionSerializer(sub).data, status=200)
 
 

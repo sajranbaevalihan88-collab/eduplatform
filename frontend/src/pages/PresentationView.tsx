@@ -475,33 +475,33 @@ export default function PresentationView(){
             {pres.is_public ? <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{t('pv_public')}</span> : pres.is_lesson_private ? <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200" title={t('pv_lesson_only_hint')}>{t('pv_lesson_only')}</span> : <span className="px-2 py-1 rounded-full bg-amber-50 text-amber-700">{t('pv_private')}</span>}
           </div>
         </div>
-        <div className="flex gap-2">
-          <button onClick={()=>setSlideshow(true)} className="px-4 py-2 rounded-xl bg-blue-700 text-white flex items-center gap-2 text-sm"><Play size={16}/> {t('pv_slideshow')}</button>
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+          <button onClick={()=>setSlideshow(true)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-700 text-white flex items-center justify-center gap-2 text-sm"><Play size={16}/> {t('pv_slideshow')}</button>
           {isOwner ? (
-            <Link to={`/presentations/${id}/edit`} className="px-4 py-2 rounded-xl bg-blue-600 text-white flex items-center gap-2 text-sm"><Edit size={16}/> {t('edit')}</Link>
+            <Link to={`/presentations/${id}/edit`} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-600 text-white flex items-center justify-center gap-2 text-sm"><Edit size={16}/> {t('edit')}</Link>
           ) : (
-            <span className="px-4 py-2 rounded-xl bg-slate-100 text-slate-400 text-sm" title={t('lessons_edit_lock')}>{t('pv_readonly')}</span>
+            <span className="px-4 py-2.5 min-h-[44px] rounded-xl bg-slate-100 text-slate-400 text-sm flex items-center justify-center" title={t('lessons_edit_lock')}>{t('pv_readonly')}</span>
           )}
-          {isOwner && <button onClick={handleDelete} className="px-4 py-2 rounded-xl bg-red-50 text-red-600 border border-red-200 flex items-center gap-2 text-sm hover:bg-red-100" title={t('pv_del_title')}><Trash2 size={16}/>{t('delete')}</button>}
+          {isOwner && <button onClick={handleDelete} className="col-span-2 sm:col-span-1 px-4 py-2.5 min-h-[44px] rounded-xl bg-red-50 text-red-600 border border-red-200 flex items-center justify-center gap-2 text-sm hover:bg-red-100" title={t('pv_del_title')}><Trash2 size={16}/>{t('delete')}</button>}
         </div>
       </div>
 
       <div className="bg-white rounded-2xl border p-4">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
           <div className="flex items-center gap-2">
-            <button onClick={()=>setIdx(i=>Math.max(0,i-1))} disabled={idx===0} className="p-2 rounded-xl bg-slate-100 disabled:opacity-40"><ChevronLeft size={18}/></button>
-            <span className="px-3 py-1.5 rounded-xl bg-slate-50 border text-sm font-medium">{idx+1} / {slides.length}</span>
-            <button onClick={()=>setIdx(i=>Math.min(slides.length-1,i+1))} disabled={idx===slides.length-1} className="p-2 rounded-xl bg-slate-100 disabled:opacity-40"><ChevronRight size={18}/></button>
+            <button onClick={()=>setIdx(i=>Math.max(0,i-1))} disabled={idx===0} aria-label={t('pv_back')} className="w-11 h-11 rounded-xl bg-slate-100 disabled:opacity-40 flex items-center justify-center"><ChevronLeft size={20}/></button>
+            <span className="px-3 py-2 min-h-[44px] rounded-xl bg-slate-50 border text-sm font-medium flex items-center">{idx+1} / {slides.length}</span>
+            <button onClick={()=>setIdx(i=>Math.min(slides.length-1,i+1))} disabled={idx===slides.length-1} aria-label={t('pv_next')} className="w-11 h-11 rounded-xl bg-slate-100 disabled:opacity-40 flex items-center justify-center"><ChevronRight size={20}/></button>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {hasPdf && (
               <div className="flex rounded-xl border overflow-hidden text-sm">
-                <button onClick={()=>setModeOv('orig')} className={`px-3 py-1.5 flex items-center gap-1.5 ${mode==='orig'?'bg-slate-900 text-white':'bg-white text-slate-600'}`}>{t('pv_original')}</button>
-                <button onClick={()=>setModeOv('blocks')} className={`px-3 py-1.5 flex items-center gap-1.5 ${mode==='blocks'?'bg-slate-900 text-white':'bg-white text-slate-600'}`}>{t('pv_blocks')}</button>
+                <button onClick={()=>setModeOv('orig')} className={`px-3 py-2 min-h-[44px] flex items-center gap-1.5 ${mode==='orig'?'bg-slate-900 text-white':'bg-white text-slate-600'}`}>{t('pv_original')}</button>
+                <button onClick={()=>setModeOv('blocks')} className={`px-3 py-2 min-h-[44px] flex items-center gap-1.5 ${mode==='blocks'?'bg-slate-900 text-white':'bg-white text-slate-600'}`}>{t('pv_blocks')}</button>
               </div>
             )}
-            <button onClick={()=>setSlideshow(true)} className="px-3 py-1.5 rounded-xl bg-white border flex items-center gap-1.5 text-sm"><Maximize2 size={14}/> {t('pv_fullscreen')}</button>
-            {isOwner && <Link to={`/presentations/${id}/edit`} className="px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm flex items-center gap-1"><Edit size={14}/> {t('edit')}</Link>}
+            <button onClick={()=>setSlideshow(true)} className="px-3 py-2 min-h-[44px] rounded-xl bg-white border flex items-center gap-1.5 text-sm"><Maximize2 size={16}/> <span className="hidden sm:inline">{t('pv_fullscreen')}</span><span className="sm:hidden">{t('pv_slideshow')}</span></button>
+            {isOwner && <Link to={`/presentations/${id}/edit`} className="px-3 py-2 min-h-[44px] rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm flex items-center gap-1"><Edit size={16}/> {t('edit')}</Link>}
           </div>
         </div>
 
@@ -533,7 +533,7 @@ export default function PresentationView(){
           <div className="aspect-video shrink-0 rounded-xl border flex items-center justify-center text-slate-400">{t('pv_no_slides')}</div>
         )}
 
-        <div className="mt-4 flex gap-2 overflow-auto pb-2">
+        <div className="mt-4 flex gap-2 overflow-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {slides.map((s:any,i:number)=>{
             const thumbBg = s.background||'#ffffff'
             const thumbIsDark = thumbBg && !isLight(thumbBg) && !thumbBg.startsWith('linear-gradient')

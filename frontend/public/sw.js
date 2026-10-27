@@ -1,4 +1,4 @@
-const CACHE = 'edu-v1'
+const CACHE = 'edu-v2'
 const CORE = ['/', '/index.html', '/logo.svg', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']
 
 self.addEventListener('install', (e) => {

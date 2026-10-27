@@ -8,6 +8,11 @@ import { toast } from '../context/UIContext'
 
 const COLORS = ['#3B82F6','#8B5CF6','#10B981','#F59E0B','#EF4444','#EC4899']
 
+function fmtCode(c?: string|null){
+  if(!c) return '—'
+  return c.length>3 ? c.slice(0,3)+'-'+c.slice(3) : c
+}
+
 export default function Classes(){
   const {t} = useLang()
   const [rooms,setRooms]=useState<any[]>([])
@@ -56,7 +61,7 @@ export default function Classes(){
         <h1 className="text-2xl font-bold flex items-center gap-2 dark:text-white"><GraduationCap/>{t('classes')}</h1>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
           <div className="flex rounded-xl border dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900 w-full sm:w-auto">
-            <input value={code} onChange={e=>setCode(e.target.value.toUpperCase())} inputMode="text" autoCapitalize="characters" placeholder={t('cls_code_ph')} className="flex-1 min-w-0 px-3 py-3 sm:py-2 text-sm uppercase font-mono outline-none bg-transparent dark:text-white dark:placeholder-slate-500"/>
+            <input value={code} onChange={e=>setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,7))} inputMode="text" autoCapitalize="characters" maxLength={8} placeholder={t('cls_code_ph')} className="flex-1 min-w-0 px-3 py-3 sm:py-2 text-sm uppercase font-mono outline-none bg-transparent dark:text-white dark:placeholder-slate-500"/>
             <button onClick={join} className="px-5 py-3 sm:py-2 bg-emerald-600 text-white text-sm font-semibold flex items-center justify-center min-h-[44px]">{t('cls_join')}</button>
           </div>
           {teach && <button onClick={()=>setCreating(v=>!v)} className="w-full sm:w-auto px-4 py-3 sm:py-2 sm:min-h-[44px] rounded-xl bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-1"><Plus size={16}/>{t('cls_new')}</button>}
@@ -87,7 +92,7 @@ export default function Classes(){
               </div>
               {r.invite_code && (
                 <button onClick={()=>copy(r.id, r.invite_code)} className="mt-3 w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 font-mono text-sm dark:text-white" title={t('cls_copy_code')}>
-                  <span className="tracking-[0.2em] font-bold">{r.invite_code}</span>
+                  <span className="tracking-[0.15em] font-bold">{fmtCode(r.invite_code)}</span>
                   {copied===r.id ? <Check size={16} className="text-emerald-600"/> : <Copy size={16} className="text-slate-400"/>}
                 </button>
               )}

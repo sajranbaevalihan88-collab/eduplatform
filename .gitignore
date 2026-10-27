@@ -16,3 +16,6 @@ devlog.txt
 
 preview52.txt
 vlog52*.txt
+
+# Vite temp config
+frontend/vite.config.ts.timestamp-*.mjs

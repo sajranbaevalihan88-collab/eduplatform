@@ -1,5 +1,9 @@
 import { loader } from '@monaco-editor/react'
-import * as monaco from 'monaco-editor'
+// Урезанный monaco: ядро редактора + все simple-языки (python/js/html/css...),
+// БЕЗ глупых language-services (ts/html/json/css workers ~8 МБ) —
+// из-за них страница редактора грузилась очень долго.
+import * as monaco from 'monaco-editor/editor/editor.api'
+import 'monaco-editor/basic-languages/monaco.contribution'
 
 let configured = false
 

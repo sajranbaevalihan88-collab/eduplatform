@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
 import client from '../api/client'
-import { useAccessibility } from '../context/UIContext'
+import { useAccessibility, toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
 import { enableShotGuard, requestGuardFullscreen, disableShotGuard } from '../utils/shotGuard'
 
@@ -77,6 +77,8 @@ export default function TestTake(){
       setResult(r.data)
       setAlreadyAttempted(true)
       localStorage.setItem(`test_done_${id}`,'1')
+      // Задание в классе отмечает сам сервер (assignments_done) — показываем тост
+      if(r.data.assignments_done) toast(t('cls_submitted'),'success')
     }catch(e:any){
       const msg=e?.response?.data?.error || e?.response?.data?.detail
       if(e?.response?.status===403 && msg?.includes('уже проходили')){
@@ -194,7 +196,7 @@ export default function TestTake(){
         </div>
         <div className="mt-3 flex flex-wrap gap-1 sm:gap-2">
           {test.questions.map((x:any,i:number)=>(
-            <button key={x.id} onClick={()=>setQi(i)} aria-label={`${t('tt_q')} ${i+1}`}
+            <button key={x.id} onClick={()=>setQi(i)} aria-label={`${t('tt_q')} ${i+1}`} aria-current={i===qi ? 'step' : undefined}
               className={`w-11 h-11 rounded-lg text-sm font-bold shrink-0 ${i===qi ? 'bg-blue-600 text-white' : answers[x.id]!==undefined && answers[x.id]!=='' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'}`}>
               {i+1}
             </button>
@@ -218,7 +220,7 @@ export default function TestTake(){
         )}
         <div className="mt-3 space-y-2">
           {(q.type==='single' || q.type==='true_false') && q.options.map((o:any)=>(
-            <label key={o.id} className={`flex items-center gap-2 sm:gap-3 p-3 rounded-xl border cursor-pointer text-sm sm:text-base dark:text-white ${answers[q.id]!==undefined && String(answers[q.id])===String(o.id)?'border-blue-600 bg-blue-50 dark:bg-blue-900/30':'bg-slate-50 hover:bg-white dark:bg-slate-700/50 dark:border-slate-600'}`}>
+            <label key={o.id} className={`flex items-center gap-2 sm:gap-3 p-3 max-lg:min-h-[56px] rounded-xl border cursor-pointer text-sm sm:text-base dark:text-white ${answers[q.id]!==undefined && String(answers[q.id])===String(o.id)?'border-blue-600 bg-blue-50 dark:bg-blue-900/30':'bg-slate-50 hover:bg-white dark:bg-slate-700/50 dark:border-slate-600'}`}>
               <input type="radio" name={`q${q.id}`} value={o.id} checked={answers[q.id]!==undefined && String(answers[q.id])===String(o.id)} onChange={()=>{
                 const next = {...answers, [q.id]: o.id}
                 setAnswers(next)
@@ -231,17 +233,17 @@ export default function TestTake(){
                   else setQi(cur=> cur===fromQi ? cur+1 : cur)
                 }, 650)
               }} autoComplete="off"/>
-              <span>{o.text}</span>
+              <span className="min-w-0 flex-1 break-words">{o.text}</span>
             </label>
           ))}
           {q.type==='multiple' && q.options.map((o:any)=>(
-            <label key={o.id} className="flex items-center gap-2 sm:gap-3 p-3 rounded-xl border bg-slate-50 dark:bg-slate-700/50 dark:border-slate-600 dark:text-white cursor-pointer text-sm sm:text-base">
+            <label key={o.id} className="flex items-center gap-2 sm:gap-3 p-3 max-lg:min-h-[56px] rounded-xl border bg-slate-50 dark:bg-slate-700/50 dark:border-slate-600 dark:text-white cursor-pointer text-sm sm:text-base">
               <input type="checkbox" checked={(answers[q.id]||[]).includes(o.id)} onChange={e=>{
                 const cur=new Set(answers[q.id]||[])
                 if(e.target.checked) cur.add(o.id); else cur.delete(o.id)
                 setAnswers(a=>({...a,[q.id]:Array.from(cur)}))
               }}/>
-              <span>{o.text}</span>
+              <span className="min-w-0 flex-1 break-words">{o.text}</span>
             </label>
           ))}
           {q.type==='multiple' && (
@@ -254,6 +256,26 @@ export default function TestTake(){
           {q.type==='text' && <div className="text-sm px-4 py-2.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200">Вопрос старого типа (текст) — оценка не требуется, жми «Отправить ответы».</div>}
         </div>
       </div>
+      )}
+      {q && (
+        <div className="lg:hidden sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-20 mt-4">
+          <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl p-2 flex items-center gap-2">
+            <button onClick={() => setQi(cur => Math.max(0, cur - 1))} disabled={qi === 0} aria-label={t('tt_prev')}
+              className="min-h-[56px] px-4 rounded-xl border font-bold text-sm disabled:opacity-40 bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600">
+              ←
+            </button>
+            <div className="flex-1 min-w-0 text-center">
+              <div className="text-xs font-bold text-slate-600 dark:text-slate-300">{t('tt_q')} {qi + 1} {t('tt_of')} {test.questions.length}</div>
+              <div className="mt-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden" role="progressbar" aria-valuemin={1} aria-valuemax={test.questions.length} aria-valuenow={qi + 1}>
+                <div className="h-full bg-blue-600 transition-all" style={{ width: `${((qi + 1) / test.questions.length) * 100}%` }} />
+              </div>
+            </div>
+            <button onClick={() => setQi(cur => Math.min(test.questions.length - 1, cur + 1))} disabled={qi + 1 >= test.questions.length} aria-label={t('tt_next_title')}
+              className="min-h-[56px] px-4 rounded-xl bg-blue-600 text-white font-bold text-sm disabled:opacity-40">
+              →
+            </button>
+          </div>
+        </div>
       )}
       <div className="text-center text-xs text-slate-400">{t('tt_hint')}</div>
       {qi+1 >= test.questions.length && (

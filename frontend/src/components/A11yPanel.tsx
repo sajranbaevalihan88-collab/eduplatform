@@ -1,108 +1,109 @@
-import { useEffect, useRef, useState } from 'react'
-import { X, Eye, EyeOff, Volume2, VolumeX, Check, Ear } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
+import { X, Eye, EyeOff } from 'lucide-react'
 import { useAccessibility } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
 
-/** Панель доступности: голос, шрифт, контраст — открывается из шапки. */
-export default function A11yPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { poor, toggle, fontScale, setFont, speech, toggleSpeech, rate, setRate, volume, setVolume, voiceLang, setLang, speak, autoRead, toggleAutoRead } = useAccessibility()
-  const { t, lang } = useLang()
-  const [voices, setVoices] = useState(0)
+type NavItem = { to: string; label: string }
+
+/** Панель доступности: режим слабовидящих + быстрый переход по разделам. */
+export default function A11yPanel({ open, onClose, items = [] }: { open: boolean; onClose: () => void; items?: NavItem[] }) {
+  const { poor, toggle, fontScale, setFont } = useAccessibility()
+  const { t } = useLang()
   const boxRef = useRef<HTMLDivElement>(null)
-  // Esc — закрыть панель (трижды повторить не нужно)
+  const openerRef = useRef<HTMLElement | null>(null)
+
+  // Esc — закрыть панель; Tab — цикл внутри модального окна.
   useEffect(() => {
     if (!open) return
+    openerRef.current = document.activeElement as HTMLElement | null
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.stopPropagation(); onClose() }
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); return }
+      if (e.key !== 'Tab' || !boxRef.current) return
+      const focusables = Array.from(boxRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ))
+      if (!focusables.length) return
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
     }
     window.addEventListener('keydown', onKey)
-    try { boxRef.current?.focus() } catch {}
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open])
-  useEffect(() => {
-    if (!open) return
-    const upd = () => {
-      try { setVoices(window.speechSynthesis?.getVoices()?.length || 0) } catch { setVoices(0) }
+    const id = setTimeout(() => boxRef.current?.focus(), 30)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      clearTimeout(id)
     }
-    upd()
-    const t = setTimeout(upd, 800)
-    try {
-      if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = upd as any
-    } catch {}
-    return () => clearTimeout(t)
-  }, [open ])
+  }, [open, onClose])
+
+  // При закрытии возвращаем фокус туда, откуда открыли.
+  useEffect(() => {
+    if (open) return
+    openerRef.current?.focus?.()
+    openerRef.current = null
+  }, [open])
+
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-16 p-4" onClick={onClose} role="dialog" aria-modal="true" aria-label={t('a11y_settings')}>
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-16 p-4" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="a11y-title">
       <div ref={boxRef} tabIndex={-1} onClick={e => e.stopPropagation()} className="w-[480px] max-w-full bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-5 space-y-4 max-h-[85vh] overflow-auto animate-scaleIn outline-none">
         <div className="flex items-center justify-between">
-          <div className="font-bold text-lg dark:text-white">{t('a11y')}</div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white" aria-label={t('a11y_close')}><X size={18} /></button>
+          <h2 id="a11y-title" className="font-bold text-lg dark:text-white">{t('a11y')}</h2>
+          <button onClick={onClose} className="min-w-[44px] min-h-[44px] p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white flex items-center justify-center" aria-label={t('a11y_close')}><X size={18} /></button>
         </div>
+
+        <nav aria-label={t('a11y_quick_nav')} className="rounded-2xl border border-blue-100 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-3">
+          <h3 className="font-bold text-sm dark:text-white">{t('a11y_quick_nav')}</h3>
+          <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{t('a11y_quick_nav_hint')}</p>
+          <ul className="mt-2 space-y-1.5">
+            {items.map((item, i) => (
+              <li key={item.to}>
+                <Link
+                  to={item.to}
+                  onClick={onClose}
+                  aria-label={`${i + 1}. ${item.label}`}
+                  className="w-full min-h-[44px] px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 font-semibold flex items-center justify-between"
+                >
+                  <span>{item.label}</span>
+                  <span aria-hidden="true" className="text-xs font-bold text-blue-700 dark:text-blue-300">Alt+{i + 1}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
 
         <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50">
           <div className="flex items-center gap-2 font-semibold text-sm dark:text-white">{poor ? <EyeOff size={17} /> : <Eye size={17} />} {t('a11y_poor')}</div>
-          <button onClick={toggle} aria-pressed={poor} className={`w-12 h-7 rounded-full transition shrink-0 ${poor ? 'bg-amber-400' : 'bg-slate-300'} relative`}>
-            <span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${poor ? 'left-6' : 'left-1'}`} />
+          <button onClick={toggle} aria-label={t('a11y_poor')} aria-pressed={poor} className={`w-14 min-h-[44px] rounded-full transition shrink-0 ${poor ? 'bg-amber-400' : 'bg-slate-300'} relative`}>
+            <span className={`absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white transition-all ${poor ? 'left-7' : 'left-1'}`} />
           </button>
         </div>
+
         {poor && (
-          <div className="flex items-center gap-2 text-sm dark:text-white">
-            <span className="font-semibold">{t('font_label')}</span>
-            <button onClick={() => setFont(fontScale - 10)} className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-700 border dark:border-slate-600 font-bold">A−</button>
-            <span className="font-bold w-12 text-center">{fontScale}%</span>
-            <button onClick={() => setFont(fontScale + 10)} className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-700 border dark:border-slate-600 font-bold">A+</button>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50">
-          <div className="flex items-center gap-2 font-semibold text-sm dark:text-white">{speech ? <Volume2 size={17} /> : <VolumeX size={17} />} {t('a11y_speech')}</div>
-          <button onClick={toggleSpeech} aria-pressed={speech} className={`w-12 h-7 rounded-full transition shrink-0 ${speech ? 'bg-blue-600' : 'bg-slate-300'} relative`}>
-            <span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${speech ? 'left-6' : 'left-1'}`} />
-          </button>
-        </div>
-
-        {/* Авто-озвучка страницы: Дефолт выключено — сам не говорит */}
-        <div className={`p-3 rounded-xl space-y-1.5 bg-slate-50 dark:bg-slate-700/50 ${(speech ? '' : 'opacity-60')}`}>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 font-semibold text-sm dark:text-white"><Ear size={17} /> <span className={autoRead&&speech ? 'text-blue-700 dark:text-blue-300' : ''}>{t('a11y_auto')}</span>{autoRead && speech ? ' •' : ''}</div>
-            <button onClick={toggleAutoRead} disabled={!speech} aria-pressed={autoRead} className={`w-12 h-7 rounded-full transition shrink-0 ${autoRead && speech ? 'bg-emerald-500' : 'bg-slate-300'} relative ${!speech ? 'opacity-50' : ''}`}>
-              <span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${autoRead && speech ? 'left-6' : 'left-1'}`} />
-            </button>
-          </div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">{t('a11y_auto_hint')}</div>
-        </div>
-        {speech && (
-          <div className="space-y-3 text-sm dark:text-white">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold w-24">{t('a11y_lang')}</span>
-              {(['ru', 'kg', 'en'] as const).map(l => (
-                <button key={l} onClick={() => setLang(l)} aria-pressed={voiceLang === l}
-                  className={`px-3 py-1.5 rounded-xl font-bold ${voiceLang === l ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-700 border dark:border-slate-600'}`}>
-                  {l === 'ru' ? 'RU' : l === 'kg' ? 'KG' : 'EN'}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold w-24">{t('a11y_rate')} {rate.toFixed(1)}x</span>
-              <input type="range" min={0.5} max={2} step={0.1} value={rate} onChange={e => setRate(parseFloat(e.target.value))} className="flex-1" aria-label={t('a11y_rate')} />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold w-24">{t('a11y_volume')} {Math.round(volume * 100)}%</span>
-              <input type="range" min={0.1} max={1} step={0.1} value={volume} onChange={e => setVolume(parseFloat(e.target.value))} className="flex-1" aria-label={t('a11y_volume')} />
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => speak(lang === 'kg' ? 'Салам! Бул үндүн текшерүүсү.' : lang === 'en' ? 'Hello! This is a voice check.' : 'Привет! Это проверка голоса.')} className="px-4 py-2 rounded-xl bg-blue-600 text-white font-bold flex items-center gap-1">
-                <Check size={15} /> {t('a11y_check_voice')}
-              </button>
-              <span className="text-xs text-slate-500 dark:text-slate-400">{voices > 0 ? `${t('a11y_voices')}${voices}` : t('a11y_no_voice')}</span>
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 text-sm dark:text-white">
+            <div className="font-semibold mb-2">{t('font_label')}</div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={() => setFont(fontScale - 10)} className="px-3 min-h-[44px] rounded-xl bg-white dark:bg-slate-700 border dark:border-slate-600 font-bold">A−</button>
+              <span className="font-bold w-12 text-center">{fontScale}%</span>
+              <button onClick={() => setFont(fontScale + 10)} className="px-3 min-h-[44px] rounded-xl bg-white dark:bg-slate-700 border dark:border-slate-600 font-bold">A+</button>
+              <span className="w-full sm:w-auto sm:ml-1 flex gap-1.5">
+                {([100, 125, 150] as const).map(v => (
+                  <button key={v} onClick={() => setFont(v)} aria-pressed={fontScale === v}
+                    className={`px-3 min-h-[44px] rounded-xl font-bold border ${fontScale === v ? 'bg-amber-400 border-amber-500 text-slate-900' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>{v}%</button>
+                ))}
+              </span>
             </div>
           </div>
         )}
 
-        <a href="/guide" onClick={onClose} className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold">
-          {t('a11y_guide')}
-        </a>
+        <div className="rounded-xl border border-blue-100 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-3">
+          <div className="font-bold text-sm dark:text-white mb-1">{t('a11y_howto')}</div>
+          <div className="text-xs leading-relaxed text-slate-700 dark:text-slate-200">
+            {t('a11y_poor_hint')}
+          </div>
+        </div>
+
         <div className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3">
           {t('a11y_hotkeys')}
         </div>

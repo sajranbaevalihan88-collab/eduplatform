@@ -3,7 +3,7 @@ import base64
 import io
 import os
 import re
-from html import escape
+from html import escape, unescape
 from html.parser import HTMLParser
 
 from django.http import FileResponse
@@ -17,10 +17,69 @@ from .serializers import WordDocumentSerializer
 
 # Лимит импорта Word — 20МБ по ТЗ (стенд + жюри)
 WORD_IMPORT_MAX_BYTES = 20 * 1024 * 1024
+WORD_BODY_MAX_CHARS = 2_000_000
 
 _ALLOWED_TAGS = {'p', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'strong', 'em', 'u', 's',
                  'a', 'table', 'tr', 'td', 'th', 'img', 'br', 'blockquote', 'span'}
 _ALLOWED_ATTRS = {'href', 'src', 'alt', 'style', 'colspan', 'rowspan'}
+_SAFE_FONTS = {
+    'times new roman', 'arial', 'calibri', 'georgia', 'verdana',
+    'courier new', 'comic sans ms',
+}
+
+
+def _clean_style(value: str) -> str:
+    """Сохраняет форматирование редактора, отбрасывая URL и произвольный CSS."""
+    cleaned = []
+    for declaration in str(value or '').split(';'):
+        if ':' not in declaration:
+            continue
+        prop, raw = declaration.split(':', 1)
+        prop = prop.strip().lower()
+        val = raw.strip().lower()
+        safe = False
+        if prop in ('text-align',):
+            safe = val in ('left', 'center', 'right', 'justify')
+        elif prop in ('color', 'background-color'):
+            safe = bool(re.fullmatch(r'#[0-9a-f]{3}([0-9a-f]{3})?', val))
+        elif prop == 'font-size':
+            m = re.fullmatch(r'(\d{1,3})(px|pt)', val)
+            safe = bool(m and 1 <= int(m.group(1)) <= 200)
+        elif prop == 'font-family':
+            safe = val.strip("'\"") in _SAFE_FONTS
+        elif prop == 'font-weight':
+            safe = val in ('normal', 'bold', '400', '500', '600', '700')
+        elif prop == 'font-style':
+            safe = val in ('normal', 'italic')
+        elif prop == 'text-decoration':
+            safe = val in ('none', 'underline', 'line-through', 'underline line-through')
+        elif prop == 'line-height':
+            safe = bool(re.fullmatch(r'(\d(\.\d{1,2})?|\d{1,3}(px|pt))', val))
+        elif prop in ('margin', 'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
+                      'left', 'top', 'width', 'height', 'max-width'):
+            pattern = r'auto|0|-?\d{1,4}(\.\d{1,2})?(px|pt|%)'
+            if prop == 'margin':
+                safe = all(re.fullmatch(pattern, part) for part in val.split()) and 1 <= len(val.split()) <= 4
+            else:
+                safe = bool(re.fullmatch(pattern, val))
+        elif prop in ('padding', 'padding-left', 'padding-right', 'padding-top', 'padding-bottom'):
+            pattern = r'0|\d{1,3}(px|pt|%)'
+            safe = all(re.fullmatch(pattern, part) for part in val.split()) and 1 <= len(val.split()) <= 4
+        elif prop == 'float':
+            safe = val in ('left', 'right', 'none')
+        elif prop == 'display':
+            safe = val in ('block', 'inline', 'inline-block')
+        elif prop == 'position':
+            safe = val in ('relative', 'absolute')
+        elif prop == 'z-index':
+            safe = val.isdigit() and int(val) <= 20
+        elif prop == 'border-collapse':
+            safe = val == 'collapse'
+        elif prop == 'table-layout':
+            safe = val == 'fixed'
+        if safe:
+            cleaned.append(f'{prop}: {val}')
+    return '; '.join(cleaned)[:1000]
 
 
 class _Sanitizer(HTMLParser):
@@ -31,6 +90,10 @@ class _Sanitizer(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         tag = tag.lower()
+        style = ''
+        for k, v in attrs:
+            if k == 'style' and isinstance(v, str):
+                style = _clean_style(v)
         if tag == 'div':
             # храним только разрывы страниц, остальное разворачиваем на фронте
             cls = ''
@@ -54,18 +117,21 @@ class _Sanitizer(HTMLParser):
             return
         if tag == 'img':
             src = ''
+            alt = ''
+            free = ''
             for k, v in attrs:
                 if k == 'src' and isinstance(v, str) and (v.startswith('data:image/') or v.startswith(('http://', 'https://'))):
-                    src = v[:2000000]
-            self.out.append(f'<img src="{escape(src, quote=True)}" alt="">' if src else '')
+                    src = v[:WORD_BODY_MAX_CHARS]
+                elif k == 'alt' and isinstance(v, str):
+                    alt = v[:300]
+                elif k == 'data-free' and v == '1':
+                    free = ' data-free="1"'
+            css = f' style="{escape(style, quote=True)}"' if style else ''
+            self.out.append(f'<img src="{escape(src, quote=True)}" alt="{escape(alt, quote=True)}"{free}{css}>' if src else '')
             return
-        style = ''
-        for k, v in attrs:
-            if k == 'style' and isinstance(v, str):
-                m = re.findall(r'(text-align\s*:\s*(left|center|right|justify)|color\s*:\s*#[0-9a-fA-F]{3,6}|background-color\s*:\s*#[0-9a-fA-F]{3,6}|font-size\s*:\s*\d{1,3}px)', v)
-                if m:
-                    style = '; '.join(x[0] for x in m)[:200]
         extra = ''
+        if tag == 'table' and any(k == 'data-fixed' and v == '1' for k, v in attrs):
+            extra += ' data-fixed="1"'
         if tag in ('td', 'th'):
             for k, v in attrs:
                 if k in ('colspan', 'rowspan') and str(v).isdigit():
@@ -92,7 +158,7 @@ class _Sanitizer(HTMLParser):
         self.out.append(f'&#{name};')
 
 
-def sanitize_html(html: str, limit: int = 500000) -> str:
+def sanitize_html(html: str, limit: int = WORD_BODY_MAX_CHARS) -> str:
     s = _Sanitizer()
     try:
         s.feed(str(html or '')[:limit])
@@ -268,36 +334,75 @@ class _HtmlToDocx(HTMLParser):
         self.doc = doc
         self.block = None  # dict: {type, align, items?}
         self.marks = []
-        self.buf = ''
+        self.styles = []
 
-    def _flush_run(self, para, text):
-        if not text:
-            return
-        run = para.add_run(text)
-        if 'b' in self.marks:
+    @staticmethod
+    def _style_dict(value):
+        result = {}
+        for declaration in _clean_style(value).split(';'):
+            if ':' in declaration:
+                key, val = declaration.split(':', 1)
+                result[key.strip()] = val.strip()
+        return result
+
+    def _current_style(self):
+        result = {}
+        for style in self.styles:
+            result.update(style)
+        return result
+
+    @staticmethod
+    def _apply_run_style(run, style):
+        from docx.shared import Pt, RGBColor
+        weight = style.get('font-weight', '')
+        if weight == 'bold' or (weight.isdigit() and int(weight) >= 600):
             run.bold = True
-        if 'i' in self.marks:
+        if style.get('font-style') == 'italic':
             run.italic = True
-        if 'u' in self.marks:
+        decoration = style.get('text-decoration', '')
+        if 'underline' in decoration:
             run.underline = True
-        if 's' in self.marks:
-            try:
-                run.font.strike = True
-            except Exception:
-                pass
+        if 'line-through' in decoration:
+            run.font.strike = True
+        size = style.get('font-size', '')
+        m = re.fullmatch(r'(\d{1,3})(px|pt)', size)
+        if m:
+            run.font.size = Pt(int(m.group(1)) * (0.75 if m.group(2) == 'px' else 1))
+        family = style.get('font-family')
+        if family:
+            run.font.name = family.strip("'\"")
+        color = style.get('color', '')
+        if re.fullmatch(r'#[0-9a-f]{6}', color):
+            run.font.color.rgb = RGBColor.from_string(color[1:].upper())
+
+    @staticmethod
+    def _add_run_image(run, style):
+        src = style.get('_image', '')
+        m = re.match(r'^data:image/(png|jpe?g|gif|bmp);base64,(.+)$', src, re.DOTALL)
+        if not m:
+            return
+        try:
+            from docx.shared import Emu
+            data = base64.b64decode(m.group(2), validate=False)
+            width = style.get('width', '')
+            wm = re.fullmatch(r'(\d{1,4})px', width)
+            # 600px примерно соответствует текстовой области A4.
+            width_emu = Emu(min(600, max(30, int(wm.group(1)))) * 9525) if wm else None
+            run.add_picture(io.BytesIO(data), width=width_emu)
+        except Exception:
+            pass
 
     def _new_block(self, btype, attrs):
         self._close_block()
-        align = None
+        block_style = {}
         for k, v in attrs:
             if k == 'style' and isinstance(v, str):
-                m = re.search(r'text-align\s*:\s*(left|center|right|justify)', v)
-                if m:
-                    align = m.group(1)
+                block_style = self._style_dict(v)
+        align = block_style.get('text-align')
         if btype in ('ul', 'ol'):
-            self.block = {'type': btype, 'align': align, 'items': [], 'cur': ''}
+            self.block = {'type': btype, 'align': align, 'style': block_style, 'items': [], 'cur': ''}
         else:
-            self.block = {'type': btype, 'align': align, 'runs': []}
+            self.block = {'type': btype, 'align': align, 'style': block_style, 'runs': []}
 
     def _close_block(self):
         b = self.block
@@ -323,18 +428,15 @@ class _HtmlToDocx(HTMLParser):
             return  # таблицы собираем отдельно через _TableBuilder (см. ниже)
         if b['type'] in ('h1', 'h2', 'h3'):
             level = {'h1': 1, 'h2': 2, 'h3': 3}[b['type']]
-            text = ''.join(t for _, t in b.get('runs', []))
-            if text.strip():
-                try:
-                    self.doc.add_heading(text.strip(), level=level)
-                except Exception:
-                    self.doc.add_paragraph(text.strip())
-            return
-        p = self.doc.add_paragraph()
-        for mark_set, text in b.get('runs', []):
-            if not text:
-                continue
-            run = p.add_run(text)
+            p = self.doc.add_heading('', level=level)
+        else:
+            p = self.doc.add_paragraph()
+        for mark_set, style, text in b.get('runs', []):
+            run = p.add_run()
+            if style.get('_image'):
+                self._add_run_image(run, style)
+            if text:
+                run.text = text
             if 'b' in mark_set:
                 run.bold = True
             if 'i' in mark_set:
@@ -342,12 +444,18 @@ class _HtmlToDocx(HTMLParser):
             if 'u' in mark_set:
                 run.underline = True
             if 's' in mark_set:
-                try:
-                    run.font.strike = True
-                except Exception:
-                    pass
+                run.font.strike = True
+            self._apply_run_style(run, style)
         if b.get('align') in amap:
             p.alignment = amap[b['align']]
+        block_style = b.get('style', {})
+        line_height = block_style.get('line-height', '')
+        if re.fullmatch(r'\d(\.\d{1,2})?', line_height):
+            p.paragraph_format.line_spacing = float(line_height)
+        elif re.fullmatch(r'\d{1,3}(px|pt)', line_height):
+            from docx.shared import Pt
+            value = float(line_height[:-2]) * (0.75 if line_height.endswith('px') else 1)
+            p.paragraph_format.line_spacing = Pt(value)
 
     def handle_starttag(self, tag, attrs):
         tag = tag.lower()
@@ -369,6 +477,17 @@ class _HtmlToDocx(HTMLParser):
             self.marks.append('u')
         elif tag == 's':
             self.marks.append('s')
+        elif tag == 'span':
+            attrs_dict = dict(attrs)
+            self.styles.append(self._style_dict(attrs_dict.get('style', '')))
+        elif tag == 'img':
+            attrs_dict = dict(attrs)
+            if self.block is None or 'runs' not in self.block:
+                self._new_block('p', [])
+            style = self._style_dict(attrs_dict.get('style', ''))
+            style.update(self._current_style())
+            style['_image'] = attrs_dict.get('src', '')
+            self.block['runs'].append((tuple(self.marks), style, ''))
         elif tag == 'br':
             self.handle_data('\n')
 
@@ -395,6 +514,9 @@ class _HtmlToDocx(HTMLParser):
         elif tag == 's':
             if 's' in self.marks:
                 self.marks.remove('s')
+        elif tag == 'span':
+            if self.styles:
+                self.styles.pop()
 
     def handle_data(self, data):
         if not data:
@@ -402,16 +524,22 @@ class _HtmlToDocx(HTMLParser):
         if self.block and self.block.get('type') in ('ul', 'ol') and 'items' in self.block and 'cur' in self.block:
             self.block['cur'] = (self.block.get('cur', '') + data)
         elif self.block and 'runs' in self.block:
-            self.block['runs'].append((tuple(self.marks), data))
+            self.block['runs'].append((tuple(self.marks), self._current_style(), data))
         elif self.block is None:
             if data.strip():
-                self.block = {'type': 'p', 'align': None, 'runs': []}
-                self.block['runs'].append((tuple(self.marks), data))
+                self.block = {'type': 'p', 'align': None, 'style': {}, 'runs': []}
+                self.block['runs'].append((tuple(self.marks), self._current_style(), data))
 
 
-def html_to_docx_bytes(body_html: str) -> bytes:
+def html_to_docx_bytes(body_html: str, page_size: str = 'A4') -> bytes:
     from docx import Document as DocxDocument
+    from docx.shared import Mm
     doc = DocxDocument()
+    dimensions = {'A3': (297, 420), 'A4': (210, 297), 'A5': (148, 210)}
+    width, height = dimensions.get(str(page_size).upper(), dimensions['A4'])
+    for section in doc.sections:
+        section.page_width = Mm(width)
+        section.page_height = Mm(height)
     # разрывы страниц редактора -> настоящие разрывы Word
     chunks = re.split(r'<div[^>]*class="[^"]*page-break[^"]*"[^>]*>.*?</div>',
                       str(body_html or ''), flags=re.DOTALL | re.IGNORECASE)
@@ -443,7 +571,7 @@ def _html_chunk_to_docx(doc, html: str) -> None:
                 grid = []
                 for r in rows:
                     cells = re.findall(r'<t[dh].*?>(.*?)</t[dh]>', r, flags=re.DOTALL | re.IGNORECASE)
-                    grid.append([re.sub(r'<[^>]+>', '', c).strip()[:500] for c in cells])
+                    grid.append([unescape(re.sub(r'<[^>]+>', '', c)).strip()[:500] for c in cells])
                 grid = [r for r in grid if r]
                 if grid:
                     cols = max(len(r) for r in grid)
@@ -487,10 +615,11 @@ class WordDocumentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         title = (serializer.validated_data.get('title') or 'Документ')[:300]
-        body = sanitize_html(serializer.validated_data.get('body_html') or '')
-        if len(body) > 2000000:
+        raw_body = serializer.validated_data.get('body_html') or ''
+        if len(raw_body) > WORD_BODY_MAX_CHARS:
             from rest_framework.exceptions import ValidationError
             raise ValidationError("Документ слишком большой (макс ~2МБ текста с картинками)")
+        body = sanitize_html(raw_body)
         serializer.save(
             owner=self.request.user if self.request.user.is_authenticated else None,
             title=title, body_html=body,
@@ -508,7 +637,11 @@ class WordDocumentViewSet(viewsets.ModelViewSet):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Только владелец")
         if 'body_html' in serializer.validated_data:
-            serializer.validated_data['body_html'] = sanitize_html(serializer.validated_data['body_html'])[:2000000]
+            raw_body = serializer.validated_data['body_html'] or ''
+            if len(raw_body) > WORD_BODY_MAX_CHARS:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError("Документ слишком большой (макс ~2МБ текста с картинками)")
+            serializer.validated_data['body_html'] = sanitize_html(raw_body)
         if 'title' in serializer.validated_data and serializer.validated_data['title']:
             serializer.validated_data['title'] = serializer.validated_data['title'][:300]
         if 'page_size' in serializer.validated_data:
@@ -573,7 +706,7 @@ class WordDocumentViewSet(viewsets.ModelViewSet):
         if not body_html.strip():
             return Response({'error': 'Пустой документ'}, status=400)
         try:
-            data = html_to_docx_bytes(body_html)
+            data = html_to_docx_bytes(body_html, clean_page_size(request.data.get('page_size')))
         except Exception as e:
             return Response({'error': f'Не получилось собрать .docx: {e}'}, status=400)
         safe = re.sub(r'[^\w\s\-а-яА-ЯёЁ]+', '', title, flags=re.UNICODE).strip()[:80] or 'document'

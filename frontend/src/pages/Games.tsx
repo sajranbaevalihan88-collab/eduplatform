@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Gamepad2, Zap, Layers, MonitorUp, Trophy, ChevronRight } from 'lucide-react'
-import { useAccessibility } from '../context/UIContext'
+import { Gamepad2, Zap, Layers, MonitorUp, ChevronRight } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 
 function best(key: string): string | null {
@@ -9,7 +8,6 @@ function best(key: string): string | null {
 }
 
 export default function Games() {
-  const { speak } = useAccessibility()
   const {t}=useLang()
   const [projector, setProjector] = useState(() => {
     try { return document.documentElement.classList.contains('projector') } catch { return false }
@@ -92,10 +90,6 @@ export default function Games() {
           aria-pressed={projector}
           className={`ml-auto px-4 py-2.5 min-h-[48px] rounded-xl font-bold flex items-center gap-2 border ${projector ? 'bg-amber-400 border-amber-500 text-slate-900' : 'bg-white dark:bg-slate-800 dark:text-white dark:border-slate-700'}`}>
           <MonitorUp size={18} /> {projector ? t('games_proj_on') : t('games_proj')}
-        </button>
-        <button onClick={() => speak(t('games_speak_text'))}
-          className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white min-h-[48px] min-w-[48px]" aria-label={t('games_speak_label')}>
-          <Trophy size={18} />
         </button>
       </div>
 

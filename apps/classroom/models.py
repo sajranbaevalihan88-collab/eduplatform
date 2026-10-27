@@ -7,7 +7,7 @@ CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 
 def gen_code():
-    return ''.join(random.choice(CODE_ALPHABET) for _ in range(6))
+    return ''.join(random.choice(CODE_ALPHABET) for _ in range(7))
 
 
 class Classroom(models.Model):
@@ -40,6 +40,12 @@ class Classroom(models.Model):
             return True
         return self.enrollments.filter(student=user).exists()
 
+    @property
+    def code_fmt(self):
+        """Код приглашения в читаемом виде: ABC-1234."""
+        c = self.invite_code
+        return f'{c[:3]}-{c[3:]}' if len(c) > 3 else c
+
     def __str__(self):
         return self.title
 
@@ -60,7 +66,8 @@ class Enrollment(models.Model):
 
 
 class Assignment(models.Model):
-    KIND_CHOICES = [('lesson', 'Урок'), ('test', 'Тест'), ('manual', 'Ручная колонка')]
+    KIND_CHOICES = [('lesson', 'Урок'), ('test', 'Тест'), ('manual', 'Ручная колонка'),
+                    ('link', 'Ссылка/видео'), ('write', 'Письменное задание')]
     classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='assignments')
     kind = models.CharField(max_length=10, choices=KIND_CHOICES)
     lesson = models.ForeignKey('lessons.Lesson', on_delete=models.SET_NULL, null=True, blank=True, related_name='assignments')
@@ -68,7 +75,8 @@ class Assignment(models.Model):
     instructions = models.TextField(blank=True)
     deadline = models.DateTimeField(null=True, blank=True)
     max_score = models.PositiveIntegerField(default=100)
-    manual_title = models.CharField(max_length=300, blank=True, help_text="Название ручной колонки журнала")
+    manual_title = models.CharField(max_length=300, blank=True, help_text="Название для link/write/manual — колонки журнала")
+    url = models.URLField(max_length=500, blank=True, default='', help_text="Ссылка для kind=link: YouTube, видео, материал")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -76,8 +84,8 @@ class Assignment(models.Model):
 
     @property
     def title(self):
-        if self.kind == 'manual':
-            return self.manual_title or 'Оценка'
+        if self.kind in ('manual', 'link', 'write'):
+            return self.manual_title or 'Задание'
         if self.kind == 'lesson' and self.lesson:
             return self.lesson.title
         if self.kind == 'test' and self.test:
@@ -94,6 +102,10 @@ class Submission(models.Model):
     student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='submissions')
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='submitted')
     score = models.FloatField(null=True, blank=True)
+    # Текстовая пометка вместо цифры: «нб» (не был), «зч», «осв» и т.п.
+    mark = models.CharField(max_length=8, blank=True, default='')
+    # Текстовый ответ ученика (kind=write: «реши и напиши»)
+    answer = models.TextField(blank=True, default='')
     attempt = models.ForeignKey('assessments.TestAttempt', on_delete=models.SET_NULL, null=True, blank=True, related_name='submissions')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
