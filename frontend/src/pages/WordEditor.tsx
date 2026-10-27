@@ -928,7 +928,7 @@ export default function WordEditor() {
     if (editRef.current && !editRef.current.innerHTML) {
       editRef.current.innerHTML = '<p>Начни писать здесь… Выдели текст чтобы форматировать.</p>'
     }
-    mergeRedundantBreaks()
+    mergeRedundantBreaks(true)
     client.get('/word-docs/').then(r => {
       const arr = Array.isArray(r.data) ? r.data : r.data.results || []
       setDocs(arr)
@@ -978,6 +978,7 @@ export default function WordEditor() {
     } catch {}
     requestAnimationFrame(() => {
       measurePages()
+      try { settleMarkers() } catch {}
       updateCurPage()
       // картинки дорисовываются после вставки — их загрузка меняет высоты, переизмеряем
       try {
@@ -1032,7 +1033,8 @@ export default function WordEditor() {
     const ps = (d as any).page_size
     if (ps && PAGE_SIZES[ps]) { setPageSize(ps); try { localStorage.setItem(LS_PAGE, ps) } catch {} }
     if (editRef.current) editRef.current.innerHTML = sanitize(d.body_html)
-    mergeRedundantBreaks()
+    mergeRedundantBreaks(true)
+    try { measurePages(); settleMarkers() } catch {}
     setDirty(false)
     refreshCounts()
     measureSoon()
@@ -1064,7 +1066,8 @@ export default function WordEditor() {
       setTitle(d.title || 'Черновик')
       if (d.page_size && PAGE_SIZES[d.page_size]) setPageSize(d.page_size)
       if (editRef.current) editRef.current.innerHTML = sanitize(d.body_html || '')
-      mergeRedundantBreaks()
+      mergeRedundantBreaks(true)
+      try { measurePages(); settleMarkers() } catch {}
       setDirty(true)
       refreshCounts()
       measureSoon()
@@ -1126,7 +1129,8 @@ export default function WordEditor() {
       const r = await client.post('/word-docs/import/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       setTitle(String(r.data.title || file.name.replace(/\.docx$/i, '').slice(0, 200)))
       if (editRef.current) editRef.current.innerHTML = sanitize(r.data.body_html)
-      mergeRedundantBreaks()
+      mergeRedundantBreaks(true)
+      try { measurePages(); settleMarkers() } catch {}
       setCurrentId(null)
       setDirty(true)
       refreshCounts()
@@ -1310,14 +1314,10 @@ export default function WordEditor() {
         }
         if (marker && (!best || best.mid >= marker.mid - 0.5)) {
           scanIdx = markerIdx // маркер решил границу — потребляем
-          // маркер старше естественной границы — рвём по нему (как в Word).
-          // «Пустая страница»: после маркера нет контента, либо следом огромный сдвинутый
-          // абзац — тогда новый лист начинается на полной высоте, как за разрывом в Word.
-          const nextNatural = gaps.find(g => !g.forced && g.mid > marker!.mid)
-          const isBlankPage =
-            contentEnd - marker.mid < 200 ||
-            (!!nextNatural && (nextNatural.mid - marker.mid > pageVH * 0.45 || nextNatural.space > pageVH * 0.55))
-          const bound = isBlankPage ? from + pageVH : Math.max(marker.mid, from + 1)
+          // Разрыв страницы = новый лист. Граница — по маркеру, но лист никогда
+          // не бывает ниже 350px и не прыгает на полную высоту A4: иначе после
+          // пары строк получалась гигантская пустая страница («белая пустота»).
+          const bound = Math.max(marker.mid, from + 350)
           hardBounds.push(bound)
           tops.push({ top: bound, slot: marker.space })
           continue
@@ -1325,12 +1325,9 @@ export default function WordEditor() {
         if (best) { tops.push({ top: best.mid, slot: best.space }); continue }
         break
       }
-      // Низ последнего листа — по фактическому концу контента, но не короче
-      // разумного минимума. Полную высоту листа (pageVH) даём только одиночному
-      // (пустому) листу: иначе после разрыва страницы последний лист растягивается
-      // в огромное белое полотно, вылезающее за контейнер редактора.
-      const minBottom = tops.length === 1 ? pageVH : tops[tops.length - 1].top + 350
-      const bottom = Math.max(contentEnd, minBottom)
+      // Низ последнего листа растёт вместе с контентом (минимум 350px) — лист больше
+      // не тянется пустым полотном на полную высоту A4, когда в документе пара строк.
+      const bottom = Math.max(contentEnd, tops[tops.length - 1].top + 350)
       const prev = layoutRef.current
       const same =
         prev.bottom === bottom &&
@@ -1364,7 +1361,7 @@ export default function WordEditor() {
 
   // при смене размера/формата/полного экрана/масштаба для слабовидящих — переизмерить
   useEffect(() => {
-    requestAnimationFrame(() => { measurePages(); updateCurPage() })
+    requestAnimationFrame(() => { measurePages(); try { settleMarkers() } catch {}; updateCurPage() })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageSize, full, poor])
 
@@ -1403,7 +1400,7 @@ export default function WordEditor() {
   // иначе измеритель создаёт серию крошечных/пустых листов, и низ редактора
   // выглядит как гигантская белая пустота. Свежий маркер (data-fresh) не трогаем:
   // пользователь только что нажал «Разрыв» и ждёт новый лист.
-  const mergeRedundantBreaks = () => {
+  const mergeRedundantBreaks = (resetMargins = false) => {
     try {
       const ed = editRef.current
       if (!ed) return
@@ -1420,6 +1417,15 @@ export default function WordEditor() {
           if (hasReal(k)) { realBetween = true; break }
         }
         if (hasFurtherMarker && !realBetween) el.remove()
+      }
+      if (resetMargins) {
+        // Старые сдвиги (marginTop от прошлой пагинации) сбрасываем —
+        // settleMarkers расставит их заново по актуальным границам листов.
+        let afterBreak = false
+        for (const el of kids) {
+          if (el.classList.contains('page-break')) { afterBreak = true; continue }
+          if (afterBreak && el.style.marginTop) el.style.marginTop = ''
+        }
       }
     } catch {}
   }
