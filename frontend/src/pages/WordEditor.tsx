@@ -928,6 +928,7 @@ export default function WordEditor() {
     if (editRef.current && !editRef.current.innerHTML) {
       editRef.current.innerHTML = '<p>Начни писать здесь… Выдели текст чтобы форматировать.</p>'
     }
+    mergeRedundantBreaks()
     client.get('/word-docs/').then(r => {
       const arr = Array.isArray(r.data) ? r.data : r.data.results || []
       setDocs(arr)
@@ -1031,6 +1032,7 @@ export default function WordEditor() {
     const ps = (d as any).page_size
     if (ps && PAGE_SIZES[ps]) { setPageSize(ps); try { localStorage.setItem(LS_PAGE, ps) } catch {} }
     if (editRef.current) editRef.current.innerHTML = sanitize(d.body_html)
+    mergeRedundantBreaks()
     setDirty(false)
     refreshCounts()
     measureSoon()
@@ -1062,6 +1064,7 @@ export default function WordEditor() {
       setTitle(d.title || 'Черновик')
       if (d.page_size && PAGE_SIZES[d.page_size]) setPageSize(d.page_size)
       if (editRef.current) editRef.current.innerHTML = sanitize(d.body_html || '')
+      mergeRedundantBreaks()
       setDirty(true)
       refreshCounts()
       measureSoon()
@@ -1123,6 +1126,7 @@ export default function WordEditor() {
       const r = await client.post('/word-docs/import/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       setTitle(String(r.data.title || file.name.replace(/\.docx$/i, '').slice(0, 200)))
       if (editRef.current) editRef.current.innerHTML = sanitize(r.data.body_html)
+      mergeRedundantBreaks()
       setCurrentId(null)
       setDirty(true)
       refreshCounts()
@@ -1395,6 +1399,31 @@ export default function WordEditor() {
     } catch {}
   }
 
+  // Подряд идущие разрывы страницы без контента между ними схлопываем в один —
+  // иначе измеритель создаёт серию крошечных/пустых листов, и низ редактора
+  // выглядит как гигантская белая пустота. Свежий маркер (data-fresh) не трогаем:
+  // пользователь только что нажал «Разрыв» и ждёт новый лист.
+  const mergeRedundantBreaks = () => {
+    try {
+      const ed = editRef.current
+      if (!ed) return
+      const kids = Array.from(ed.children) as HTMLElement[]
+      const hasReal = (el: HTMLElement) => !!el.querySelector('img,table') || (el.textContent || '').trim().length > 0
+      for (let i = 0; i < kids.length; i++) {
+        const el = kids[i]
+        if (!el.classList.contains('page-break') || el.dataset.fresh === '1') continue
+        let hasFurtherMarker = false
+        let realBetween = false
+        for (let j = i + 1; j < kids.length; j++) {
+          const k = kids[j]
+          if (k.classList.contains('page-break')) { hasFurtherMarker = true; break }
+          if (hasReal(k)) { realBetween = true; break }
+        }
+        if (hasFurtherMarker && !realBetween) el.remove()
+      }
+    } catch {}
+  }
+
   // разрыв страницы в позиции каретки (лента) / в конце (кн. «+ Лист»):
   // строится вручную через DOM — execCommand в ряде состояний каретки молча не вставляет ничего
   const insertPageBreak = () => {
@@ -1404,6 +1433,8 @@ export default function WordEditor() {
     mk.className = 'page-break'
     mk.setAttribute('contenteditable', 'false')
     mk.setAttribute('aria-hidden', 'true')
+    mk.setAttribute('data-fresh', '1')
+    window.setTimeout(() => { try { delete mk.dataset.fresh } catch {} }, 1500)
     const blank = document.createElement('p')
     blank.appendChild(document.createElement('br'))
     try {
@@ -1848,9 +1879,9 @@ export default function WordEditor() {
         </div>
 
         {/* страница */}
-        <div className="bg-slate-100 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 p-2 sm:p-4"
+        <div className="bg-slate-100 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 p-2 sm:p-4 overflow-hidden"
           onClick={e => { if (e.target === e.currentTarget) focusEnd() }}>
-          <div className="relative mx-auto" ref={wrapRef} style={{ maxWidth: page.maxW }}>
+          <div className="relative mx-auto" ref={wrapRef} style={{ maxWidth: page.maxW, minHeight: layout.bottom }}>
             {/* визуальные листы: границы по реальным стыкам абзацев, разрез — только в зазоре */}
             <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
               {layout.tops.map((t, k) => {
@@ -1881,7 +1912,7 @@ export default function WordEditor() {
               role="textbox"
               aria-multiline="true"
               aria-label="Текст документа Word"
-              onInput={() => { saveSelection(); setDirty(true); refreshCounts(); autoStash(); measureSoon(); placeHandle(); requestAnimationFrame(placeTblOverlay) }}
+              onInput={() => { saveSelection(); setDirty(true); refreshCounts(); autoStash(); mergeRedundantBreaks(); measureSoon(); placeHandle(); requestAnimationFrame(placeTblOverlay) }}
               onMouseUp={() => { saveSelection(); refreshCounts() }}
               onKeyUp={() => { saveSelection(); refreshCounts(); measureSoon() }}
               onKeyDown={onEditorKeyDown}
