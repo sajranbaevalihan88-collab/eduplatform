@@ -1343,7 +1343,7 @@ export default function WordEditor() {
   const measureTimer = useRef<number | undefined>(undefined)
   const measureSoon = () => {
     window.clearTimeout(measureTimer.current)
-    measureTimer.current = window.setTimeout(() => { measurePages(); updateCurPage() }, 90)
+    measureTimer.current = window.setTimeout(() => { measurePages(); try { settleMarkers() } catch {}; updateCurPage() }, 90)
   }
 
   const updateCurPage = () => {
@@ -1385,12 +1385,15 @@ export default function WordEditor() {
           for (const t of tops) { if (t.top > rel - 24) { target = t.top; break } }
           const after = pb.nextElementSibling as HTMLElement | null
           if (!after || after.classList?.contains('page-break')) continue
-          for (let fix = 0; fix < 2; fix++) {
+          for (let fix = 0; fix < 3; fix++) {
             const cur = after.getBoundingClientRect().top - wr.getBoundingClientRect().top
             const curMt = parseFloat(after.style.marginTop || '0') || 0
-            const want = curMt + (target + SHEET_PAD + 12 - cur)
-            if (want <= curMt + 1) break // тянуть вверх не нужно — хвост и так ниже листа
-            after.style.marginTop = `${Math.round(want)}px`
+            const delta = target + SHEET_PAD + 12 - cur
+            // выравниваем в ОБЕ стороны: после удаления текста выше хвост подтягиваем
+            // обратно наверх своего листа, после дописывания — опускаем на новый лист
+            if (Math.abs(delta) <= 1) break
+            if (delta < 0 && curMt <= 0) break // естественный переполненный поток — не трогаем
+            after.style.marginTop = `${Math.max(0, Math.round(curMt + delta))}px`
             measurePages()
           }
         }
