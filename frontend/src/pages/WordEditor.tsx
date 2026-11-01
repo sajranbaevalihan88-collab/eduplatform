@@ -125,6 +125,7 @@ export default function WordEditor() {
   const [busy, setBusy] = useState(false)
   const [online, setOnline] = useState(true)
   const [words, setWords] = useState(0)
+  const [chars, setChars] = useState(0)
   const [active, setActive] = useState<Record<string, boolean>>({})
   const [selImg, setSelImg] = useState<HTMLImageElement | null>(null)
   const [imgW, setImgW] = useState(100)
@@ -171,6 +172,7 @@ export default function WordEditor() {
   const refreshCounts = () => {
     const t = text().trim()
     setWords(t ? t.split(/\s+/).length : 0)
+    setChars(t ? t.replace(/\s+/g, '').length : 0)
     try {
       const q = (c: string) => { try { return document.queryCommandState(c) } catch { return false } }
       setActive({
@@ -1607,7 +1609,7 @@ export default function WordEditor() {
           <input value={title} onChange={e => { setTitle(e.target.value); setDirty(true) }}
             aria-label="Название документа" placeholder="Название документа"
             className="order-first sm:order-none basis-full sm:basis-auto flex-1 min-w-0 px-3 h-11 sm:h-10 rounded-xl border bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 font-bold text-base sm:text-sm" />
-          <span className="hidden lg:block shrink-0 text-xs text-slate-500 dark:text-slate-400 px-2 font-mono whitespace-nowrap" aria-live="polite">Стр. {curPage}/{pages}</span>
+          <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400 px-2 font-mono whitespace-nowrap sm:hidden lg:block sm:text-[11px] lg:text-xs" aria-live="polite">Стр. {curPage}/{pages}</span>
           <button onClick={() => setFull(f => !f)} title={full ? 'Выйти из полного экрана (Esc)' : 'Во весь экран'}
             aria-label={full ? 'Выйти из полного экрана' : 'Полный экран'}
             className="p-2.5 h-11 w-11 sm:h-10 sm:w-10 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white shrink-0 flex items-center justify-center">
@@ -1936,6 +1938,7 @@ export default function WordEditor() {
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400" aria-live="polite">
           <span>Слов: {words}</span>
+          <span aria-label="Количество символов без пробелов">Симв.: {chars}</span>
           <span>•</span>
           <span>{dirty ? 'Есть несохранённые изменения' : 'Всё сохранено'}</span>
           <span>•</span>

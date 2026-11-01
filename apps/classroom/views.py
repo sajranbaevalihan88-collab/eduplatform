@@ -1,4 +1,4 @@
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
@@ -326,6 +326,18 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Assignment.objects.select_related('classroom', 'lesson', 'test').filter(
             classroom__in=_visible_classrooms(self.request.user))
+        # счёт «сдано/оценено» для учителя: классы маленькие, поэтому подзапросы дёшевы,
+        # а руками на фронте их не собрать — экономит N лишних fetch'ей
+        qs = qs.annotate(
+            submitted_count=Count(
+                'submissions',
+                filter=Q(submissions__status__in=['submitted', 'late']),
+                distinct=True),
+            graded_count=Count(
+                'submissions',
+                filter=Q(submissions__status__in=['submitted', 'late'], submissions__score__isnull=False),
+                distinct=True),
+        )
         kind = self.request.query_params.get('kind')
         if kind:
             qs = qs.filter(kind=kind)

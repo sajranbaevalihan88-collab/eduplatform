@@ -6,9 +6,10 @@ const DICT: Record<string, Record<string, string>> = {
   ru: {
     ab_title: 'О платформе',
     ab_sub: 'Почему EduPlatform AI существует и чем отличается',
-    ab_story_t: 'Откуда идея',
-    ab_story_p1: 'Идея родилась дома. Мама — учительница. Постоянно одно и то же: открыть Word, порыться в папках в поисках то презентации, то видео, то теста. Десять вкладок браузера, Word, PowerPoint, плеер — всё одновременно.',
-    ab_story_p2: 'Ноутбук старый, оперативки мало, кулер воет, компьютер виснет посреди урока. И так не у неё одной — у большинства учителей и преподавателей техника слабая. Стало ясно: им всем нужен один инструмент вместо десяти окон.',
+    ab_story_t: 'Сколько стоит один хороший урок?',
+    ab_story_p1: 'У репетитора — несколько сотен сомов. В частной школе — тысячи каждый месяц. А для семьи из далёкого села — дороже всех: к цене урока добавляется дорога в город. Выходит несправедливо: качество урока зависит от того, где родился ребёнок и что в кошельке у родителей.',
+    ab_story_p2: 'PISA-2025: Кыргызстан — 80-е место из 91 страны, 76% школьников ниже базового уровня, школам не хватает 761 учителя. Школу в горах строят годами, репетитора в каждое село не отправишь — а телефон уже лежит в кармане почти у каждого школьника. Хороший урок должен стоить как звонок родителям: почти ничего. Поэтому я собрал EduPlatform — урок, который живёт в браузере и сам приходит в каждый телефон.',
+    ab_quote: 'Мне не нужно строить школу в каждой деревне. Мне нужно, чтобы урок сам приходил в каждый телефон.',
     ab_prob1t: 'Десять окон вместо одного',
     ab_prob1x: 'Word + PowerPoint + видео + тест — четыре программы и десяток вкладок ради одного урока.',
     ab_prob2t: 'Слабые ноутбуки не тянут',
@@ -29,9 +30,10 @@ const DICT: Record<string, Record<string, string>> = {
   en: {
     ab_title: 'About the platform',
     ab_sub: 'Why EduPlatform AI exists and how it differs',
-    ab_story_t: 'Where the idea came from',
-    ab_story_p1: 'The idea was born at home. My mom is a teacher. The same routine every day: open Word, dig through folders for a presentation, a video, a test. Ten browser tabs, Word, PowerPoint, a video player — all at once.',
-    ab_story_p2: 'Her laptop is old, low on RAM, the fan roars, the machine freezes mid-lesson. And she is not alone — most teachers and lecturers have weak hardware. They all need one tool instead of ten windows.',
+    ab_story_t: 'How much does one good lesson cost?',
+    ab_story_p1: 'A tutor costs hundreds of soms per lesson. A private school — thousands every month. For a family in a remote village it is the most expensive: add the road to the city to the price. It is unfair: the quality of a lesson depends on where a child was born and what the parents can afford.',
+    ab_story_p2: 'PISA-2025: Kyrgyzstan ranks 80th out of 91 countries; 76% of schoolchildren are below the basic level; schools lack 761 teachers. A mountain school takes years to build, you cannot send a tutor to every village — yet a phone is already in almost every schoolchild pocket. A good lesson should cost like a call to your parents: almost nothing. So I built EduPlatform — a lesson that lives in the browser and arrives in every phone on its own.',
+    ab_quote: 'I do not need to build a school in every village. I need the lesson to arrive in every phone by itself.',
     ab_prob1t: 'Ten windows instead of one',
     ab_prob1x: 'Word + PowerPoint + video + test — four programs and a dozen tabs for a single lesson.',
     ab_prob2t: 'Weak laptops suffer',
@@ -52,9 +54,10 @@ const DICT: Record<string, Record<string, string>> = {
   kg: {
     ab_title: 'Platforma жөнүндө',
     ab_sub: 'EduPlatform AI эмне үчүн жана эмнеси менен айырмаланат',
-    ab_story_t: 'Идея кайдан жаралды',
-    ab_story_p1: 'Идея үйдө жаралды. Апам — мугалим. Күн сайын бирдей: Word ачып, папкалардан презентация, видео, тест издейт. Он вкладка, Word, PowerPoint, видео ойноткуч — бир убакта.',
-    ab_story_p2: 'Ноутбук эски, оперативка аз, желбирөөч айкалдап, сабактын ортосунда тоңуп калат. Ал гана эмес — мугалимдердин жана окутуучулардын көбүнүн техникасы алсыз. Бардыгына он терезенин ордуна бир курал керек.',
+    ab_story_t: 'Бир жакшы сабак канча турат?',
+    ab_story_p1: 'Репетитор — бир нече жүз сом. Жеке мектеп — ай сайын миңдеген сом. Ал эми алыскы кыштактагы үй-бүлөгө эң кымбат: сабактын баасына шаарга чейинки жол кошулат. Чыккандай: сабактын сапаты баланы кайда төрөлгөнүнө жана ата-энесинин жумушуна байланыштуу.',
+    ab_story_p2: 'PISA-2025: Кыргызстан — 91 өлкөнүн ичинен 80-орунда, мектеп окуучулардын 76% негизги деңгээлден төмөн, мектептерге 761 мугалим жетишпейт. Тоодогу мектепти жылдар бою курушат, репетиторду ар бир кыштакка жиберсе болбойт — ал эми телефон дээрлик ар бир окуучунун капчыгында. Жакшы сабак ата-энесине телефон чалуу сыяктуу эле арзан туруш керек: дээрлик эч нерсе. Ошондуктан мен EduPlatform түздүм — браузерде жашаган жана ар бир телефонго өзү келген сабак.',
+    ab_quote: 'Ар бир кыштакка мектеп курушум керек эмес. Мага сабактын өзү ар бир телефонго келиши керек.',
     ab_prob1t: 'Биринин ордуна он терезе',
     ab_prob1x: 'Word + PowerPoint + видео + тест — бир сабак үчүн төрт программа жана он вкладка.',
     ab_prob2t: 'Алсыз ноутбуктор көтөрбөйт',
@@ -105,11 +108,16 @@ export default function About() {
         <p className="text-slate-500 dark:text-slate-400 mt-1">{L.ab_sub}</p>
       </div>
 
-      {/* История */}
+      {/* История: цифры и правда о цене урока */}
       <section className="bg-gradient-to-br from-blue-600 to-cyan-600 rounded-3xl p-6 sm:p-8 text-white shadow-xl">
         <div className="flex items-center gap-2 text-blue-100 text-sm font-semibold mb-3"><Heart size={16}/> {L.ab_story_t}</div>
         <p className="text-lg leading-relaxed font-medium">{L.ab_story_p1}</p>
         <p className="mt-3 leading-relaxed text-blue-50">{L.ab_story_p2}</p>
+        {L.ab_quote && (
+          <blockquote className="mt-5 border-l-4 border-white/40 pl-4 text-lg font-display font-bold italic text-white/95">
+            «{L.ab_quote}»
+          </blockquote>
+        )}
       </section>
 
       {/* Проблемы → решение */}

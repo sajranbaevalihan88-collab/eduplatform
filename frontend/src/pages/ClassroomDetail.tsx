@@ -337,6 +337,19 @@ export default function ClassroomDetail(){
 
           {tab==='tasks' && (
             <div className="space-y-3">
+              {!isOwner && tasks.length>0 && (()=>{
+                const done = tasks.filter((a:any)=> ['submitted','late'].includes(myTasks[a.id]?.status)).length
+                const pct = Math.round(done/tasks.length*100)
+                return (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50/70 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50" data-testid="stu-progress">
+                    <span className="text-sm font-bold text-blue-800 dark:text-blue-200 whitespace-nowrap">{t('cls_submitted_of').replace('{x}', String(done)).replace('{y}', String(tasks.length))}</span>
+                    <div className="flex-1 h-2.5 rounded-full bg-blue-100 dark:bg-blue-900/50 overflow-hidden">
+                      <div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 transition-all duration-500" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-xs font-bold text-blue-700 dark:text-blue-300">{pct}%</span>
+                  </div>
+                )
+              })()}
               {isOwner && !creating && <button onClick={()=>setCreating(true)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-700 text-white text-sm font-semibold flex items-center gap-1"><Plus size={15}/>{t('cls_new_task')}</button>}
               {isOwner && creating && (
                 <div className="p-4 rounded-xl border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 space-y-3">
@@ -396,12 +409,20 @@ export default function ClassroomDetail(){
                 const cd = countdown(a.deadline)
                 const kindCls = a.kind==='test'? 'bg-rose-100 text-rose-700' : a.kind==='link'? 'bg-violet-100 text-violet-700' : a.kind==='write'? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
                 const kindLbl = a.kind==='test'? t('tests') : a.kind==='lesson'? t('lessons') : a.kind==='link'? t('cls_k_link') : t('cls_k_write')
+                const sm = a.submitted_count ?? 0
                 return (
                   <div key={a.id} className="p-4 rounded-xl border dark:border-slate-700 flex flex-wrap items-center gap-3">
                     <div className="flex-1 min-w-[200px]">
-                      <div className="font-bold flex items-center gap-2 dark:text-white">
+                      <div className="font-bold flex items-center gap-2 dark:text-white flex-wrap">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full ${kindCls}`}>{kindLbl}</span>
                         {a.title}
+                        {/* «Гугл-классрум»-фичa: учитель сразу видит, сколько кто сдал */}
+                        {isOwner && room && (
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${sm>0?'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300':'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}
+                            data-testid={`subm-count-${a.id}`}>
+                            {t('cls_submitted_of').replace('{x}', String(sm)).replace('{y}', String(room.members_count ?? 0))}
+                          </span>
+                        )}
                       </div>
                       {a.url && <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 underline break-all mt-1 inline-block max-w-full">{a.url}</a>}
                       {a.instructions && <div className="text-sm text-slate-500 dark:text-slate-400 mt-1 whitespace-pre-wrap">{a.instructions}</div>}
