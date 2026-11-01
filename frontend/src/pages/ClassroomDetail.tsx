@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import client from '../api/client'
-import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles, Share2, Video, PenLine, FlaskConical, BookOpen } from 'lucide-react'
+import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles, Share2, Video, PenLine, FlaskConical, BookOpen, X } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
 
@@ -73,6 +73,8 @@ export default function ClassroomDetail(){
   const [colBusy,setColBusy]=useState(false)
   const [editCell,setEditCell]=useState<{a:number,s:number}|null>(null)
   const [editVal,setEditVal]=useState('')
+  // список «кто сдал» по заданию (как в Google Classroom): панель справа
+  const [subListFor,setSubListFor]=useState<any>(null)
 
   const load=()=>{
     client.get(`/classrooms/${id}/`).then(r=>setRoom(r.data)).catch(()=>nav('/classes'))
@@ -418,10 +420,11 @@ export default function ClassroomDetail(){
                         {a.title}
                         {/* «Гугл-классрум»-фичa: учитель сразу видит, сколько кто сдал */}
                         {isOwner && room && (
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${sm>0?'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300':'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}
+                          <button onClick={()=>setSubListFor(a)} title={t('cls_who_title')}
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-bold cursor-pointer hover:ring-2 hover:ring-emerald-400/60 transition ${sm>0?'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300':'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}
                             data-testid={`subm-count-${a.id}`}>
                             {t('cls_submitted_of').replace('{x}', String(sm)).replace('{y}', String(room.members_count ?? 0))}
-                          </span>
+                          </button>
                         )}
                       </div>
                       {a.url && <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 underline break-all mt-1 inline-block max-w-full">{a.url}</a>}
@@ -603,6 +606,43 @@ export default function ClassroomDetail(){
           )}
         </div>
       </div>
+
+      {/* «Кто сдал» — как в Google Classroom: список учеников по одному заданию */}
+      {isOwner && subListFor && (
+        <div className="fixed inset-0 z-50" data-testid="who-list">
+          <div className="absolute inset-0 bg-black/40" onClick={()=>setSubListFor(null)} />
+          <div className="absolute right-0 top-0 h-full w-full max-w-sm bg-white dark:bg-slate-900 border-l dark:border-slate-700 shadow-2xl p-4 overflow-y-auto">
+            <div className="flex items-start gap-2 mb-4">
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{t('cls_who_title')}</div>
+                <div className="font-bold dark:text-white break-words">{subListFor.title}</div>
+                <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-1"><Clock size={12}/>{fmtDl(subListFor.deadline)}</div>
+              </div>
+              <button onClick={()=>setSubListFor(null)} aria-label={t('close')} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-white shrink-0"><X size={18}/></button>
+            </div>
+            <div className="space-y-2">
+              {(gb?.students || []).map((s:any)=>{
+                const c = (gb?.cells || []).find((x:any)=>x.assignment===subListFor.id && x.student===s.id)
+                const st = c?.status || 'pending'
+                const lbl = st==='submitted' ? t('cls_w_sub') : st==='late' ? t('cls_w_late') : st==='overdue' ? t('cls_w_ov') : t('cls_w_no')
+                return (
+                  <div key={s.id} className="flex items-center gap-3 p-2.5 rounded-xl border dark:border-slate-700" data-testid={`who-st-${s.id}`}>
+                    <div className="w-9 h-9 rounded-full bg-blue-700 text-white flex items-center justify-center font-bold shrink-0">{s.username?.[0]?.toUpperCase()}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm dark:text-white truncate">{s.username}</div>
+                      {c?.mark ? <div className="text-xs text-slate-400">{c.mark}</div> : null}
+                    </div>
+                    <span className={`text-[11px] px-2 py-1 rounded-full border whitespace-nowrap ${ST_CLS[st]}`}>
+                      {ST_TXT[st]} {lbl}{c?.score!=null ? ` • ${c.score}` : ''}
+                    </span>
+                  </div>
+                )
+              })}
+              {gb && !gb.students?.length && <div className="text-center text-slate-400 py-8 text-sm">{t('cls_no_members')}</div>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
