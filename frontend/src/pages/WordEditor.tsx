@@ -1908,7 +1908,7 @@ export default function WordEditor() {
                 if (t.slot < 8) return null
                 const sliceH = Math.max(6, Math.min(12, t.slot - 2))
                 return (
-                  <div key={`gap-${i}`} className="word-sheet-gap bg-slate-100 dark:bg-slate-900"
+                  <div key={`gap-${i}`} className="word-sheet-gap"
                     style={{ top: t.top - sliceH / 2, height: sliceH }} />
                 )
               })}
