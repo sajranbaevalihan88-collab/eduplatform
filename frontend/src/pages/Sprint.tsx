@@ -59,12 +59,13 @@ export default function Sprint() {
     } catch {}
   }, [])
 
-  const buildWords = async (): Promise<string[]> => {
-    if (src === 'custom') {
+  const buildWords = async (srcOv: Src = src): Promise<string[]> => {
+    if (srcOv === 'custom') {
       const arr = custom.split(/[\s,;|]+/).map(s => s.trim()).filter(s => s.length >= 2)
-      return shuffle(arr.length >= 10 ? arr : [...WORD_PACKS.ru.words])
+      const base: Src = (srcOv === 'custom' && ['ru','kg','en'].includes(srcOv)) ? 'ru' : srcOv
+      return shuffle(arr.length >= 10 ? arr : [...WORD_PACKS[base].words])
     }
-    if (src === 'lesson' && lessonId) {
+    if (srcOv === 'lesson' && lessonId) {
       try {
         const r = await client.get(`/lessons/${lessonId}/`)
         const parts: string[] = []
@@ -78,12 +79,12 @@ export default function Sprint() {
         if (got.length >= 10) return shuffle(got)
       } catch {}
     }
-    return shuffle([...WORD_PACKS[src === 'lesson' ? 'ru' : src].words])
+    return shuffle([...WORD_PACKS[srcOv === 'lesson' ? 'ru' : srcOv].words])
   }
 
-  const start = async (m: number = mode) => {
+  const start = async (m: number = mode, srcOv: Src = src) => {
     setLoading(true)
-    const w = await buildWords()
+    const w = await buildWords(srcOv)
     const need = Math.ceil((m / 60) * 140) + 40
     const looped: string[] = []
     while (looped.length < need) looped.push(...w)
@@ -320,7 +321,8 @@ export default function Sprint() {
           <button key={m} onClick={() => { setMode(m); start(m); }}
             className={`px-4 py-2.5 min-h-[48px] rounded-xl font-bold ${mode === m ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-800 dark:text-white border dark:border-slate-700'}`}>{m}{t('sprint_sec')}</button>
         ))}
-        <select value={src} onChange={e => setSrc(e.target.value as Src)} aria-label={t('sprint_words_aria')}
+        <select value={src} onChange={e => { const v = e.target.value as Src; setSrc(v); // смена набора сразу даёт новый текст, без «перезапуска вручную»
+          if (v === 'ru' || v === 'kg' || v === 'en') start(mode, v) }} aria-label={t('sprint_words_aria')}
           className="px-3 py-2.5 min-h-[48px] rounded-xl border bg-white text-slate-900 dark:bg-slate-800 dark:text-white dark:[color-scheme:dark] font-bold">
           <option value="ru">{t('sprint_ru')}</option>
           <option value="kg">{t('sprint_kg')}</option>
@@ -335,7 +337,7 @@ export default function Sprint() {
           </button>
           {t('sprint_ghost')}
         </label>
-        <span className="ml-auto font-mono font-bold text-3xl dark:text-white" role="timer">{left}</span>
+        <span className="ml-auto font-mono font-bold text-2xl sm:text-3xl dark:text-white" role="timer">{left}</span>
         {best[mode] !== undefined && <span className="text-sm font-bold text-amber-600 flex items-center gap-1"><Trophy size={15} /> {best[mode]}</span>}
       </div>
 

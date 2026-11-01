@@ -59,6 +59,7 @@ const dict:Record<Lang,Record<string,string>>={
     login_reg_ok:'Регистрация успешна — теперь войди', login_title_reg:'Регистрация', login_sub_reg:'Создай аккаунт учителя или ученика',
     login_ph_user:'Логин (мин 3 символа, без пробелов)', login_ph_email:'Email (необязательно)', login_ph_pass:'Пароль (мин 8 символов)',
     login_teacher:'Учитель', login_student:'Ученик', login_btn_reg:'Зарегистрироваться', login_submit:'Войти',
+    login_show_pass:'Показать пароль', login_hide_pass:'Скрыть пароль', login_doing:'Входим…',
     login_to_in:'Уже есть аккаунт? Войти', login_to_reg:'Нет аккаунта? Регистрация',
     login_hint:'✨ Глобальная база: все уроки/презентации/тесты видны всем без входа. Войди чтобы создавать свои.',
     subj_load_err:'Не удалось загрузить предметы', subj_no_desc:'Без описания', subj_courses:'курсов', subj_go:'Уроки →', subj_empty:'Предметов пока нет.',

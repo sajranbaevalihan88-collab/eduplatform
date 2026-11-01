@@ -2,6 +2,7 @@ import { useState } from 'react'
 import client from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import { useLang } from '../context/LangContext'
+import { Eye, EyeOff } from 'lucide-react'
 
 export default function Login(){
   const {t}=useLang()
@@ -10,6 +11,7 @@ export default function Login(){
   const nav=useNavigate()
   const [error,setError]=useState<string>('')
   const [busy,setBusy]=useState(false)
+  const [showPass,setShowPass]=useState(false)
   const submit=async(e:any)=>{
     e.preventDefault()
     if(busy) return
@@ -70,12 +72,20 @@ export default function Login(){
         <h1 className="text-2xl font-display font-bold text-center dark:text-white">{isReg?t('login_title_reg'):t('login')}</h1>
         <p className="text-sm text-slate-500 text-center mt-1">{isReg?t('login_sub_reg'):t('login_to_create')}</p>
         <form onSubmit={submit} className="mt-6 space-y-3">
-          <input placeholder={t('login_ph_user')} aria-label={t('login_ph_user')} autoComplete="username" autoCapitalize="none" value={form.username} onChange={e=>setForm({...form,username:e.target.value})} className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border bg-slate-50" required minLength={3}/>
-          {isReg && <input placeholder={t('login_ph_email')} aria-label={t('login_ph_email')} autoComplete="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border bg-slate-50" type="email"/>}
-          <input type="password" placeholder={t('login_ph_pass')} aria-label={t('login_ph_pass')} autoComplete={isReg ? 'new-password' : 'current-password'} value={form.password} onChange={e=>setForm({...form,password:e.target.value})} className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border bg-slate-50" required minLength={8}/>
-          {isReg && <select value={form.role} onChange={e=>setForm({...form,role:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50"><option value="teacher">{t('login_teacher')}</option><option value="student">{t('login_student')}</option></select>}
-          {error && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 whitespace-pre-wrap">{error}</div>}
-          <button disabled={busy} className="w-full min-h-[44px] py-2.5 rounded-xl bg-blue-600 text-white font-bold disabled:opacity-60">{busy ? '…' : isReg ? t('login_btn_reg') : t('login_submit')}</button>
+          <input placeholder={t('login_ph_user')} aria-label={t('login_ph_user')} autoComplete="username" autoCapitalize="none" value={form.username} onChange={e=>setForm({...form,username:e.target.value})} className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400" required minLength={3}/>
+          {isReg && <input placeholder={t('login_ph_email')} aria-label={t('login_ph_email')} autoComplete="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400" type="email"/>}
+          <div className="relative">
+            <input type={showPass ? 'text' : 'password'} placeholder={t('login_ph_pass')} aria-label={t('login_ph_pass')} autoComplete={isReg ? 'new-password' : 'current-password'} value={form.password} onChange={e=>setForm({...form,password:e.target.value})} className="w-full min-h-[44px] px-4 py-2.5 pr-11 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 tracking-wide" required minLength={8}/>
+            <button type="button" onClick={()=>setShowPass(v=>!v)} aria-label={showPass ? t('login_hide_pass') : t('login_show_pass')} aria-pressed={showPass}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2.5 min-w-[36px] min-h-[36px] rounded-lg text-slate-500 hover:bg-slate-200/70 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 flex items-center justify-center">
+              {showPass ? <EyeOff size={18}/> : <Eye size={18}/>}
+            </button>
+          </div>
+          {isReg && <select value={form.role} onChange={e=>setForm({...form,role:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white dark:[color-scheme:dark]"><option value="teacher">{t('login_teacher')}</option><option value="student">{t('login_student')}</option></select>}
+          {error && <div role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 whitespace-pre-wrap">{error}</div>}
+          <button disabled={busy} className="w-full min-h-[48px] py-2.5 rounded-xl bg-blue-600 text-white font-bold disabled:opacity-60 flex items-center justify-center gap-2">
+            {busy ? (<><span className="dot-typing inline-flex gap-1"><span className="w-1.5 h-1.5 rounded-full bg-white inline-block"/><span className="w-1.5 h-1.5 rounded-full bg-white inline-block"/><span className="w-1.5 h-1.5 rounded-full bg-white inline-block"/></span> {t('login_doing')}</>) : (isReg ? t('login_btn_reg') : t('login_submit'))}
+          </button>
         </form>
         <button onClick={()=>{setIsReg(!isReg); setError('')}} className="w-full mt-3 text-sm text-blue-600 font-medium">{isReg?t('login_to_in'):t('login_to_reg')}</button>
         <div className="mt-6 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-slate-700">{t('login_hint')}</div>

@@ -264,7 +264,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               {showLang && (
                 <div className="absolute right-0 top-full mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl p-1 z-50 min-w-[160px]">
                   {(['ru','en','kg'] as const).map(l=>(
-                    <button key={l} onClick={()=>{setLang(l); setShowLang(false); setTimeout(()=>window.location.reload(), 150)}} className={`w-full text-left px-3 py-2.5 min-h-[44px] rounded-lg text-sm flex items-center justify-between ${lang===l?'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold':'hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-white'}`}>{l==='ru'?'🇷🇺 Русский':l==='en'?'🇬🇧 English':'🇰🇬 Кыргызча'} {lang===l && '✓'}</button>
+                    <button key={l} onClick={()=>{setLang(l); setShowLang(false)}} className={`w-full text-left px-3 py-2.5 min-h-[44px] rounded-lg text-sm flex items-center justify-between ${lang===l?'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold':'hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-white'}`}>{l==='ru'?'🇷🇺 Русский':l==='en'?'🇬🇧 English':'🇰🇬 Кыргызча'} {lang===l && '✓'}</button>
                   ))}
                 </div>
               )}
