@@ -1895,7 +1895,7 @@ export default function WordEditor() {
               {layout.tops.map((t, k) => {
                 const nx = layout.tops[k + 1]
                 // полоса-шов рисуется только если зазор >= 8px; иначе листы бесшовные (граница и чип работают)
-                const sliceH = nx && nx.slot >= 8 ? Math.max(6, Math.min(12, nx.slot - 2)) : 0
+                const sliceH = nx && nx.slot >= 8 ? Math.max(6, Math.min(24, nx.slot - 2)) : 0
                 const top = k === 0 ? 0 : t.top + sliceH / 2
                 const bottom = nx ? nx.top - sliceH / 2 : layout.bottom
                 return (
@@ -1906,7 +1906,7 @@ export default function WordEditor() {
               })}
               {layout.tops.slice(1).map((t, i) => {
                 if (t.slot < 8) return null
-                const sliceH = Math.max(6, Math.min(12, t.slot - 2))
+                const sliceH = Math.max(6, Math.min(24, t.slot - 2))
                 return (
                   <div key={`gap-${i}`} className="word-sheet-gap"
                     style={{ top: t.top - sliceH / 2, height: sliceH }} />
