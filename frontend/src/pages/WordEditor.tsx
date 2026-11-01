@@ -1316,20 +1316,20 @@ export default function WordEditor() {
         }
         if (marker && (!best || best.mid >= marker.mid - 0.5)) {
           scanIdx = markerIdx // маркер решил границу — потребляем
-          // Разрыв страницы = новый лист. Граница — по маркеру, но лист никогда
-          // не бывает ниже 350px и не прыгает на полную высоту A4: иначе после
-          // пары строк получалась гигантская пустая страница («белая пустота»).
-          const bound = Math.max(marker.mid, from + 350)
+          // Разрыв страницы = новый лист ПОЛНОЙ высоты, как в Word: предыдущий лист
+          // остаётся полным (пустое место под текстом), хвост начинается с нового листа.
+          // +10 к маркеру — гарантированный свободный зазор, чтобы маска стыка не резала текст.
+          const bound = Math.max(marker.mid + 10, from + pageVH)
           hardBounds.push(bound)
-          tops.push({ top: bound, slot: marker.space })
+          tops.push({ top: bound, slot: Math.max(marker.space, 20) })
           continue
         }
         if (best) { tops.push({ top: best.mid, slot: best.space }); continue }
         break
       }
-      // Низ последнего листа растёт вместе с контентом (минимум 350px) — лист больше
-      // не тянется пустым полотном на полную высоту A4, когда в документе пара строк.
-      const bottom = Math.max(contentEnd, tops[tops.length - 1].top + 350)
+      // Каждый лист — полного размера (А4/А5/А3), включая последний: страница
+      // не сжимается под содержимое, как и в настоящем Word.
+      const bottom = Math.max(contentEnd, tops[tops.length - 1].top + pageVH)
       const prev = layoutRef.current
       const same =
         prev.bottom === bottom &&
@@ -1388,7 +1388,7 @@ export default function WordEditor() {
           for (let fix = 0; fix < 2; fix++) {
             const cur = after.getBoundingClientRect().top - wr.getBoundingClientRect().top
             const curMt = parseFloat(after.style.marginTop || '0') || 0
-            const want = curMt + (target + 12 - cur)
+            const want = curMt + (target + SHEET_PAD + 12 - cur)
             if (want <= curMt + 1) break // тянуть вверх не нужно — хвост и так ниже листа
             after.style.marginTop = `${Math.round(want)}px`
             measurePages()
