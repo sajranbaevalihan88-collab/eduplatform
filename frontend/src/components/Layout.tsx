@@ -219,7 +219,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="absolute inset-0 bg-black/60 motion-safe:animate-fadeIn" onClick={()=>setOpen(false)} />
           <div className="absolute left-0 top-0 w-[85%] max-w-[320px] h-[100dvh] bg-white dark:bg-slate-900 flex flex-col motion-safe:animate-drawer shadow-2xl overscroll-contain">
             <div className="h-[64px] flex items-center justify-between px-6 border-b dark:border-slate-700 shrink-0">
-              <span className="font-bold dark:text-white flex items-center gap-2"><img src="/logo.svg" alt="EduPlatform AI" className="w-8 h-8" />EduPlatform <span className="brand-ai">AI</span></span>
+              <span className="font-bold dark:text-white flex items-center gap-2.5"><img src="/logo.svg" alt="EduPlatform AI" className="w-10 h-10 drop-shadow-md" />EduPlatform <span className="brand-ai">AI</span></span>
               <button onClick={()=>setOpen(false)} className="dark:text-white p-2" aria-label={t('close_menu')}><X size={20}/></button>
             </div>
             <nav id="mobile-navigation" tabIndex={-1} aria-label={t('main_navigation')} className="flex-1 p-3 space-y-1 overflow-auto outline-none">
@@ -247,6 +247,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <header className="h-[calc(64px+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2 px-4 lg:px-8 sticky top-0 z-40 shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
             <button className="lg:hidden shrink-0 p-2 rounded-xl bg-slate-100 hover:bg-white hover:shadow-md transition-all" onClick={()=>setOpen(true)} aria-label={t('open_menu')} aria-expanded={open} aria-controls="mobile-drawer"><Menu size={18}/></button>
+            {/* Логотип в мобильной шапке: раньше его не было вовсе — бренд видно только в меню */}
+            <Link to="/" className="md:hidden flex items-center gap-1.5 min-w-0" aria-label="EduPlatform AI — на главную">
+              <img src="/logo.svg" alt="" aria-hidden="true" className="w-9 h-9 shrink-0 drop-shadow-md" />
+              <span className="font-display font-bold text-[15px] leading-none whitespace-nowrap">
+                <span className="gradient-text">EduPlatform</span> <span className="brand-ai">AI</span>
+              </span>
+            </Link>
             <p className="font-display font-bold text-lg hidden md:block gradient-text truncate" aria-label={t('platform_title')}>{t('platform_title')}</p>
             {hideSidebar && <button onClick={toggleSidebar} className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-white border border-slate-200 text-xs font-medium btn-hover" aria-label={t('show_tabs')}><PanelLeft size={14}/> {t('menu')}</button>}
           </div>

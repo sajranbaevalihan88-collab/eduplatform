@@ -6,7 +6,7 @@ import { useLang } from '../context/LangContext'
 import { compressDataUrl } from '../board/legacy'
 
 type ShapeType = 'cube' | 'sphere' | 'cylinder' | 'cone' | 'plane'
-type SItem = { id: number; type: ShapeType; mesh: THREE.Mesh; size: number; colorHex: string }
+type SItem = { id: number; type: ShapeType; mesh: THREE.Mesh; size: number; colorHex: string; spawnT: number; scaleMul: number }
 
 const COLORS = ['#ef4444', '#3B82F6', '#22c55e', '#f59e0b', '#a855f7', '#0f172a', '#14b8a6']
 
@@ -34,16 +34,17 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
     if (!host) return
     let renderer: THREE.WebGLRenderer
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true })
     } catch {
       setWebglFail(true)
       return
     }
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0xeef2f7)
     const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 500)
     camera.position.set(6, 5, 8)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75))
+    renderer.shadowMap.enabled = true
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.setSize(host.clientWidth || 600, host.clientHeight || 400)
     renderer.domElement.style.touchAction = 'none'
     host.appendChild(renderer.domElement)
@@ -52,15 +53,37 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
     controls.dampingFactor = 0.08
     controls.maxPolarAngle = Math.PI / 1.9
     controls.target.set(0, 1, 0)
+    // сцена слегка вращается сама, пока учитель не взял управление — выглядит живой
+    controls.autoRotate = true
+    controls.autoRotateSpeed = 0.8
+    const stopAuto = () => { controls.autoRotate = false }
+    renderer.domElement.addEventListener('pointerdown', stopAuto)
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.15))
     const dir = new THREE.DirectionalLight(0xffffff, 1.1)
     dir.position.set(6, 10, 6)
+    dir.castShadow = true
+    dir.shadow.mapSize.set(1024, 1024)
+    dir.shadow.camera.left = -14
+    dir.shadow.camera.right = 14
+    dir.shadow.camera.top = 14
+    dir.shadow.camera.bottom = -14
+    dir.shadow.camera.near = 1
+    dir.shadow.camera.far = 40
     scene.add(dir)
 
-    const grid = new THREE.GridHelper(24, 24, 0x94a3b8, 0xcbd5e1)
+    // мягкая тень под фигурами + приглушённая сетка
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(13, 48), new THREE.ShadowMaterial({ opacity: 0.16 }))
+    ground.rotation.x = -Math.PI / 2
+    ground.position.y = -0.015
+    ground.receiveShadow = true
+    scene.add(ground)
+    const grid = new THREE.GridHelper(24, 24, 0x8494a9, 0xc2cddb)
+    const gridMat = grid.material as THREE.Material
+    gridMat.transparent = true
+    gridMat.opacity = 0.75
     scene.add(grid)
-    const axisMat = (c: number) => new THREE.LineBasicMaterial({ color: c })
+    const axisMat = (c: number) => new THREE.LineBasicMaterial({ color: c, transparent: true, opacity: 0.55 })
     const mkAxis = (dirV: THREE.Vector3, c: number) => {
       const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, 0), dirV])
       scene.add(new THREE.Line(g, axisMat(c)))
@@ -196,6 +219,17 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
     let raf = 0
     const tick = () => {
       controls.update()
+      // плавное «вырастание» только что добавленной фигуры
+      const now = performance.now()
+      itemsRef.current.forEach(it => {
+        if (!it.spawnT) return
+        const k = Math.min(1, (now - it.spawnT) / 260)
+        const e = 1 - Math.pow(1 - k, 3)
+        const s = it.scaleMul * (0.55 + 0.45 * e)
+        it.mesh.scale.setScalar(s)
+        if (it.type !== 'plane') it.mesh.position.y = Math.max(0.03, (it.size * s) / 2)
+        if (k >= 1) it.spawnT = 0
+      })
       renderer.render(scene, camera)
       raf = requestAnimationFrame(tick)
     }
@@ -224,7 +258,8 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
       else geo = new THREE.BoxGeometry(s * 2, 0.06, s * 2)
       const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: new THREE.Color(ui.color), roughness: 0.45, metalness: 0.06 }))
       mesh.position.set(x, ty === 'plane' ? 0.04 : s / 2, z)
-      const it: SItem = { id: idRef.current++, type: ty, mesh, size: s, colorHex: ui.color }
+      mesh.castShadow = true
+      const it: SItem = { id: idRef.current++, type: ty, mesh, size: s, colorHex: ui.color, spawnT: performance.now(), scaleMul: 1 }
       itemsRef.current.push(it)
       scene.add(mesh)
       stRef.current.setCount(itemsRef.current.length)
@@ -251,6 +286,8 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
       resizeSelected(scale: number) {
         const it = itemsRef.current.find(i => i.id === selRef.current)
         if (!it) return
+        it.scaleMul = scale
+        it.spawnT = 0
         it.mesh.scale.setScalar(scale)
         if (it.type !== 'plane') it.mesh.position.y = (it.size * scale) / 2
       },
@@ -279,6 +316,7 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
       renderer.domElement.removeEventListener('pointerup', onUp)
       renderer.domElement.removeEventListener('pointercancel', onUp)
       controls.dispose()
+      renderer.domElement.removeEventListener('pointerdown', stopAuto)
       itemsRef.current.forEach(i => { i.mesh.geometry.dispose(); (i.mesh.material as THREE.Material).dispose() })
       Object.values(ghostGeo).forEach(g => g.dispose())
       ghostMat.dispose()
@@ -334,7 +372,7 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
 
   return (
     <div className="relative w-full h-full select-none">
-      <div ref={hostRef} className="w-full h-full" />
+      <div ref={hostRef} className="w-full h-full bg-gradient-to-b from-sky-100 via-slate-100 to-slate-300 dark:from-slate-900 dark:via-slate-950 dark:to-black" />
       {!hudOpen && (
         <button onClick={() => setHudOpen(true)} title={t('bd3_panel_title')} aria-label={t('bd3_panel_title')}
           className="absolute top-2 left-2 z-10 w-12 h-12 rounded-2xl bg-white/95 dark:bg-slate-800/95 backdrop-blur border shadow-lg flex items-center justify-center">
@@ -342,9 +380,12 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
         </button>
       )}
       {hudOpen && (
-      <div className="absolute top-2 left-2 z-10 flex flex-col gap-2 bg-white/95 dark:bg-slate-800/95 backdrop-blur rounded-2xl border p-2 shadow-lg max-w-[210px]">
+      <div className="absolute top-2 left-2 z-10 flex flex-col gap-2 bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl rounded-2xl border p-2 shadow-lg max-w-[210px]">
         <div className="flex items-center justify-between">
-          <div className="text-[11px] font-bold text-slate-500 px-1">{t('bd3_panel_title')}</div>
+          <div className="flex items-center gap-1.5 px-1 text-[11px] font-bold text-slate-500 dark:text-slate-400">
+            <span className="w-2 h-2 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400" aria-hidden="true" />
+            {t('bd3_panel_title')}
+          </div>
           <button onClick={() => setHudOpen(false)} title={t('a11y_close')} aria-label={t('a11y_close')} className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"><X size={16} /></button>
         </div>
         <div className="grid grid-cols-5 gap-1">
