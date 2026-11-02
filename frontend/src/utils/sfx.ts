@@ -5,6 +5,7 @@
 
 export type Sfx =
   | 'ui.click' | 'ui.win' | 'ui.lose'
+  | 'ui.success' | 'ui.error' | 'ui.notify'
   | 'ws.select' | 'ws.found' | 'ws.wrong' | 'ws.hint' | 'ws.win' | 'ws.go'
   | 'mem.flip' | 'mem.match' | 'mem.miss' | 'mem.bonus' | 'mem.win' | 'mem.lose'
   | 'cm.tap' | 'cm.right' | 'cm.wrong' | 'cm.over'
@@ -46,6 +47,13 @@ try {
 export function sfxVolume(v: number) {
   muted = v <= 0
   try { localStorage.setItem('edu-sfx-mute', muted ? '1' : '0') } catch {}
+}
+
+// для шапки: чтение/установка глобального выключателя звуков
+export const isSfxMuted = () => muted
+export const setSfxMuted = (m: boolean) => {
+  muted = m
+  try { localStorage.setItem('edu-sfx-mute', m ? '1' : '0') } catch {}
 }
 
 interface Note { f0: number; f1?: number; t?: number; d: number; v?: number; type?: OscillatorType }
@@ -101,6 +109,10 @@ export function sfx(name: Sfx, volume = 1, pitchMul = 1) {
 
   switch (name) {
     // — общий UI —
+    // ── интерфейсные сигналы продукта (тосты/сохранения/уведомления) ──
+    case 'ui.success': O({ f0: 659.25, d: 0.12, v: 0.14 }); O({ f0: 987.77, t: 0.09, d: 0.22, v: 0.16 }); break
+    case 'ui.error': O({ f0: 196, d: 0.16, v: 0.15, type: 'triangle' }); O({ f0: 155.56, t: 0.12, d: 0.26, v: 0.15, type: 'triangle' }); break
+    case 'ui.notify': O({ f0: 880, d: 0.07, v: 0.12 }); O({ f0: 1174.66, t: 0.06, d: 0.12, v: 0.1 }); break
     case 'ui.click': O({ f0: 1300, f1: 900, d: 0.06, v: 0.35, type: 'triangle' }); N({ t: 0, d: 0.03, v: 0.15, f0: 3000, f1: 1500 }); break
     case 'ui.win': {
       const m = [523, 659, 784, 1046]

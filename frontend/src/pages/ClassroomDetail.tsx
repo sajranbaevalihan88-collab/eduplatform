@@ -5,6 +5,7 @@ import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check,
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
 import QuizBuilder from '../components/ClassroomQuizBuilder'
+import { sfx } from '../utils/sfx'
 
 function fmtDl(s?: string){
   if(!s) return '—'
@@ -88,7 +89,13 @@ export default function ClassroomDetail(){
     }).catch(()=>{})
     client.get(`/announcements/?classroom=${id}`).then(r=>setNotes(r.data.results||r.data||[])).catch(()=>{})
     client.get(`/classrooms/${id}/gradebook/`).then(r=>setGb(r.data)).catch(()=>setGb(null))
+    // id владельца — из СВЕЖЕГО /auth/me, а не только из localStorage:
+    // если локальные данные устарели, инструменты учителя (Журнал, задания) пропадали
     try{ setMeId(JSON.parse(localStorage.getItem('user')||'{}').id) }catch{}
+    client.get('/auth/me/').then(r=>{
+      setMeId(r.data.id)
+      try{ localStorage.setItem('user', JSON.stringify(r.data)) }catch{}
+    }).catch(()=>{})
   }
   useEffect(()=>{load()},[id])
   useEffect(()=>{
@@ -101,7 +108,7 @@ export default function ClassroomDetail(){
 
   const post=async()=>{
     if(!text.trim()) return
-    try{ await client.post('/announcements/', {classroom:id, text:text.trim()}); setText(''); load() }
+    try{ await client.post('/announcements/', {classroom:id, text:text.trim()}); setText(''); load(); sfx('ui.notify') }
     catch(e:any){ toast(e?.response?.data?.detail||'err','error') }
   }
   const mkTask=async()=>{

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
+import { sfx } from '../utils/sfx'
 
 // Toast (встроен для сжатия)
 type Toast = { id:number, msg:string, type:'error'|'success'|'info' }
@@ -9,6 +10,9 @@ export function ToastContainer(){
   useEffect(()=>{
     push = (msg, type='info')=>{
       const id=Date.now()+Math.random()
+      // звуковая обратная связь продукта: успех/ошибка слышны сразу, info — без шума
+      if(type==='success') sfx('ui.success')
+      else if(type==='error') sfx('ui.error')
       setToasts(t=>[...t,{id,msg,type}])
       setTimeout(()=> setToasts(t=>t.filter(x=>x.id!==id)), 4000)
     }

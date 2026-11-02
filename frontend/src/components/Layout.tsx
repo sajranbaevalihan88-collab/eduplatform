@@ -1,10 +1,11 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info, Database } from 'lucide-react'
+import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info, Database, Volume2, VolumeX } from 'lucide-react'
 import A11yPanel from './A11yPanel'
 import { useState, useEffect, useRef } from 'react'
 import client from '../api/client'
 import { useTheme, useAccessibility } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
+import { isSfxMuted, setSfxMuted, sfx } from '../utils/sfx'
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const loc = useLocation()
@@ -14,6 +15,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [hideSidebar,setHideSidebar]=useState(false)
   const [showLang,setShowLang]=useState(false)
   const [showA11y,setShowA11y]=useState(false)
+  const [sfxOff,setSfxOff]=useState(()=>isSfxMuted())
   const drawerRef=useRef<HTMLDivElement>(null)
   const menuOpenerRef=useRef<HTMLElement | null>(null)
   const isGameFull = /^\/games\/.+/.test(loc.pathname)
@@ -258,6 +260,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             {hideSidebar && <button onClick={toggleSidebar} className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-white border border-slate-200 text-xs font-medium btn-hover" aria-label={t('show_tabs')}><PanelLeft size={14}/> {t('menu')}</button>}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
+            <button onClick={()=>{ const next=!sfxOff; setSfxOff(next); setSfxMuted(next); if(!next) sfx('ui.click') }} aria-label={sfxOff?'Включить звуки интерфейса':'Выключить звуки интерфейса'} title={sfxOff?'Звуки: выкл':'Звуки: вкл'} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 hover:shadow-md transition-all flex items-center justify-center" data-testid="sfx-toggle">{sfxOff?<VolumeX size={16}/>:<Volume2 size={16}/>}</button>
             <button onClick={toggleTheme} aria-label={theme==='dark' ? t('theme_light') : t('theme_dark')} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 hover:shadow-md transition-all flex items-center justify-center" title={theme==='dark'?t('light'):t('dark')}>{theme==='dark'?<Sun size={16}/>:<Moon size={16}/>}</button>
             <div className="relative">
               <button onClick={()=>setShowLang(v=>!v)} aria-label={t('change_lang')} aria-expanded={showLang} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 flex items-center justify-center gap-1 text-xs font-bold">{lang.toUpperCase()} <Languages size={12}/></button>
