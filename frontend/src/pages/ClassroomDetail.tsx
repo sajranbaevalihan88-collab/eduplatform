@@ -4,6 +4,7 @@ import client from '../api/client'
 import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles, Share2, Video, PenLine, FlaskConical, BookOpen, X } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
+import QuizBuilder from '../components/ClassroomQuizBuilder'
 
 function fmtDl(s?: string){
   if(!s) return '—'
@@ -75,6 +76,8 @@ export default function ClassroomDetail(){
   const [editVal,setEditVal]=useState('')
   // список «кто сдал» по заданию (как в Google Classroom): панель справа
   const [subListFor,setSubListFor]=useState<any>(null)
+  // конструктор теста «как Google Forms» прямо в классруме
+  const [qbOpen,setQbOpen]=useState(false)
 
   const load=()=>{
     client.get(`/classrooms/${id}/`).then(r=>setRoom(r.data)).catch(()=>nav('/classes'))
@@ -117,6 +120,12 @@ export default function ClassroomDetail(){
       setAobj(''); setAdlDate(''); setAdlTime(''); setAinstr(''); setAtitle(''); setAurl(''); setCreating(false); load()
       toast(t('cls_added'),'success')
     }catch(e:any){ toast(e?.response?.data?.detail||e?.response?.data?.url||e?.response?.data?.manual_title||JSON.stringify(e?.response?.data)||'err','error') }
+  }
+  // тест создан в конструкторе — сразу превращаем его в задание класса (как Google Classroom + Forms)
+  const onQuizCreated=async(testId:number)=>{
+    const dl = adlDate? new Date(`${adlDate}T${adlTime||'23:59'}`).toISOString(): null
+    await client.post('/assignments/', {classroom:id, kind:'test', test:testId, deadline:dl, instructions:ainstr})
+    setAobj(''); setAdlDate(''); setAdlTime(''); setAinstr(''); setCreating(false); load()
   }
   // письменная сдача задания (повторно — подставляем прежний ответ)
   const startWrite=async(aid:number)=>{
@@ -383,6 +392,12 @@ export default function ClassroomDetail(){
                       {objs.map((o:any)=><option key={o.id} value={o.id}>{o.title}</option>)}
                     </select>
                   )}
+                  {akind==='test' && (
+                    <button type="button" onClick={()=>setQbOpen(true)} data-testid="open-quiz-builder"
+                      className="w-full px-4 py-3 min-h-[48px] rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold text-sm flex items-center justify-center gap-2 hover:opacity-95 shadow-md">
+                      <FlaskConical size={17}/>{t('cls_new_quiz')}
+                    </button>
+                  )}
                   <div className="space-y-2">
                     <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5"><Clock size={14}/>{t('cls_deadline')}</div>
                     <div className="flex flex-wrap gap-2">
@@ -608,6 +623,7 @@ export default function ClassroomDetail(){
       </div>
 
       {/* «Кто сдал» — как в Google Classroom: список учеников по одному заданию */}
+      {qbOpen && <QuizBuilder onClose={()=>setQbOpen(false)} onCreated={onQuizCreated}/>}
       {isOwner && subListFor && (
         <div className="fixed inset-0 z-50" data-testid="who-list">
           <div className="absolute inset-0 bg-black/40" onClick={()=>setSubListFor(null)} />
