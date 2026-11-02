@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import client from '../api/client'
 import { useAccessibility } from '../context/UIContext'
-import { playNotifySound } from '../utils/sound'
+import { playNotifySound, playUiSound } from '../utils/sound'
 import SpeakableText from '../components/SpeakableText'
 import { useLang } from '../context/LangContext'
 import { Bell, BellOff, Play, Pause, Trash2, Plus, Check, Volume2, Timer } from 'lucide-react'
@@ -133,7 +133,7 @@ export default function Notes() {
       const s = running._left ?? running.timer_sec
       document.title = `⏰ ${fmt(s)} • ${running.title}`
     } else {
-      document.title = 'EduPlatform AI — Уроки, Тесты, Игры и Аркан тартыш'
+      document.title = 'EduPlatform — Уроки, Тесты, Игры и Аркан тартыш'
     }
   }, [notes])
 
@@ -173,6 +173,7 @@ export default function Notes() {
     }
     try {
       const r = await client.post('/notes/', payload)
+      playUiSound('ui-save')
       const created = { ...r.data, _left: r.data.timer_sec || 0, _running: false }
       setNotes(ns => {
         const next = [created, ...ns]

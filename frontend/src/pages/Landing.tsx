@@ -1,15 +1,15 @@
 import { Link } from 'react-router-dom'
-import { BookOpen, Layers, Presentation, FlaskConical, PenTool, Sparkles, ArrowRight, Shield, Globe, Zap, FileText, Gamepad2, Code2, CheckCircle2 } from 'lucide-react'
+import { BookOpen, Layers, Presentation, FlaskConical, PenTool, Sparkles, ArrowRight, Shield, Globe, Zap, FileText, Gamepad2, Code2, CheckCircle2, Plus } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 import Reveal from '../components/Reveal'
 
 const FEATURES = [
-  { icon: Layers, grad: 'from-blue-500 to-cyan-500', title: 'Уроки-конструктор', desc: 'Текст, видео, тесты и код — урок собирается из блоков и меняется перетаскиванием.', to: '/lessons' },
-  { icon: Presentation, grad: 'from-orange-500 to-amber-400', title: 'Презентации как PowerPoint', desc: '14 фигур, анимации и переходы, импорт .pptx и .pdf, показ на весь экран.', to: '/presentations' },
-  { icon: PenTool, grad: 'from-emerald-500 to-teal-500', title: 'Доска 2D/3D', desc: 'Рисование как в Figma и режим стереометрии с настоящими 3D-фигурами и тенями.', to: '/board' },
-  { icon: FlaskConical, grad: 'from-rose-500 to-orange-500', title: 'Тесты с автопроверкой', desc: 'Генерация вопросов по теме, таймер, античит и оценки сразу в журнал.', to: '/tests' },
-  { icon: FileText, grad: 'from-indigo-500 to-blue-500', title: 'Word онлайн', desc: 'Документы с форматированием, таблицами и картинками, импорт и экспорт .docx.', to: '/word' },
-  { icon: Gamepad2, grad: 'from-violet-500 to-fuchsia-500', title: 'Игры и код', desc: '8 обучающих игр и запуск Python и JavaScript прямо в браузере с терминалом.', to: '/games' },
+  { icon: Layers, tint: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300', title: 'Уроки-конструктор', desc: 'Текст, видео, тесты и код — урок собирается из блоков и меняется перетаскиванием.', to: '/lessons' },
+  { icon: Presentation, tint: 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300', title: 'Презентации как PowerPoint', desc: '14 фигур, анимации и переходы, импорт .pptx и .pdf, показ на весь экран.', to: '/presentations' },
+  { icon: PenTool, tint: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300', title: 'Доска 2D/3D', desc: 'Рисование как в Figma и режим стереометрии с настоящими 3D-фигурами и тенями.', to: '/board' },
+  { icon: FlaskConical, tint: 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300', title: 'Тесты с автопроверкой', desc: 'Конструктор вопросов, таймер, режим «как Google Forms», оценки сразу в журнал.', to: '/tests' },
+  { icon: FileText, tint: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300', title: 'Word онлайн', desc: 'Документы с форматированием, таблицами и картинками, импорт и экспорт .docx.', to: '/word' },
+  { icon: Gamepad2, tint: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300', title: 'Игры и код', desc: '8 обучающих игр и запуск Python и JavaScript прямо в браузере с терминалом.', to: '/games' },
 ]
 
 const MARQUEE = ['🎓 Уроки-конструктор', '🖼 Презентации', '🧪 Тесты с автопроверкой', '📄 Word онлайн', '🧊 3D-доска', '🎮 8 обучающих игр', '💻 Python и JavaScript', '🏫 Классы и журнал', '🗣 RU · EN · KG']
@@ -77,11 +77,7 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-white dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 -m-4 lg:-m-8">
       {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-grid-slate-100 dark:bg-grid-slate-800 [mask-image:linear-gradient(to_bottom,white,transparent)]" />
-        <div className="absolute top-16 left-[8%] w-64 h-64 bg-blue-300 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl opacity-25 dark:opacity-20 animate-floatSubtle" />
-        <div className="absolute top-36 right-[6%] w-80 h-80 bg-cyan-300 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl opacity-25 dark:opacity-20 animate-floatSubtle" style={{ animationDelay: '1.2s' }} />
-
+      <section className="relative">
         <div className="max-w-7xl mx-auto px-5 sm:px-6 pt-14 pb-10 sm:pt-20 relative">
           <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-10 items-center">
             <div>
@@ -92,9 +88,8 @@ export default function Landing() {
               </Reveal>
               <Reveal delay={90}>
                 <h1 className="mt-5 text-[34px] leading-[1.08] sm:text-5xl xl:text-[56px] font-display font-extrabold tracking-tight">
-                  <span className="text-slate-900 dark:text-white">EduPlatform </span>
-                  <span className="brand-ai">AI</span>
-                  <span className="block mt-2 text-slate-900 dark:text-white">{t('hero_title1')} <span className="gradient-text">{t('hero_title2')}</span></span>
+                  <span className="text-slate-900 dark:text-white">EduPlatform</span>
+                  <span className="block mt-2 text-slate-900 dark:text-white">{t('hero_title1')} <span>{t('hero_title2')}</span></span>
                 </h1>
               </Reveal>
               <Reveal delay={180}>
@@ -102,11 +97,11 @@ export default function Landing() {
               </Reveal>
               <Reveal delay={260}>
                 <div className="mt-8 flex flex-wrap gap-3">
-                  <Link to="/lessons" className="btn-shine px-6 py-3.5 min-h-[48px] rounded-2xl bg-blue-700 dark:bg-white dark:text-slate-900 text-white font-bold flex items-center gap-2 shadow-lg shadow-blue-600/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">
+                  <Link to="/lessons" className="px-6 py-3.5 min-h-[48px] rounded-xl bg-blue-700 dark:bg-white dark:text-slate-900 text-white font-bold flex items-center gap-2 hover:bg-blue-800 dark:hover:bg-slate-100 transition-colors">
                     {t('view_lessons')} <ArrowRight size={18} />
                   </Link>
-                  <Link to="/lessons/new" className="px-6 py-3.5 min-h-[48px] rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white font-semibold flex items-center gap-2 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
-                    <Sparkles size={18} className="text-blue-600 dark:text-cyan-400" /> {t('create_lesson')}
+                  <Link to="/lessons/new" className="px-6 py-3.5 min-h-[48px] rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white font-semibold flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                    <Plus size={18} className="text-blue-700 dark:text-cyan-400" /> {t('create_lesson')}
                   </Link>
                 </div>
               </Reveal>
@@ -142,14 +137,14 @@ export default function Landing() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 mt-10">
           {FEATURES.map((f, i) => (
             <Reveal key={f.title} delay={i * 70}>
-              <Link to={f.to} className="group block h-full bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-6 card-hover shadow-sm hover:shadow-xl hover:border-blue-200 dark:hover:border-blue-700 transition-all">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${f.grad} flex items-center justify-center text-white shadow-md group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300`}>
+              <Link to={f.to} className="group block h-full bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6 card-hover hover:border-blue-400 dark:hover:border-blue-600 transition-colors">
+                <div className={`w-11 h-11 rounded-lg ${f.tint} flex items-center justify-center`}>
                   <f.icon size={22} />
                 </div>
                 <h3 className="font-bold mt-4 text-slate-900 dark:text-white">{f.title}</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">{f.desc}</p>
-                <span className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 dark:text-cyan-400 mt-3.5 opacity-0 group-hover:opacity-100 -translate-x-1 group-hover:translate-x-0 transition-all">
-                  Открыть <ArrowRight size={15} />
+                <span className="inline-flex items-center gap-1 text-sm font-semibold text-blue-700 dark:text-cyan-400 mt-3.5">
+                  Открыть <ArrowRight size={15} className="opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
                 </span>
               </Link>
             </Reveal>
@@ -166,7 +161,7 @@ export default function Landing() {
           {STEPS.map((s, i) => (
             <Reveal key={s.n} delay={i * 90}>
               <div className="relative h-full bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-5 card-hover">
-                <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 text-white font-display font-extrabold flex items-center justify-center shadow-md shadow-blue-600/25">{s.n}</span>
+                <span className="w-10 h-10 rounded-xl bg-blue-700 text-white font-display font-extrabold flex items-center justify-center">{s.n}</span>
                 <h3 className="font-bold mt-3.5 text-slate-900 dark:text-white">{s.title}</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">{s.desc}</p>
               </div>
@@ -178,15 +173,13 @@ export default function Landing() {
       {/* CTA */}
       <section className="max-w-7xl mx-auto px-5 sm:px-6 pb-16">
         <Reveal>
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-blue-900 to-cyan-900 p-8 sm:p-12 text-white shadow-2xl">
-            <div className="absolute inset-0 bg-grid-white/10 [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]" />
-            <div className="absolute -top-16 -right-10 w-64 h-64 bg-cyan-400/20 rounded-full blur-3xl animate-floatSubtle" />
-            <div className="relative flex flex-col lg:flex-row lg:items-center gap-6">
+          <div className="rounded-2xl bg-slate-900 dark:bg-slate-800 border border-slate-800 dark:border-slate-700 p-8 sm:p-12 text-white">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-6">
               <div className="flex-1">
                 <h2 className="text-2xl sm:text-3xl font-display font-extrabold tracking-tight">{t('ready')}</h2>
-                <p className="text-white/80 mt-2.5 max-w-xl text-sm sm:text-base">{t('ready_sub')}</p>
+                <p className="text-white/70 mt-2.5 max-w-xl text-sm sm:text-base">{t('ready_sub')}</p>
               </div>
-              <Link to="/login" className="btn-shine shrink-0 inline-flex px-7 py-3.5 min-h-[48px] rounded-2xl bg-white text-slate-900 font-bold text-sm sm:text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all w-fit">
+              <Link to="/login" className="shrink-0 inline-flex px-7 py-3.5 min-h-[48px] rounded-xl bg-white text-slate-900 font-bold text-sm sm:text-base hover:bg-blue-50 transition-colors w-fit">
                 {t('login_btn')} <ArrowRight size={18} className="ml-2" />
               </Link>
             </div>

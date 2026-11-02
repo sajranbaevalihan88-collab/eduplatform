@@ -18,9 +18,9 @@ const LANGS = [
 ]
 
 const TEMPLATES: Record<string,string> = {
-  python:'print("Hello EduPlatform AI!")\nfor i in range(3):\n    print(f"Строка {i+1}")\n',
+  python:'print("Hello EduPlatform!")\nfor i in range(3):\n    print(f"Строка {i+1}")\n',
   javascript:'console.log("Hello from JS")\nconst sum=(a,b)=>a+b\nconsole.log("2+3 =", sum(2,3))\n',
-  html:'<!DOCTYPE html>\n<html><body style="font-family:sans-serif; padding:20px">\n<h1 style="color:#7c3aed">EduPlatform AI</h1>\n<p>HTML preview — без бэкенда</p>\n<button onclick="alert(\'Привет!\')">Кнопка</button>\n</body></html>',
+  html:'<!DOCTYPE html>\n<html><body style="font-family:sans-serif; padding:20px">\n<h1 style="color:#7c3aed">EduPlatform</h1>\n<p>HTML preview — без бэкенда</p>\n<button onclick="alert(\'Привет!\')">Кнопка</button>\n</body></html>',
   css:'body { background:#f0f4f8; font-family:sans-serif; }\nh1 { color:#7c3aed; }\n',
 }
 
@@ -481,7 +481,7 @@ export default function VSCodeEditor(){
       {/* Title bar */}
       <div className="h-7 bg-[#181818] flex items-center px-2 gap-2 text-xs border-b border-[#2d2d2d] shrink-0">
         <div className="flex gap-1.5 mr-1"><span className="w-3 h-3 rounded-full bg-[#ff5f56]"/><span className="w-3 h-3 rounded-full bg-[#ffbd2e]"/><span className="w-3 h-3 rounded-full bg-[#27c93f]"/></div>
-        <FileCode2 size={12} className="text-[#007acc] hidden sm:block"/> <span className="text-slate-300 hidden md:inline truncate">EduPlatform AI — VS Code • {active.name}</span>
+        <FileCode2 size={12} className="text-[#007acc] hidden sm:block"/> <span className="text-slate-300 hidden md:inline truncate">EduPlatform — VS Code • {active.name}</span>
         {isFull && <button onClick={()=>setIsFull(false)} className="px-3 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-1 shrink-0"><X size={11}/> {t('vsc_exit_esc')}</button>}
         <button onClick={()=>setShowCmd(v=>!v)} className="mx-auto hidden md:flex items-center gap-1.5 bg-[#252526] hover:bg-[#2a2d2e] border border-[#3c3c3c] rounded px-3 py-0.5 text-slate-400 text-xs">
           <Command size={10}/> {t('vsc_cmd')}

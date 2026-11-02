@@ -66,8 +66,8 @@ export default function Login(){
     <div className="max-w-md mx-auto">
       <div className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-2xl border p-5 sm:p-8">
         <div className="flex flex-col items-center gap-1 mb-1">
-          <img src="/logo.svg" alt="EduPlatform AI" className="w-16 h-16 drop-shadow-md" />
-          <div className="font-display font-bold text-lg dark:text-white">EduPlatform <span className="brand-ai">AI</span></div>
+          <img src="/logo.svg" alt="EduPlatform" className="w-16 h-16 drop-shadow-md" />
+          <div className="font-display font-bold text-lg dark:text-white">EduPlatform</div>
         </div>
         <h1 className="text-2xl font-display font-bold text-center dark:text-white">{isReg?t('login_title_reg'):t('login')}</h1>
         <p className="text-sm text-slate-500 text-center mt-1">{isReg?t('login_sub_reg'):t('login_to_create')}</p>

@@ -5,7 +5,7 @@ import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check,
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
 import QuizBuilder from '../components/ClassroomQuizBuilder'
-import { playNotifySound } from '../utils/sound'
+import { playUiSound } from '../utils/sound'
 import { AI_FEATURES } from '../utils/features'
 
 function fmtDl(s?: string){
@@ -112,7 +112,7 @@ export default function ClassroomDetail(){
 
   const post=async()=>{
     if(!text.trim()) return
-    try{ await client.post('/announcements/', {classroom:id, text:text.trim()}); setText(''); load(); playNotifySound('wave', 0.6) }
+    try{ await client.post('/announcements/', {classroom:id, text:text.trim()}); setText(''); load(); playUiSound('ui-notify') }
     catch(e:any){ toast(e?.response?.data?.detail||'err','error') }
   }
   const mkTask=async()=>{

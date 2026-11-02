@@ -184,21 +184,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {(!isGameFull && !hideSidebar) ? (
       <aside aria-label={t('main_navigation')} className="hidden lg:flex w-[280px] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-r border-slate-200/60 dark:border-slate-700/60 flex-col sticky top-0 h-screen shadow-sm animate-slideIn">
         <div className="h-[64px] flex items-center gap-3 px-6 border-b border-slate-100 dark:border-slate-700">
-          <img src="/logo.svg" alt="EduPlatform AI" className="w-10 h-10 shrink-0 drop-shadow-md" />
-          <div className="flex-1 min-w-0"><div className="font-display font-bold leading-tight dark:text-white text-[15px]">EduPlatform <span className="brand-ai">AI</span></div><div className="text-xs text-slate-500 dark:text-slate-400">{t('tagline')}</div></div>
+          <img src="/logo.svg" alt="EduPlatform" className="w-10 h-10 shrink-0 drop-shadow-md" />
+          <div className="flex-1 min-w-0"><div className="font-display font-bold leading-tight dark:text-white text-[15px]">EduPlatform</div><div className="text-xs text-slate-500 dark:text-slate-400">{t('tagline')}</div></div>
           <button onClick={toggleSidebar} aria-label={t('hide_tabs')} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 btn-hover" title={t('hide_tabs')}><PanelLeftClose size={18}/></button>
         </div>
         <nav id="main-navigation" aria-label={t('main_navigation')} className="flex-1 p-3 space-y-1.5 overflow-auto scrollbar-thin stagger">
           {items.map(it => (
-            <Link key={it.to} to={it.to} aria-current={isActive(it.to) ? 'page' : undefined} aria-label={it.label} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 ${isActive(it.to) ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-600/30 scale-[1.02]' : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md hover:scale-[1.01] border border-transparent hover:border-slate-100 dark:hover:border-slate-700'}`}>
+            <Link key={it.to} to={it.to} aria-current={isActive(it.to) ? 'page' : undefined} aria-label={it.label} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive(it.to) ? 'bg-blue-700 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-100 dark:hover:border-slate-700'}`}>
               <span className={`p-1.5 rounded-lg ${isActive(it.to) ? 'bg-white/15' : 'bg-slate-50 dark:bg-slate-800'}`}><it.icon size={16} /></span> {it.label}
             </Link>
           ))}
         </nav>
         <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-gradient-to-t from-slate-50/50 dark:from-slate-800/50 to-transparent space-y-2">
           {me ? (
-            <Link to="/profile" className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium card-hover ${isActive('/profile') ? 'bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700 shadow-sm' : 'bg-white dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-600 dark:text-white'}`}>
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-white font-bold text-xs shadow-md">{(me.username||'U')[0].toUpperCase()}</div>
+            <Link to="/profile" className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium card-hover ${isActive('/profile') ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700' : 'bg-white dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-600 dark:text-white'}`}>
+              <div className="w-8 h-8 rounded-full bg-blue-700 flex items-center justify-center text-white font-bold text-xs">{(me.username||'U')[0].toUpperCase()}</div>
               <div className="flex-1 min-w-0"><div className="font-semibold line-clamp-1">{me.username}</div><div className="text-xs text-slate-500 dark:text-slate-400 truncate">{me.email||`ID ${me.id}`}</div></div>
             </Link>
           ) : (
@@ -207,7 +207,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {me ? (
             <button onClick={logout} className="w-full flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 btn-hover"><LogOut size={16}/> {t('logout')}</button>
           ) : (
-            <Link to="/login" className="w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold shadow-md btn-hover"><User size={16}/> {t('login')}</Link>
+            <Link to="/login" className="w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-xl bg-blue-700 text-white font-semibold hover:bg-blue-800 transition-colors"><User size={16}/> {t('login')}</Link>
           )}
         </div>
       </aside>
@@ -221,23 +221,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="absolute inset-0 bg-black/60 motion-safe:animate-fadeIn" onClick={()=>setOpen(false)} />
           <div className="absolute left-0 top-0 w-[85%] max-w-[320px] h-[100dvh] bg-white dark:bg-slate-900 flex flex-col motion-safe:animate-drawer shadow-2xl overscroll-contain">
             <div className="h-[64px] flex items-center justify-between px-6 border-b dark:border-slate-700 shrink-0">
-              <span className="font-bold dark:text-white flex items-center gap-2.5"><img src="/logo.svg" alt="EduPlatform AI" className="w-10 h-10 drop-shadow-md" />EduPlatform <span className="brand-ai">AI</span></span>
+              <span className="font-bold dark:text-white flex items-center gap-2.5"><img src="/logo.svg" alt="EduPlatform" className="w-10 h-10 drop-shadow-md" />EduPlatform</span>
               <button onClick={()=>setOpen(false)} className="dark:text-white p-2" aria-label={t('close_menu')}><X size={20}/></button>
             </div>
             <nav id="mobile-navigation" tabIndex={-1} aria-label={t('main_navigation')} className="flex-1 p-3 space-y-1 overflow-auto outline-none">
               {items.map(it=>(
-                <Link key={it.to} to={it.to} onClick={()=>setOpen(false)} aria-current={isActive(it.to) ? 'page' : undefined} className={`flex items-center gap-3 px-3 py-3 rounded-xl min-h-[48px] ${isActive(it.to)?'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-600/30':'text-slate-600 dark:text-slate-300'}`}><it.icon size={18}/>{it.label}</Link>
+                <Link key={it.to} to={it.to} onClick={()=>setOpen(false)} aria-current={isActive(it.to) ? 'page' : undefined} className={`flex items-center gap-3 px-3 py-3 rounded-xl min-h-[48px] ${isActive(it.to)?'bg-blue-700 text-white':'text-slate-600 dark:text-slate-300'}`}><it.icon size={18}/>{it.label}</Link>
               ))}
             </nav>
             <div className="p-3 pb-[calc(12px+env(safe-area-inset-bottom))] border-t dark:border-slate-700 shrink-0">
               {me ? (<>
                 <Link to="/profile" onClick={()=>setOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 dark:text-white">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-amber-400 flex items-center justify-center text-white font-bold text-xs">{(me.username||'U')[0].toUpperCase()}</div>
+                  <div className="w-8 h-8 rounded-full bg-blue-700 flex items-center justify-center text-white font-bold text-xs">{(me.username||'U')[0].toUpperCase()}</div>
                   <div className="flex-1 min-w-0"><div className="font-semibold text-sm line-clamp-1">{me.username}</div></div>
                 </Link>
                 <button onClick={()=>{ setOpen(false); logout() }} className="mt-2 w-full flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 px-3 py-2"><LogOut size={16}/> {t('logout')}</button>
               </>) : (
-                <Link to="/login" onClick={()=>setOpen(false)} className="w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold"><User size={16}/> {t('login')}</Link>
+                <Link to="/login" onClick={()=>setOpen(false)} className="w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-xl bg-blue-700 text-white font-semibold"><User size={16}/> {t('login')}</Link>
               )}
             </div>
           </div>
@@ -250,13 +250,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3 min-w-0">
             <button className="lg:hidden shrink-0 p-2 rounded-xl bg-slate-100 hover:bg-white hover:shadow-md transition-all" onClick={()=>setOpen(true)} aria-label={t('open_menu')} aria-expanded={open} aria-controls="mobile-drawer"><Menu size={18}/></button>
             {/* Логотип в мобильной шапке: раньше его не было вовсе — бренд видно только в меню */}
-            <Link to="/" className="md:hidden flex items-center gap-1.5 min-w-0" aria-label="EduPlatform AI — на главную">
+            <Link to="/" className="md:hidden flex items-center gap-1.5 min-w-0" aria-label="EduPlatform — на главную">
               <img src="/logo.svg" alt="" aria-hidden="true" className="w-9 h-9 shrink-0 drop-shadow-md" />
-              <span className="font-display font-bold text-[15px] leading-none whitespace-nowrap">
-                <span className="gradient-text">EduPlatform</span> <span className="brand-ai">AI</span>
-              </span>
+              <span className="font-display font-bold text-[15px] leading-none whitespace-nowrap text-slate-900 dark:text-white">EduPlatform</span>
             </Link>
-            <p className="font-display font-bold text-lg hidden md:block gradient-text truncate" aria-label={t('platform_title')}>{t('platform_title')}</p>
+            <p className="font-display font-bold text-lg hidden md:block truncate text-slate-900 dark:text-slate-100" aria-label={t('platform_title')}>{t('platform_title')}</p>
             {hideSidebar && <button onClick={toggleSidebar} className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-white border border-slate-200 text-xs font-medium btn-hover" aria-label={t('show_tabs')}><PanelLeft size={14}/> {t('menu')}</button>}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -275,11 +273,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <button onClick={()=>setShowA11y(true)} aria-label={t('a11y_settings')} aria-expanded={showA11y} className={`p-2.5 min-w-[44px] min-h-[44px] rounded-xl border flex items-center justify-center gap-1 text-xs font-bold ${poor?'bg-amber-400 border-amber-500 text-slate-900':'bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border-transparent hover:border-slate-200 dark:border-slate-600'}`} title={t('a11y_settings')}><Accessibility size={16}/><span className="hidden lg:inline">{t('a11y')}{poor?' •':' '}</span></button>
             <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"/>
             {!student && (
-            <Link to="/lessons/new" className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white text-sm font-semibold shadow-md hover:shadow-lg btn-hover hidden sm:flex items-center gap-1.5">✨ {t('create_lesson')}</Link>
+            <Link to="/lessons/new" className="px-4 py-2 rounded-xl bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 transition-colors hidden sm:flex items-center gap-1.5">{t('create_lesson')}</Link>
             )}
             {me ? (
               <Link to="/profile" className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-700 dark:bg-white dark:text-slate-900 text-white text-sm font-semibold shadow-md btn-hover">
-                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-amber-400 flex items-center justify-center text-xs font-bold">{(me.username||'U')[0].toUpperCase()}</div>
+                <div className="w-6 h-6 rounded-full bg-blue-700 flex items-center justify-center text-xs font-bold">{(me.username||'U')[0].toUpperCase()}</div>
                 {me.username}
               </Link>
             ) : (

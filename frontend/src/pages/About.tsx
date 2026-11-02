@@ -5,7 +5,7 @@ import { useLang } from '../context/LangContext'
 const DICT: Record<string, Record<string, string>> = {
   ru: {
     ab_title: 'О платформе',
-    ab_sub: 'Почему EduPlatform AI существует и чем отличается',
+    ab_sub: 'Почему EduPlatform существует и чем отличается',
     ab_story_t: 'Сколько стоит один хороший урок?',
     ab_story_p1: 'У репетитора — несколько сотен сомов. В частной школе — тысячи каждый месяц. А для семьи из далёкого села — дороже всех: к цене урока добавляется дорога в город. Выходит несправедливо: качество урока зависит от того, где родился ребёнок и что в кошельке у родителей.',
     ab_story_p2: 'PISA-2025: Кыргызстан — 80-е место из 91 страны, 76% школьников ниже базового уровня, школам не хватает 761 учителя. Школу в горах строят годами, репетитора в каждое село не отправишь — а телефон уже лежит в кармане почти у каждого школьника. Хороший урок должен стоить как звонок родителям: почти ничего. Поэтому я собрал EduPlatform — урок, который живёт в браузере и сам приходит в каждый телефон.',
@@ -29,7 +29,7 @@ const DICT: Record<string, Record<string, string>> = {
   },
   en: {
     ab_title: 'About the platform',
-    ab_sub: 'Why EduPlatform AI exists and how it differs',
+    ab_sub: 'Why EduPlatform exists and how it differs',
     ab_story_t: 'How much does one good lesson cost?',
     ab_story_p1: 'A tutor costs hundreds of soms per lesson. A private school — thousands every month. For a family in a remote village it is the most expensive: add the road to the city to the price. It is unfair: the quality of a lesson depends on where a child was born and what the parents can afford.',
     ab_story_p2: 'PISA-2025: Kyrgyzstan ranks 80th out of 91 countries; 76% of schoolchildren are below the basic level; schools lack 761 teachers. A mountain school takes years to build, you cannot send a tutor to every village — yet a phone is already in almost every schoolchild pocket. A good lesson should cost like a call to your parents: almost nothing. So I built EduPlatform — a lesson that lives in the browser and arrives in every phone on its own.',
@@ -53,7 +53,7 @@ const DICT: Record<string, Record<string, string>> = {
   },
   kg: {
     ab_title: 'Platforma жөнүндө',
-    ab_sub: 'EduPlatform AI эмне үчүн жана эмнеси менен айырмаланат',
+    ab_sub: 'EduPlatform эмне үчүн жана эмнеси менен айырмаланат',
     ab_story_t: 'Бир жакшы сабак канча турат?',
     ab_story_p1: 'Репетитор — бир нече жүз сом. Жеке мектеп — ай сайын миңдеген сом. Ал эми алыскы кыштактагы үй-бүлөгө эң кымбат: сабактын баасына шаарга чейинки жол кошулат. Чыккандай: сабактын сапаты баланы кайда төрөлгөнүнө жана ата-энесинин жумушуна байланыштуу.',
     ab_story_p2: 'PISA-2025: Кыргызстан — 91 өлкөнүн ичинен 80-орунда, мектеп окуучулардын 76% негизги деңгээлден төмөн, мектептерге 761 мугалим жетишпейт. Тоодогу мектепти жылдар бою курушат, репетиторду ар бир кыштакка жиберсе болбойт — ал эми телефон дээрлик ар бир окуучунун капчыгында. Жакшы сабак ата-энесине телефон чалуу сыяктуу эле арзан туруш керек: дээрлик эч нерсе. Ошондуктан мен EduPlatform түздүм — браузерде жашаган жана ар бир телефонго өзү келген сабак.',
@@ -144,7 +144,7 @@ export default function About() {
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700 text-left">
                 <th className="p-3 font-semibold dark:text-white min-w-[220px]"></th>
-                <th className="p-3 text-center font-bold text-blue-700 dark:text-blue-300 whitespace-nowrap">EduPlatform AI</th>
+                <th className="p-3 text-center font-bold text-blue-700 dark:text-blue-300 whitespace-nowrap">EduPlatform</th>
                 <th className="p-3 text-center font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">Google Classroom</th>
                 <th className="p-3 text-center font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">Kahoot</th>
                 <th className="p-3 text-center font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">Moodle</th>

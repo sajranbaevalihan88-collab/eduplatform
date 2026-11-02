@@ -73,6 +73,12 @@ function synthFallback(name: string, volume = 0.8) {
     else if (name === 'wave') { tone(660, 0, 0.35, vol, ctx); tone(880, 0.4, 0.35, vol, ctx); tone(1100, 0.8, 0.5, vol, ctx) }
     else if (name === 'alarm') { for (let i = 0; i < 3; i++) tone(990, i * 0.5, 0.3, vol, ctx) }
     else if (name === 'notify') { tone(880, 0, 0.5, vol, ctx) }
+    else if (name === 'ui-success') { tone(698, 0, 0.25, vol * 0.8, ctx); tone(880, 0.12, 0.4, vol * 0.8, ctx) }
+    else if (name === 'ui-error') { tone(160, 0, 0.18, vol, ctx); tone(150, 0.16, 0.22, vol * 0.8, ctx) }
+    else if (name === 'ui-notify') { tone(1318, 0, 0.6, vol * 0.8, ctx) }
+    else if (name === 'ui-win') { tone(523, 0, 0.2, vol * 0.8, ctx); tone(659, 0.11, 0.2, vol * 0.8, ctx); tone(784, 0.22, 0.2, vol * 0.9, ctx); tone(1047, 0.35, 0.55, vol, ctx) }
+    else if (name === 'ui-save') { tone(1760, 0, 0.05, vol * 0.5, ctx); tone(1864, 0.1, 0.05, vol * 0.45, ctx) }
+    else if (name === 'ui-pop') { tone(380, 0, 0.06, vol * 0.8, ctx); tone(860, 0.02, 0.06, vol * 0.6, ctx) }
     setTimeout(() => { try { ctx.close() } catch {} }, 2500)
   } catch {}
 }
@@ -104,6 +110,13 @@ export function playArkanSound(name: ArkanSound, volume = 0.85) {
 }
 
 export function playNotifySound(name: NotifySound = 'notify', volume = 0.9) {
+  if (!mp3(name, volume)) synthFallback(name, volume)
+}
+
+// Продуктовый набор интерфейсных звуков (gen_ui_sounds.py): тосты, тесты, панели.
+// Это НЕ игровые файлы — свой свежий синт, тёплый и короткий.
+export type UiSound = 'ui-success' | 'ui-error' | 'ui-notify' | 'ui-win' | 'ui-save' | 'ui-pop'
+export function playUiSound(name: UiSound, volume = 0.75) {
   if (!mp3(name, volume)) synthFallback(name, volume)
 }
 
