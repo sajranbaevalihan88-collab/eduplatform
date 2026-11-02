@@ -1,29 +1,29 @@
 # Карта звуков
 
-Каждый файл — реальный записанный сэмпл с **Mixkit** (бесплатная лицензия без атрибуции),
-прогнанный через ffmpeg loudnorm (единая громкость, mp3 q2). Никакого синтеза.
+Каждый файл — реальный записанный сэмпл из паков **Kenney** (kenney.nl, лицензия CC0 —
+общественное достояние, атрибуция не нужна): паки *Interface Sounds* и *Music Jingles*.
+Джинглы подобраны автоматическим анализом контура высоты тона (восходящие = победные,
+нисходящие = «мимо»). Никакого синтеза.
 
-Регенерация/замена любого звука берётся из каталогов Mixkit: game / notification / interface.
-
-| Файл | Источник (Mixkit) | Где звучит | Момент |
+| Файл | Источник (Kenney) | Где звучит | Момент |
 |---|---|---|---|
-| `ui-success.mp3` | Correct answer tone | тосты «успешно» (урок/тест/задание) | `UIContext` |
-| `ui-error.mp3` | Wrong answer fail notification | тосты «ошибка» | `UIContext` |
-| `ui-notify.mp3` | Bell notification | тест не пройден (нейтральный сигнал) | `TestTake` |
-| `ui-win.mp3` | Game level completed | **тест пройден** — фанфара | `TestTake` |
-| `ui-start.mp3` | Software interface start | первый ответ в попытке — «поехали!» | `TestTake` |
-| `ui-save.mp3` | Confirmation tone | заметка сохранена | `Notes` |
-| `ui-pop.mp3` | Message pop alert | резерв (пузырь) | — |
-| `correct.mp3` | Correct answer reward | игры: верно | `sound.ts` |
-| `wrong.mp3` | Sci-Fi reject notification | игры: мимо | `sound.ts` |
-| `win.mp3` | Winning an extra bonus | игры: победа | `sound.ts` |
-| `go.mp3` | Positive notification | игры: старт | `sound.ts` |
-| `tick.mp3` | Light button | игры: тик таймера (тихий −20 LUFS) | `sound.ts` |
-| `standard.mp3` | Happy bells notification | рингтон заметок «Обычный» | `Notes` |
-| `wave.mp3` | Magic notification ring | рингтон заметок «Волна» | `Notes` |
-| `alarm.mp3` | Urgent simple tone loop | рингтон заметок «Сигнал» (луп) | `Notes` |
-| `notify.mp3` | Doorbell tone | рингтон напоминания (по умолчанию) | `Notes` |
-| `type.mp3` | ATM cash machine key press | спринт печати — клавиша (тихий −20 LUFS) | `Sprint` |
+| `ui-success.mp3` | Interface → confirmation_004 | тосты «успешно» (урок/тест/задание) | `UIContext` |
+| `ui-error.mp3` | Interface → error_005 | тосты «ошибка» | `UIContext` |
+| `ui-notify.mp3` | Interface → glass_004 | тест не пройден (нейтральный колокол) | `TestTake` |
+| `ui-win.mp3` | Jingles → PIZZI02 (восходящий) | **тест пройден** — щипковый джингл | `TestTake` |
+| `ui-start.mp3` | Interface → maximize_005 | первый ответ в попытке — «поехали!» | `TestTake` |
+| `ui-save.mp3` | Interface → select_005 | заметка сохранена | `Notes` |
+| `ui-pop.mp3` | Interface → drop_004 | резерв (пузырь) | — |
+| `correct.mp3` | Jingles → PIZZI16 (короткий восходящий) | игры: верно | `sound.ts` |
+| `wrong.mp3` | Jingles → PIZZI05 (нисходящий) | игры: мимо | `sound.ts` |
+| `win.mp3` | Jingles → PIZZI15 (восходящий вариант) | игры: победа | `sound.ts` |
+| `go.mp3` | Jingles → NES09 (чиптюн-старт) | игры: старт | `sound.ts` |
+| `tick.mp3` | Interface → tick_001 (−20 LUFS) | игры: тик таймера | `sound.ts` |
+| `standard.mp3` | собран: glass_004 ×2 | рингтон заметок «Обычный» | `Notes` |
+| `wave.mp3` | собран: щипковое арпеджио C-E-G-C | рингтон заметок «Волна» | `Notes` |
+| `alarm.mp3` | собран: glass_005 ×4 | рингтон заметок «Сигнал» | `Notes` |
+| `notify.mp3` | собран: колокол + эхо-щипок | рингтон напоминания (по умолчанию) | `Notes` |
+| `type.mp3` | Interface → click_002 (−20 LUFS) | спринт печати — клавиша | `Sprint` |
 
 **Исключение: `arkan-*.mp3`** — этно-набор Аркан тартыш (комуз + барабан), используется только игрой Arkan.
 
@@ -33,3 +33,4 @@
 Мьют: кнопка 🔊/🔇 в шапке глушит **всё** (ключ `edu-sfx-mute`).
 
 Скрипт `scripts/gen_ui_sounds.py` больше не источник звуков (исторический файл, можно не трогать).
+Сборка текущего набора: см. историю коммитов (паки Kenney + ffmpeg loudnorm).
