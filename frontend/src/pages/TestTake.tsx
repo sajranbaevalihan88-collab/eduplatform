@@ -4,7 +4,7 @@ import client from '../api/client'
 import { useAccessibility, toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
 import { enableShotGuard, requestGuardFullscreen, disableShotGuard } from '../utils/shotGuard'
-import { sfx } from '../utils/sfx'
+import { playGameSound, playNotifySound } from '../utils/sound'
 
 export default function TestTake(){
   const {id}=useParams()
@@ -77,7 +77,7 @@ export default function TestTake(){
       const r=await client.post(`/tests/${id}/submit/`,{answers:ans})
       setResult(r.data)
       // маленькая фанфара за пройденный тест, мягкий сигнал иначе
-      if(r.data.passed) sfx('ui.win'); else sfx('ui.notify')
+      if(r.data.passed) playGameSound('win', 0.85); else playNotifySound('standard', 0.6)
       setAlreadyAttempted(true)
       localStorage.setItem(`test_done_${id}`,'1')
       // Задание в классе отмечает сам сервер (assignments_done) — показываем тост

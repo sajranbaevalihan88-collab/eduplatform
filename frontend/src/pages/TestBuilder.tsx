@@ -4,6 +4,7 @@ import client from '../api/client'
 import { Trash2, Save, Sparkles } from 'lucide-react'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
+import { AI_FEATURES } from '../utils/features'
 
 type Opt={text:string,is_correct:boolean}
 type Q={text:string,type:string,points:number,options:Opt[],explanation?:string}
@@ -82,6 +83,7 @@ export default function TestBuilder(){
               <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('tb_mode_manual_sub')}</span>
             </span>
           </button>
+          {AI_FEATURES && (
           <button onClick={()=>{setMode('form'); setShowGen(true)}} data-testid="tb-ai"
             className="w-full text-left px-5 py-4 min-h-[92px] rounded-2xl border-2 border-emerald-400/60 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700 hover:border-emerald-500 flex items-center gap-4 transition-colors">
             <span className="text-4xl">✨</span>
@@ -90,6 +92,7 @@ export default function TestBuilder(){
               <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('tb_mode_ai_sub')}</span>
             </span>
           </button>
+          )}
         </div>
       ) : (<>
       <div className="bg-white rounded-2xl border p-6 space-y-3">
@@ -165,15 +168,15 @@ export default function TestBuilder(){
         </div>
       )}
       <div className="flex flex-col sm:flex-row gap-3">
-        <button onClick={()=>setShowGen(true)} className="flex-1 px-4 py-3 min-h-[48px] rounded-xl bg-blue-600 text-white font-semibold flex items-center justify-center gap-2"><Sparkles size={18}/> {t('tb_create_ai')}</button>
+        {AI_FEATURES && <button onClick={()=>setShowGen(true)} className="flex-1 px-4 py-3 min-h-[48px] rounded-xl bg-blue-600 text-white font-semibold flex items-center justify-center gap-2"><Sparkles size={18}/> {t('tb_create_ai')}</button>}
         <button onClick={save} disabled={saving} className="flex-1 px-4 py-3 min-h-[48px] rounded-xl bg-emerald-600 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-50"><Save size={18}/> {saving?t('tb_saving'):t('tb_save_test')}</button>
       </div>
-      {genSource && (
+      {AI_FEATURES && genSource && (
         <div className={`text-xs font-bold px-3 py-2 rounded-xl ${genSource.startsWith('gemini') ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
           {genSource.startsWith('gemini') ? `${t('tb_gen_ai_pre')} ${genSource.split(':')[1] || 'Gemini'}` : t('tb_gen_offline')}
         </div>
       )}
-      {showGen && (
+      {AI_FEATURES && showGen && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-16 p-4" onClick={()=>setShowGen(false)}>
           <div onClick={e=>e.stopPropagation()} className="relative w-[560px] max-w-full bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-5 space-y-3 animate-scaleIn modal-safe">
             <button onClick={()=>setShowGen(false)} aria-label={t('close')} title={t('close')} className="absolute top-2 right-2 inline-flex items-center justify-center w-11 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-white text-lg font-bold">✕</button>

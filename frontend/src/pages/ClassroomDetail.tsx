@@ -5,7 +5,8 @@ import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check,
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
 import QuizBuilder from '../components/ClassroomQuizBuilder'
-import { sfx } from '../utils/sfx'
+import { playNotifySound } from '../utils/sound'
+import { AI_FEATURES } from '../utils/features'
 
 function fmtDl(s?: string){
   if(!s) return '—'
@@ -75,6 +76,9 @@ export default function ClassroomDetail(){
   const [colBusy,setColBusy]=useState(false)
   const [editCell,setEditCell]=useState<{a:number,s:number}|null>(null)
   const [editVal,setEditVal]=useState('')
+  // Журнал: быстрый поиск по ученикам + сортировка (по имени или по успеваемости)
+  const [gbq,setGbq]=useState('')
+  const [gbSort,setGbSort]=useState<'name'|'avg'>('name')
   // список «кто сдал» по заданию (как в Google Classroom): панель справа
   const [subListFor,setSubListFor]=useState<any>(null)
   // конструктор теста «как Google Forms» прямо в классруме
@@ -108,7 +112,7 @@ export default function ClassroomDetail(){
 
   const post=async()=>{
     if(!text.trim()) return
-    try{ await client.post('/announcements/', {classroom:id, text:text.trim()}); setText(''); load(); sfx('ui.notify') }
+    try{ await client.post('/announcements/', {classroom:id, text:text.trim()}); setText(''); load(); playNotifySound('wave', 0.6) }
     catch(e:any){ toast(e?.response?.data?.detail||'err','error') }
   }
   const mkTask=async()=>{
@@ -272,6 +276,20 @@ export default function ClassroomDetail(){
     }catch(e:any){ toast(e?.response?.data?.detail||e?.response?.data?.error||'err','error') }
     setRepBusy(false)
   }
+
+  // Журнал: видимый список учеников — поиск + сортировка (по имени / по успеваемости)
+  const gbList = (gb?.students||[])
+    .filter((s:any)=> !gbq.trim() || String(s.username||'').toLowerCase().includes(gbq.trim().toLowerCase()))
+    .slice()
+    .sort((x:any,y:any)=> gbSort==='name'
+      ? String(x.username||'').localeCompare(String(y.username||''))
+      : (gb.avg_student?.[String(y.id)] ?? -1) - (gb.avg_student?.[String(x.id)] ?? -1))
+
+  const avgColor = (v:number|null|undefined)=> v==null? 'text-slate-400'
+    : v>=85? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+    : v>=70? 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300'
+    : v>=50? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+    : 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300'
 
   const tabs:any[] = [
     {k:'stream', label:t('cls_tab_stream'), icon:Megaphone},
@@ -502,6 +520,7 @@ export default function ClassroomDetail(){
 
           {tab==='grades' && isOwner && (
             <div className="space-y-4">
+              {AI_FEATURES && (
               <div className="flex flex-wrap gap-2">
                 <button onClick={genReport} disabled={repBusy}
                   className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold flex items-center gap-2 disabled:opacity-50" data-testid="cls-report">
@@ -509,7 +528,8 @@ export default function ClassroomDetail(){
                 </button>
                 <span className="text-xs text-slate-400 self-center">{t('cls_report_hint')}</span>
               </div>
-              {rep && (
+              )}
+              {AI_FEATURES && rep && (
                 <div className="p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20" data-testid="cls-report-card">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="font-bold text-sm dark:text-white">✨ {t('cls_report')}</span>
@@ -520,6 +540,18 @@ export default function ClassroomDetail(){
                 </div>
               )}
               <div className="flex flex-wrap gap-2 items-center">
+                {isOwner && gb && (gb.students||[]).length>1 && (
+                  <input data-testid="gb-search" value={gbq} onChange={e=>setGbq(e.target.value)}
+                    placeholder={t('cls_g_search')||'Поиск ученика…'} aria-label={t('cls_g_search')||'Поиск ученика…'}
+                    className="px-3 py-2 rounded-xl border bg-white dark:bg-slate-800 dark:text-white dark:border-slate-700 text-sm w-[180px]" />
+                )}
+                {isOwner && gb && (gb.students||[]).length>1 && (
+                  <button onClick={()=>setGbSort(o=>o==='name'?'avg':'name')} data-testid="gb-sort"
+                    title={gbSort==='name'? (t('cls_g_sort_avg')||'Сортировать по успеваемости') : (t('cls_g_sort_name')||'Сортировать по имени')}
+                    className="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border dark:border-slate-700 text-sm font-semibold dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700">
+                    {gbSort==='name'? 'А→Я' : '🎯 По успеваемости'}
+                  </button>
+                )}
                 {isOwner && (
                   <button onClick={()=>setColOpen(o=>!o)} data-testid="cls-addcol"
                     className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold text-sm hover:bg-blue-50 dark:hover:bg-slate-700 flex items-center gap-1">
@@ -574,7 +606,7 @@ export default function ClassroomDetail(){
                     </tr>
                   </thead>
                   <tbody>
-                    {gb.students.map((s:any)=>(
+                    {gbList.map((s:any, si:number)=>(
                       <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
                         <td className="p-2 border-b dark:border-slate-700 font-semibold sticky left-0 z-10 bg-white dark:bg-slate-900 shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]">{s.username}</td>
                         {gb.assignments.map((a:any)=>{
@@ -585,7 +617,12 @@ export default function ClassroomDetail(){
                               <input autoFocus maxLength={8} value={editVal} onChange={e=>setEditVal(e.target.value)}
                                 onBlur={()=>saveCell(a.id,s.id,editVal)}
                                 onKeyDown={e=>{
-                                  if(e.key==='Enter') saveCell(a.id,s.id,editVal)
+                                  // Enter: сохранить и перейти к следующему ученику в этой колонке — оценка всего класса «не отрывая рук»
+                                  if(e.key==='Enter'){
+                                    saveCell(a.id,s.id,editVal)
+                                    const nx=gbList[si+1]
+                                    if(nx){ setEditCell({a:a.id,s:nx.id}); setEditVal('') }
+                                  }
                                   else if(e.key==='Escape') setEditCell(null)
                                 }}
                                 className="w-16 px-1 py-1 rounded-lg border-2 border-blue-500 text-center text-xs bg-white dark:bg-slate-800 dark:text-white"/>
@@ -606,8 +643,10 @@ export default function ClassroomDetail(){
                             </td>
                           )
                         })}
-                        <td className="p-2 border-b dark:border-slate-700 text-center font-bold text-blue-700 dark:text-blue-300" data-testid={`gb-avg-${s.id}`}>
-                          {gb.avg_student?.[String(s.id)]!=null? gb.avg_student[String(s.id)] : '—'}
+                        <td className="p-2 border-b dark:border-slate-700 text-center" data-testid={`gb-avg-${s.id}`}>
+                          {gb.avg_student?.[String(s.id)]!=null
+                            ? <span className={`inline-block px-2 py-0.5 rounded-lg font-bold ${avgColor(gb.avg_student[String(s.id)])}`}>{gb.avg_student[String(s.id)]}</span>
+                            : <span className="text-slate-400">—</span>}
                         </td>
                       </tr>
                     ))}
@@ -623,6 +662,9 @@ export default function ClassroomDetail(){
                   </tbody>
                 </table>
                 </div>
+              )}
+              {gb && gb.assignments.length>0 && gbList.length===0 && (
+                <div className="text-center text-slate-400 py-6" data-testid="gb-search-empty">{t('cls_g_no_match')}</div>
               )}
             </div>
           )}

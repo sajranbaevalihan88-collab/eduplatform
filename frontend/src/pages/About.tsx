@@ -79,7 +79,7 @@ const DICT: Record<string, Record<string, string>> = {
 
 // [мы, Google Classroom, Kahoot, Moodle]: 2 = да, 1 = частично, 0 = нет
 const ROWS_RU = [
-  { name: 'ИИ-генерация тестов из текста урока', vals: [2, 0, 0, 1] },
+  { name: '🧪 Тесты как в Google Forms (конструктор, автопроверка)', vals: [2, 0, 0, 1] },
   { name: 'Работает без API-ключей (офлайн-генератор)', vals: [2, 2, 2, 0] },
   { name: 'Доска 2D/3D с осями координат', vals: [2, 0, 0, 0] },
   { name: 'Редактор кода с живым HTML-превью', vals: [2, 0, 0, 0] },

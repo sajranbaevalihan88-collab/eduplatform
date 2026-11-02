@@ -4,6 +4,7 @@ import client, { mediaUrl } from '../api/client'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
 import { Plus, Trash2, Save, GripVertical, Type, FileText, Presentation, FlaskConical, Code2, PenTool, Video, Eye, BookOpen, Sparkles } from 'lucide-react'
+import { AI_FEATURES } from '../utils/features'
 
 type Block={id:string,type:string,data:any}
 
@@ -666,6 +667,7 @@ export default function LessonBuilder(){
                           <div className="text-sm font-bold">Новый тест для урока</div>
                           <button onClick={()=>setTestInlineOpen(p=>({...p,[b.id]:false}))} className="min-h-[44px] px-3 py-2 text-sm font-semibold rounded-full bg-white border active:bg-slate-100">✕ Свернуть</button>
                         </div>
+                        {AI_FEATURES && (
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 space-y-2" data-testid="lb-ai">
                           <button onClick={()=>setLtAiOpen(p=>({...p,[b.id]:!p[b.id]}))}
                             className="px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold flex items-center gap-1.5" data-testid="lb-ai-btn">
@@ -690,6 +692,7 @@ export default function LessonBuilder(){
                             </div>
                           )}
                         </div>
+                        )}
                         <input value={getInlineTest(b.id).title} onChange={e=>setInlineTests(prev=>({...prev,[b.id]:{...getInlineTest(b.id), title:e.target.value}}))} placeholder="Название теста, напр. Ребусы — проверка" className="w-full px-3 py-2 rounded-xl border bg-white text-sm font-semibold"/>
                         <textarea value={getInlineTest(b.id).desc} onChange={e=>setInlineTests(prev=>({...prev,[b.id]:{...getInlineTest(b.id), desc:e.target.value}}))} placeholder="Описание (необязательно)" rows={2} className="w-full px-3 py-2 rounded-xl border bg-white text-sm"/>
                         <div className="flex items-center gap-2 text-xs">

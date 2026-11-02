@@ -3,10 +3,16 @@
 export type GameSound = 'correct' | 'wrong' | 'win' | 'tick' | 'go'
 export type NotifySound = 'notify' | 'standard' | 'wave' | 'alarm'
 
+// Глобальный выключатель звука (кнопка 🔊 в шапке, хранится классическом ключе)
+function isMuted(): boolean {
+  try { return localStorage.getItem('edu-sfx-mute') === '1' } catch { return false }
+}
+
 const cache = new Map<string, HTMLAudioElement>()
 
 function mp3(name: string, volume = 0.8): boolean {
   try {
+    if (isMuted()) return true
     let el = cache.get(name)
     if (!el) {
       el = new Audio(`/sounds/${name}.mp3`)
