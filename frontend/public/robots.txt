@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Не индексируем служебные страницы аккаунта
+Disallow: /profile
+Disallow: /dashboard
+
+Sitemap: https://edu-frontend-l5kq.onrender.com/sitemap.xml
