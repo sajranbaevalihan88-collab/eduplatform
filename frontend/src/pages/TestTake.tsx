@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
 import client from '../api/client'
 import { useAccessibility, toast } from '../context/UIContext'
@@ -10,6 +10,8 @@ export default function TestTake(){
   const {id}=useParams()
   const {t}=useLang()
   const [test,setTest]=useState<any>(null)
+  // «GO»-сигнал звучит один раз за попытку — на первом выбранном ответе
+  const questionsStarted=useRef(false)
   const [answers,setAnswers]=useState<Record<string,any>>({})
   const [result,setResult]=useState<any>(null)
   const [alreadyAttempted,setAlreadyAttempted]=useState(false)
@@ -46,6 +48,7 @@ export default function TestTake(){
   },[speech, autoRead, test?.id])
   useEffect(()=>{
     setAnswers({}); setResult(null); setAlreadyAttempted(false); setBlockedMsg(null); setQi(0); setLeftMap({})
+    questionsStarted.current = false
     client.get(`/tests/${id}/`).then(r=>{
       setTest(r.data)
       const perQ = r.data.time_per_question || 0
@@ -225,6 +228,8 @@ export default function TestTake(){
           {(q.type==='single' || q.type==='true_false') && q.options.map((o:any)=>(
             <label key={o.id} className={`flex items-center gap-2 sm:gap-3 p-3 max-lg:min-h-[56px] rounded-xl border cursor-pointer text-sm sm:text-base dark:text-white ${answers[q.id]!==undefined && String(answers[q.id])===String(o.id)?'border-blue-600 bg-blue-50 dark:bg-blue-900/30':'bg-slate-50 hover:bg-white dark:bg-slate-700/50 dark:border-slate-600'}`}>
               <input type="radio" name={`q${q.id}`} value={o.id} checked={answers[q.id]!==undefined && String(answers[q.id])===String(o.id)} onChange={()=>{
+                // первый ответ в попытке = старт-сигнал «поехали» (жест пользователя есть → звук разрешён)
+                if(questionsStarted.current===false){ questionsStarted.current=true; playUiSound('ui-start') }
                 const next = {...answers, [q.id]: o.id}
                 setAnswers(next)
                 // автовопрос: выбрал — едем дальше; на последнем — автосдача
@@ -244,6 +249,8 @@ export default function TestTake(){
               <input type="checkbox" checked={(answers[q.id]||[]).includes(o.id)} onChange={e=>{
                 const cur=new Set(answers[q.id]||[])
                 if(e.target.checked) cur.add(o.id); else cur.delete(o.id)
+                // первый ответ в попытке = старт-сигнал «поехали»
+                if(questionsStarted.current===false){ questionsStarted.current=true; playUiSound('ui-start') }
                 setAnswers(a=>({...a,[q.id]:Array.from(cur)}))
               }}/>
               <span className="min-w-0 flex-1 break-words">{o.text}</span>
