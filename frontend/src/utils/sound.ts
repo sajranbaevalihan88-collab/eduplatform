@@ -115,7 +115,7 @@ export function playNotifySound(name: NotifySound = 'notify', volume = 0.9) {
 
 // Продуктовый набор интерфейсных звуков (gen_ui_sounds.py): тосты, тесты, панели.
 // Это НЕ игровые файлы — свой свежий синт, тёплый и короткий.
-export type UiSound = 'ui-success' | 'ui-error' | 'ui-notify' | 'ui-win' | 'ui-save' | 'ui-pop' | 'ui-start'
+export type UiSound = 'ui-success' | 'ui-error' | 'ui-notify' | 'ui-win' | 'ui-save' | 'ui-pop'
 export function playUiSound(name: UiSound, volume = 0.75) {
   if (!mp3(name, volume)) synthFallback(name, volume)
 }

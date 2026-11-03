@@ -5,17 +5,16 @@
 Джинглы подобраны автоматическим анализом контура высоты тона (восходящие = победные,
 нисходящие = «мимо»). Никакого синтеза.
 
-| Файл | Источник (Kenney) | Где звучит | Момент |
+| Файл | Источник | Где звучит | Момент |
 |---|---|---|---|
-| `ui-success.mp3` | Interface → confirmation_004 | тосты «успешно» (урок/тест/задание) | `UIContext` |
-| `ui-error.mp3` | Interface → error_005 | тосты «ошибка» | `UIContext` |
-| `ui-notify.mp3` | Interface → glass_004 | тест не пройден (нейтральный колокол) | `TestTake` |
-| `ui-win.mp3` | Jingles → PIZZI02 (восходящий) | **тест пройден** — щипковый джингл | `TestTake` |
-| `ui-start.mp3` | Interface → maximize_005 | первый ответ в попытке — «поехали!» | `TestTake` |
-| `ui-save.mp3` | Interface → select_005 | заметка сохранена | `Notes` |
-| `ui-pop.mp3` | Interface → drop_004 | резерв (пузырь) | — |
-| `correct.mp3` | Jingles → PIZZI16 (короткий восходящий) | игры: верно | `sound.ts` |
-| `wrong.mp3` | Jingles → PIZZI05 (нисходящий) | игры: мимо | `sound.ts` |
+| `ui-success.mp3` | Mixkit «Correct answer tone» — **выбор пользователя** | тосты «успешно» (урок/тест/задание) | `UIContext` |
+| `ui-error.mp3` | Kenney Interface → error_008 — **выбор пользователя** | тосты «ошибка» | `UIContext` |
+| `ui-notify.mp3` | Mixkit «Bell notification» — **выбор пользователя** | тест не пройден (нейтральный колокол) | `TestTake` |
+| `ui-win.mp3` | Jingles → PIZZI02 (восходящий) — **выбор пользователя** | **тест пройден** — щипковый джингл | `TestTake` |
+| `ui-save.mp3` | тот же сэмпл, что ui-success | заметка сохранена | `Notes` |
+| `ui-pop.mp3` | Kenney Interface → drop_004 | резерв (пузырь) | — |
+| `correct.mp3` | Jingles → PIZZI08 (мягкий восходящий; пользователь не отметил — рекомендация) | игры: верно | `sound.ts` |
+| `wrong.mp3` | Jingles → PIZZI05 (нисходящий) — **выбор пользователя** | игры: мимо | `sound.ts` |
 | `win.mp3` | Jingles → PIZZI15 (восходящий вариант) | игры: победа | `sound.ts` |
 | `go.mp3` | Jingles → NES09 (чиптюн-старт) | игры: старт | `sound.ts` |
 | `tick.mp3` | Interface → tick_001 (−20 LUFS) | игры: тик таймера | `sound.ts` |
@@ -24,6 +23,8 @@
 | `alarm.mp3` | собран: glass_005 ×4 | рингтон заметок «Сигнал» | `Notes` |
 | `notify.mp3` | собран: колокол + эхо-щипок | рингтон напоминания (по умолчанию) | `Notes` |
 | `type.mp3` | Interface → click_002 (−20 LUFS) | спринт печати — клавиша | `Sprint` |
+
+Старт теста — **без звука** (решение пользователя, «Тишина»); файл `ui-start.mp3` удалён.
 
 **Исключение: `arkan-*.mp3`** — этно-набор Аркан тартыш (комуз + барабан), используется только игрой Arkan.
 
