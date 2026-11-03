@@ -14,7 +14,7 @@ class ClassroomSerializer(serializers.ModelSerializer):
         model = Classroom
         fields = ['id', 'title', 'description', 'subject', 'subject_name', 'owner', 'owner_name',
                   'invite_code', 'code_fmt', 'color', 'created_at', 'members_count', 'assignments_count',
-                  'is_paid', 'price', 'payment_details', 'my_status', 'pending_count']
+                  'is_paid', 'price', 'payment_details', 'payment_qr', 'my_status', 'pending_count']
         read_only_fields = ['id', 'owner', 'invite_code', 'created_at']
 
     def get_my_status(self, obj):

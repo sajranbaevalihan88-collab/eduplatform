@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import client from '../api/client'
+import client, { mediaUrl } from '../api/client'
 import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles, Share2, Video, PenLine, FlaskConical, BookOpen, X, Wallet, Lock } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
@@ -127,6 +127,23 @@ export default function ClassroomDetail(){
     setPBusy(true)
     try{ await client.post(`/classrooms/${id}/request_paid_access/`); toast('Заявка отправлена учителю','success'); load() }
     catch(e:any){ toast(e?.response?.data?.detail||'err','error') } finally{ setPBusy(false) }
+  }
+  // 5000.00 -> «5000» для красивого бейджа
+  const fmtSom=(v:any)=> (v===null||v===undefined||v==='') ? '' : String(parseFloat(String(v)))
+  const copyDetails=async()=>{
+    try{ await navigator.clipboard.writeText(payInfo?.payment_details||room.payment_details||''); toast('Реквизиты скопированы','success') }catch{}
+  }
+  const uploadQr=async(f:File|undefined)=>{
+    if(!f) return
+    setPBusy(true)
+    try{
+      const fd=new FormData(); fd.append('file', f)
+      await client.post(`/classrooms/${id}/payment_qr_upload/`, fd, {headers:{'Content-Type':'multipart/form-data'}})
+      toast('QR банка загружен','success'); load()
+    }catch(e:any){ toast(e?.response?.data?.file||e?.response?.data?.detail||'err','error') } finally{ setPBusy(false) }
+  }
+  const removeQr=async()=>{
+    try{ await client.delete(`/classrooms/${id}/payment_qr_upload/`); toast('QR удалён','success'); load() }catch{}
   }
   const savePaid=async(fields:Record<string,any>)=>{
     setPBusy(true)
@@ -350,7 +367,7 @@ export default function ClassroomDetail(){
           {room.description && <p className="text-white/85 text-xs sm:text-sm mt-1">{room.description}</p>}
           {room.is_paid && (
             <span className="inline-flex items-center gap-1 text-xs font-bold bg-white/20 border border-white/30 rounded-full px-2.5 py-1 mt-2" data-testid="paid-badge">
-              💰 Платный курс — {room.price} сом
+              💰 Платный курс — {fmtSom(room.price)} сом
             </span>
           )}
         </div>
@@ -367,15 +384,34 @@ export default function ClassroomDetail(){
       {needsPay && (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 p-4 sm:p-5" data-testid="pay-banner">
           <div className="flex flex-wrap items-start gap-4">
-            {payInfo?.qr && <img src={payInfo.qr} alt="QR-код для оплаты" className="w-28 h-28 rounded-lg border border-amber-300 bg-white" data-testid="pay-qr"/>}
+            {payInfo?.payment_qr ? (
+              <a href={mediaUrl(payInfo.payment_qr)} target="_blank" rel="noopener noreferrer" title="Открыть в полном размере">
+                <img src={mediaUrl(payInfo.payment_qr)} alt="QR банка для оплаты" className="w-44 h-44 object-contain rounded-xl border border-amber-300 bg-white" data-testid="pay-qr"/>
+              </a>
+            ) : payInfo?.qr && (
+              <img src={payInfo.qr} alt="QR-код с реквизитами" className="w-28 h-28 rounded-lg border border-amber-300 bg-white" data-testid="pay-qr"/>
+            )}
             <div className="min-w-0 flex-1">
               <div className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2"><Lock size={16}/> Платный курс — доступ ожидает оплаты</div>
-              <div className="text-sm text-amber-800 dark:text-amber-300 mt-1">
-                Цена: <b>{payInfo?.price ?? room.price} сом</b>. Отсканируй QR банковским приложением и переведи на: {payInfo?.payment_details || room.payment_details || '—'}
+              {payInfo?.payment_qr ? (
+                <div className="text-sm text-amber-800 dark:text-amber-300 mt-1">
+                  Отсканируй QR камерой или приложением банка (<b>Мбанк / О!Деньги / Элсом</b>) и переведи <b>{fmtSom(payInfo?.price ?? room.price)} сом</b> учителю курса.
+                </div>
+              ) : (
+                <div className="text-sm text-amber-800 dark:text-amber-300 mt-1">
+                  Цена: <b>{fmtSom(payInfo?.price ?? room.price)} сом</b>. Переведи по реквизитам: {payInfo?.payment_details || room.payment_details || '—'}
+                </div>
+              )}
+              {(payInfo?.payment_details || room.payment_details) && (
+                <button onClick={copyDetails} className="mt-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-xs font-semibold text-amber-800 dark:text-amber-300" data-testid="pay-copy-details">
+                  📋 {payInfo?.payment_details || room.payment_details} — копировать
+                </button>
+              )}
+              <div>
+                <button onClick={markPaid} disabled={pBusy} data-testid="pay-mark-paid" className="mt-3 px-5 py-2.5 min-h-[44px] rounded-xl bg-amber-600 text-white font-semibold disabled:opacity-50">
+                  {pBusy ? '…' : '✅ Я оплатил — жду подтверждения'}
+                </button>
               </div>
-              <button onClick={markPaid} disabled={pBusy} data-testid="pay-mark-paid" className="mt-3 px-5 py-2.5 min-h-[44px] rounded-xl bg-amber-600 text-white font-semibold disabled:opacity-50">
-                {pBusy ? '…' : '✅ Я оплатил — жду подтверждения'}
-              </button>
               <div className="text-xs text-amber-700 dark:text-amber-400 mt-2">Учитель проверит перевод и откроет доступ. Пока материалы класса закрыты.</div>
             </div>
           </div>
@@ -572,7 +608,7 @@ export default function ClassroomDetail(){
                   </div>
                   {room.is_paid && !paidOpen && (
                     <div className="text-sm text-slate-600 dark:text-slate-300 mt-1">
-                      Цена: <b>{room.price} сом</b> • реквизиты: {room.payment_details||'—'} • ждут подтверждения: {pendingPays.length}
+                      Цена: <b>{fmtSom(room.price)} сом</b> • реквизиты: {room.payment_details||'—'} • ждут подтверждения: {pendingPays.length}
                     </div>
                   )}
                   {paidOpen && (
@@ -586,10 +622,37 @@ export default function ClassroomDetail(){
                         <input value={pDetails} onChange={e=>setPDetails(e.target.value)} placeholder="Реквизиты: Мбанк 0500123456 / карта" data-testid="paid-details" className="px-3 py-2 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white"/>
                       </div>
                       <button onClick={()=>savePaid({is_paid:!!room.is_paid, price:pPrice, payment_details:pDetails})} disabled={pBusy} data-testid="paid-save" className="px-5 py-2.5 min-h-[44px] rounded-xl bg-blue-700 text-white font-semibold disabled:opacity-50">{pBusy?'…':'Сохранить'}</button>
-                      {room.is_paid && payInfo?.qr && (
-                        <div className="flex items-start gap-3 pt-2 border-t dark:border-slate-700">
-                          <img src={payInfo.qr} alt="QR для оплаты" className="w-32 h-32 rounded-lg border dark:border-slate-600 bg-white" data-testid="paid-qr"/>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">QR для оплаты — покажи на экране или вставь в презентацию. Ученик сканирует, переводит деньги и нажимает «Я оплатил». Ты подтверждаешь — доступ открывается.</div>
+                      {room.is_paid && (
+                        <div className="pt-2 border-t dark:border-slate-700 space-y-3">
+                          <div>
+                            <div className="text-sm font-semibold dark:text-white">QR твоего банка — ученики сканируют и платят напрямую</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Открой приложение банка → «Мой QR-код» / «Получить перевод» → сделай скриншот → загрузи сюда. Плюс продублируй номер в реквизитах выше — ученик сможет скопировать.</div>
+                            <div className="flex items-start gap-3 mt-2">
+                              {room.payment_qr ? (
+                                <>
+                                  <img src={mediaUrl(room.payment_qr)} alt="QR банка" className="w-36 h-36 object-contain rounded-xl border dark:border-slate-600 bg-white" data-testid="paid-qr-bank"/>
+                                  <div className="space-y-2">
+                                    <label className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white text-sm font-semibold cursor-pointer inline-block hover:bg-slate-200 dark:hover:bg-slate-700">
+                                      Заменить
+                                      <input type="file" accept="image/*" className="hidden" onChange={e=>uploadQr(e.target.files?.[0])}/>
+                                    </label>
+                                    <button onClick={removeQr} className="px-4 py-2 rounded-xl bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 text-sm font-semibold block">Удалить</button>
+                                  </div>
+                                </>
+                              ) : (
+                                <label className="px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-700 text-white text-sm font-semibold cursor-pointer inline-flex items-center gap-1" data-testid="paid-qr-upload">
+                                  📷 Загрузить QR из банка
+                                  <input type="file" accept="image/*" className="hidden" onChange={e=>uploadQr(e.target.files?.[0])}/>
+                                </label>
+                              )}
+                            </div>
+                          </div>
+                          {payInfo?.qr && (
+                            <div className="flex items-start gap-3 pt-2 border-t dark:border-slate-700">
+                              <img src={payInfo.qr} alt="Запасной QR с реквизитами" className="w-24 h-24 rounded-lg border dark:border-slate-600 bg-white"/>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">Запасной QR с текстом реквизитов — покажется ученику, если свой QR банка не загружен.</div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

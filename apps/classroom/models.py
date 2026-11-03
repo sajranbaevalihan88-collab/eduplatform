@@ -24,6 +24,9 @@ class Classroom(models.Model):
     price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     payment_details = models.CharField(max_length=300, blank=True, default='',
                                        help_text='Реквизиты: «Мбанк 0500123456» / номер карты / Элсом')
+    # Настоящий QR из приложения банка (скрин) — ученики сканируют его и платят напрямую
+    payment_qr = models.ImageField(upload_to='payment_qr/', null=True, blank=True,
+                                   help_text='Скрин QR-кода из приложения банка')
 
     class Meta:
         ordering = ['-created_at']

@@ -156,8 +156,32 @@ class ClassroomViewSet(viewsets.ModelViewSet):
             'is_paid': room.is_paid, 'price': room.price,
             'payment_details': room.payment_details, 'title': room.title,
             'code_fmt': room.code_fmt, 'my_status': my,
+            # СВОЙ QR учителя приоритетнее: ученики сканируют его в приложении банка
+            'payment_qr': (room.payment_qr.url if room.payment_qr else ''),
             'qr': _pay_qr_data_uri(room) if room.is_paid else '',
         })
+
+    @action(detail=True, methods=['post', 'delete'])
+    def payment_qr_upload(self, request, pk=None):
+        """Загрузить / удалить скрин QR из приложения банка (только владелец).
+        POST multipart: file=<изображение>; DELETE — убрать."""
+        room = self._get_owned()
+        if request.method == 'DELETE':
+            if room.payment_qr:
+                room.payment_qr.delete(save=True)
+            return Response({'ok': True, 'payment_qr': ''})
+        f = request.FILES.get('file')
+        if not f:
+            raise ValidationError({'file': 'Приложи изображение QR'})
+        if f.size > 5 * 1024 * 1024:
+            raise ValidationError({'file': 'Файл больше 5 МБ'})
+        if not str(f.content_type or '').startswith('image/'):
+            raise ValidationError({'file': 'Нужна картинка (скрин QR)'})
+        if room.payment_qr:
+            room.payment_qr.delete(save=False)
+        room.payment_qr = f
+        room.save(update_fields=['payment_qr'])
+        return Response({'ok': True, 'payment_qr': room.payment_qr.url})
 
     @action(detail=True, methods=['post'])
     def request_paid_access(self, request, pk=None):
