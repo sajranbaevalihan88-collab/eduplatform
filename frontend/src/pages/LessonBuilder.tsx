@@ -19,6 +19,8 @@ export default function LessonBuilder(){
   const withFrom = (to:string)=> `${to}?from=${encodeURIComponent(fromPath)}`
   const [title,setTitle]=useState('')
   const [desc,setDesc]=useState('')
+  // публичность урока: приватный = только внутри платформы, публичный = всем по ссылке (и гостям)
+  const [isPublic,setIsPublic]=useState(false)
   const [subject,setSubject]=useState<any>(null)
   const [subjects,setSubjects]=useState<any[]>([])
   const [subjectsLoading,setSubjectsLoading]=useState(true)
@@ -71,7 +73,7 @@ export default function LessonBuilder(){
   // 1) загрузка справочников и урока — только при смене id
   useEffect(()=>{
     loadSubjects(); loadOptions()
-    if(!isNew && id) client.get(`/lessons/${id}/`).then(r=>{setTitle(r.data.title); setDesc(r.data.description||''); setSubject(r.data.subject!=null?Number(r.data.subject):null); if(r.data.blocks?.length) setBlocks(r.data.blocks)}).catch(e=>toast(e?.response?.data?.detail||'Не удалось загрузить урок','error'))
+    if(!isNew && id) client.get(`/lessons/${id}/`).then(r=>{setTitle(r.data.title); setDesc(r.data.description||''); setIsPublic(!!r.data.is_public); setSubject(r.data.subject!=null?Number(r.data.subject):null); if(r.data.blocks?.length) setBlocks(r.data.blocks)}).catch(e=>toast(e?.response?.data?.detail||'Не удалось загрузить урок','error'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[id])
 
@@ -370,7 +372,7 @@ export default function LessonBuilder(){
     if(!token){ toast(t('lb_login_to_save'),'error'); nav('/login'); return }
     setSaving(true)
     try{
-      const payload={title:title.trim(),description:desc.trim(),subject,blocks}
+      const payload={title:title.trim(),description:desc.trim(),subject,blocks,is_public:isPublic}
       if(isNew){
         const r=await client.post('/lessons/',payload)
         localStorage.removeItem('lesson-draft')
@@ -453,6 +455,21 @@ export default function LessonBuilder(){
             <div>
               <label className="text-sm font-semibold text-slate-700">О чём урок?</label>
               <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Коротко: цели, для кого, что узнают. Это покажется в списке уроков." rows={3} className="w-full mt-1 px-4 py-3 rounded-xl border bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"/>
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-slate-700">Кому доступен урок</label>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                <button type="button" onClick={()=>setIsPublic(false)} data-testid="lb-private"
+                  className={`px-3 py-2.5 rounded-xl border text-sm text-left ${!isPublic?'border-blue-600 bg-blue-50 font-semibold':'bg-slate-50 hover:bg-slate-100'}`}>
+                  <span className="block">🔒 Приватный</span>
+                  <span className={`block text-xs mt-0.5 ${!isPublic?'text-blue-700':'text-slate-400'}`}>Только на платформе: класс, где урок назначен</span>
+                </button>
+                <button type="button" onClick={()=>setIsPublic(true)} data-testid="lb-public"
+                  className={`px-3 py-2.5 rounded-xl border text-sm text-left ${isPublic?'border-blue-600 bg-blue-50 font-semibold':'bg-slate-50 hover:bg-slate-100'}`}>
+                  <span className="block">🌐 Публичный</span>
+                  <span className={`block text-xs mt-0.5 ${isPublic?'text-blue-700':'text-slate-400'}`}>Всем по ссылке, даже без входа</span>
+                </button>
+              </div>
             </div>
             <div ref={subjectRefEl} id="lesson-subject-field">
               <label className="text-sm font-semibold text-slate-700">Предмет *</label>

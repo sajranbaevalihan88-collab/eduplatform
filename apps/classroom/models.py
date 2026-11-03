@@ -18,6 +18,12 @@ class Classroom(models.Model):
     invite_code = models.CharField(max_length=12, unique=True, blank=True)
     color = models.CharField(max_length=20, default='#3B82F6')
     created_at = models.DateTimeField(auto_now_add=True)
+    # Платный курс: цена и реквизиты для перевода (Мбанк / О!Деньги / карта).
+    # Оплата подтверждается вручную владельцем — без платёжных шлюзов.
+    is_paid = models.BooleanField(default=False)
+    price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    payment_details = models.CharField(max_length=300, blank=True, default='',
+                                       help_text='Реквизиты: «Мбанк 0500123456» / номер карты / Элсом')
 
     class Meta:
         ordering = ['-created_at']
@@ -32,6 +38,7 @@ class Classroom(models.Model):
         super().save(*args, **kwargs)
 
     def is_member(self, user):
+        """Видит класс вообще (включая тех, кто ещё не подтвердил оплату)."""
         if not user or not user.is_authenticated:
             return False
         if user.is_staff or getattr(user, 'role', None) == 'admin':
@@ -39,6 +46,19 @@ class Classroom(models.Model):
         if self.owner_id == user.id:
             return True
         return self.enrollments.filter(student=user).exists()
+
+    def has_access(self, user):
+        """Полный доступ к материалам: для платного класса ждём активную оплату."""
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_staff or getattr(user, 'role', None) == 'admin':
+            return True
+        if self.owner_id == user.id:
+            return True
+        e = self.enrollments.filter(student=user).first()
+        if not e:
+            return False
+        return e.status == 'active' or not self.is_paid
 
     @property
     def code_fmt(self):
@@ -51,8 +71,12 @@ class Classroom(models.Model):
 
 
 class Enrollment(models.Model):
+    STATUS_CHOICES = [('active', 'Учится'), ('pending', 'Ожидает оплаты')]
     classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='enrollments')
     student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='enrollments')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
+    # время, когда ученик нажал «Я оплатил» (для очереди подтверждений у учителя)
+    paid_requested_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

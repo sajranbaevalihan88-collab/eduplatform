@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import client from '../api/client'
-import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles, Share2, Video, PenLine, FlaskConical, BookOpen, X } from 'lucide-react'
+import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles, Share2, Video, PenLine, FlaskConical, BookOpen, X, Wallet, Lock } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
 import QuizBuilder from '../components/ClassroomQuizBuilder'
@@ -84,6 +84,14 @@ export default function ClassroomDetail(){
   // конструктор теста «как Google Forms» прямо в классруме
   const [qbOpen,setQbOpen]=useState(false)
 
+  // ── Платный курс: инфо об оплате, очередь «Я оплатил», форма владельца ──
+  const [payInfo,setPayInfo]=useState<any>(null)
+  const [pendingPays,setPendingPays]=useState<any[]>([])
+  const [paidOpen,setPaidOpen]=useState(false)
+  const [pPrice,setPPrice]=useState('')
+  const [pDetails,setPDetails]=useState('')
+  const [pBusy,setPBusy]=useState(false)
+
   const load=()=>{
     client.get(`/classrooms/${id}/`).then(r=>setRoom(r.data)).catch(()=>nav('/classes'))
     client.get(`/classrooms/${id}/members/`).then(r=>setMembers(r.data.results||r.data||[])).catch(()=>{})
@@ -93,6 +101,9 @@ export default function ClassroomDetail(){
     }).catch(()=>{})
     client.get(`/announcements/?classroom=${id}`).then(r=>setNotes(r.data.results||r.data||[])).catch(()=>{})
     client.get(`/classrooms/${id}/gradebook/`).then(r=>setGb(r.data)).catch(()=>setGb(null))
+    client.get(`/classrooms/${id}/pay_info/`).then(r=>setPayInfo(r.data)).catch(()=>setPayInfo(null))
+    // очередь «Я оплатил»: сервер отдаёт только владельцу, остальным 403 — не страшно
+    client.get(`/classrooms/${id}/pending_payments/`).then(r=>setPendingPays(r.data.results||r.data||[])).catch(()=>setPendingPays([]))
     // id владельца — из СВЕЖЕГО /auth/me, а не только из localStorage:
     // если локальные данные устарели, инструменты учителя (Журнал, задания) пропадали
     try{ setMeId(JSON.parse(localStorage.getItem('user')||'{}').id) }catch{}
@@ -109,6 +120,38 @@ export default function ClassroomDetail(){
 
   if(!room) return <div className="p-8 text-center"><div className="skeleton h-32 rounded-2xl max-w-2xl mx-auto"/></div>
   const isOwner = String(room.owner)===String(meId)
+  // платный класс и текущий ученик ещё не подтверждён владельцем
+  const needsPay = !isOwner && room.is_paid && room.my_status==='pending'
+
+  const markPaid=async()=>{
+    setPBusy(true)
+    try{ await client.post(`/classrooms/${id}/request_paid_access/`); toast('Заявка отправлена учителю','success'); load() }
+    catch(e:any){ toast(e?.response?.data?.detail||'err','error') } finally{ setPBusy(false) }
+  }
+  const savePaid=async(fields:Record<string,any>)=>{
+    setPBusy(true)
+    try{
+      const body:Record<string,any>={...fields}
+      if(body.price!==undefined){
+        const raw=String(body.price).trim().replace(',','.')
+        if(raw==='') body.price=null
+        else{
+          const num=Number(raw)
+          if(isNaN(num)||num<0){ toast('Цена — число больше 0','error'); setPBusy(false); return }
+          body.price=num
+        }
+      }
+      await client.patch(`/classrooms/${id}/`, body)
+      toast('Настройки курса сохранены','success'); setPaidOpen(false); load()
+    }catch(e:any){ toast(e?.response?.data?.detail||'err','error') } finally{ setPBusy(false) }
+  }
+  const approvePay=async(sid:any)=>{
+    try{ await client.post(`/classrooms/${id}/approve_payment/`,{student:sid}); toast('Доступ открыт','success'); load() }
+    catch(e:any){ toast(e?.response?.data?.detail||'err','error') }
+  }
+  const declinePay=async(sid:any)=>{
+    try{ await client.post(`/classrooms/${id}/decline_payment/`,{student:sid}); load() }catch{}
+  }
 
   const post=async()=>{
     if(!text.trim()) return
@@ -305,6 +348,11 @@ export default function ClassroomDetail(){
           <div className="flex items-center gap-2 text-white/80 text-xs sm:text-sm"><GraduationCap size={16} className="shrink-0"/>{room.owner_name} • {room.subject_name||t('cls_no_subject')}</div>
           <h1 className="text-xl sm:text-2xl font-bold mt-1 break-words">{room.title}</h1>
           {room.description && <p className="text-white/85 text-xs sm:text-sm mt-1">{room.description}</p>}
+          {room.is_paid && (
+            <span className="inline-flex items-center gap-1 text-xs font-bold bg-white/20 border border-white/30 rounded-full px-2.5 py-1 mt-2" data-testid="paid-badge">
+              💰 Платный курс — {room.price} сом
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={shareCode} className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-white/15 border border-white/30 flex items-center justify-center" title={t('cls_share')} aria-label={t('cls_share')}>
@@ -315,6 +363,24 @@ export default function ClassroomDetail(){
           </button>
         </div>
       </div>
+
+      {needsPay && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 p-4 sm:p-5" data-testid="pay-banner">
+          <div className="flex flex-wrap items-start gap-4">
+            {payInfo?.qr && <img src={payInfo.qr} alt="QR-код для оплаты" className="w-28 h-28 rounded-lg border border-amber-300 bg-white" data-testid="pay-qr"/>}
+            <div className="min-w-0 flex-1">
+              <div className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2"><Lock size={16}/> Платный курс — доступ ожидает оплаты</div>
+              <div className="text-sm text-amber-800 dark:text-amber-300 mt-1">
+                Цена: <b>{payInfo?.price ?? room.price} сом</b>. Отсканируй QR банковским приложением и переведи на: {payInfo?.payment_details || room.payment_details || '—'}
+              </div>
+              <button onClick={markPaid} disabled={pBusy} data-testid="pay-mark-paid" className="mt-3 px-5 py-2.5 min-h-[44px] rounded-xl bg-amber-600 text-white font-semibold disabled:opacity-50">
+                {pBusy ? '…' : '✅ Я оплатил — жду подтверждения'}
+              </button>
+              <div className="text-xs text-amber-700 dark:text-amber-400 mt-2">Учитель проверит перевод и откроет доступ. Пока материалы класса закрыты.</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 overflow-hidden">
         <div className="flex overflow-x-auto sm:grid sm:grid-flow-col sm:auto-cols-fr border-b dark:border-slate-700">
@@ -497,6 +563,53 @@ export default function ClassroomDetail(){
           {tab==='people' && (
             <div className="space-y-4">
               {isOwner && (
+                <div className="rounded-xl border dark:border-slate-700 p-4" data-testid="paid-panel">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-semibold dark:text-white flex items-center gap-2"><Wallet size={16}/> Платный курс</div>
+                    <button onClick={()=>{setPaidOpen(v=>!v); setPPrice(room.price!=null?String(room.price):''); setPDetails(room.payment_details||'')}} className="text-sm font-semibold text-blue-700 dark:text-blue-400" data-testid="paid-toggle">
+                      {paidOpen ? 'Скрыть' : (room.is_paid ? 'Настройки' : 'Сделать платным')}
+                    </button>
+                  </div>
+                  {room.is_paid && !paidOpen && (
+                    <div className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                      Цена: <b>{room.price} сом</b> • реквизиты: {room.payment_details||'—'} • ждут подтверждения: {pendingPays.length}
+                    </div>
+                  )}
+                  {paidOpen && (
+                    <div className="mt-3 space-y-3">
+                      <label className="flex items-center gap-2 text-sm dark:text-white">
+                        <input type="checkbox" checked={!!room.is_paid} onChange={e=>savePaid({is_paid:e.target.checked})} className="w-4 h-4"/>
+                        Включить платный доступ (ученики ждут подтверждения оплаты)
+                      </label>
+                      <div className="grid sm:grid-cols-2 gap-2">
+                        <input value={pPrice} onChange={e=>setPPrice(e.target.value)} placeholder="Цена, сом (например 500)" inputMode="decimal" data-testid="paid-price" className="px-3 py-2 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white"/>
+                        <input value={pDetails} onChange={e=>setPDetails(e.target.value)} placeholder="Реквизиты: Мбанк 0500123456 / карта" data-testid="paid-details" className="px-3 py-2 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white"/>
+                      </div>
+                      <button onClick={()=>savePaid({is_paid:!!room.is_paid, price:pPrice, payment_details:pDetails})} disabled={pBusy} data-testid="paid-save" className="px-5 py-2.5 min-h-[44px] rounded-xl bg-blue-700 text-white font-semibold disabled:opacity-50">{pBusy?'…':'Сохранить'}</button>
+                      {room.is_paid && payInfo?.qr && (
+                        <div className="flex items-start gap-3 pt-2 border-t dark:border-slate-700">
+                          <img src={payInfo.qr} alt="QR для оплаты" className="w-32 h-32 rounded-lg border dark:border-slate-600 bg-white" data-testid="paid-qr"/>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">QR для оплаты — покажи на экране или вставь в презентацию. Ученик сканирует, переводит деньги и нажимает «Я оплатил». Ты подтверждаешь — доступ открывается.</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {pendingPays.length>0 && (
+                    <div className="mt-3 pt-3 border-t dark:border-slate-700">
+                      <div className="text-sm font-semibold dark:text-white mb-1">«Я оплатил» — ждут подтверждения:</div>
+                      {pendingPays.map((p:any)=>(
+                        <div key={p.id} className="flex items-center gap-2 py-1.5">
+                          <span className="text-sm dark:text-slate-200">{p.student_name}</span>
+                          <span className="text-xs text-slate-400">{p.paid_requested_at ? new Date(p.paid_requested_at).toLocaleString() : ''}</span>
+                          <button onClick={()=>approvePay(p.student)} data-testid={`pay-approve-${p.student}`} className="ml-auto px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold">Принять</button>
+                          <button onClick={()=>declinePay(p.student)} className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold">Отклонить</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {isOwner && (
                 <div className="flex gap-2">
                   <input value={addUser} onChange={e=>setAddUser(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addMember()} placeholder={t('cls_add_ph')} className="flex-1 px-4 py-2.5 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-blue-400"/>
                   <button onClick={addMember} className="px-5 py-2.5 rounded-xl bg-blue-700 text-white font-semibold flex items-center gap-1"><Plus size={15}/>{t('add')}</button>
@@ -511,6 +624,7 @@ export default function ClassroomDetail(){
                   <div key={m.id} className="py-2.5 flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 dark:text-white flex items-center justify-center font-bold">{m.student_name?.[0]?.toUpperCase()}</div>
                     <div className="font-semibold dark:text-white">{m.student_name}</div>
+                    {m.status==='pending' && <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">не оплатил</span>}
                     {isOwner && <button onClick={async()=>{ await client.post(`/classrooms/${id}/remove_member/`, {username:m.student_name}).catch(()=>{}); load() }} className="ml-auto text-xs text-red-500 hover:text-red-700">✕</button>}
                   </div>
                 ))}

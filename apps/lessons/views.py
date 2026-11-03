@@ -18,9 +18,9 @@ class LessonViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
         qs = super().get_queryset()
         user = self.request.user
         from django.db.models import Q
-        # гость: только опубликованные; зарегистрированный: + свои черновики
+        # гость: только опубликованные публичные; вошедший: как раньше + все опубликованные
         if not user.is_authenticated:
-            qs = qs.filter(is_published=True)
+            qs = qs.filter(is_published=True, is_public=True)
         elif not (user.is_staff or getattr(user, 'role', None) == 'admin'):
             qs = qs.filter(Q(owner=user) | Q(is_published=True))
         subject = self.request.query_params.get('subject')

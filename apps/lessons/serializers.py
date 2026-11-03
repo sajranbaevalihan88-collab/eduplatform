@@ -10,7 +10,7 @@ class LessonListSerializer(serializers.ModelSerializer):
     owner = serializers.ReadOnlyField(source='owner.id')
     class Meta:
         model = Lesson
-        fields = ['id','title','description','subject','subject_name','subject_color','subject_icon','course','course_title','is_published','blocks_count','created_at','updated_at','owner']
+        fields = ['id','title','description','subject','subject_name','subject_color','subject_icon','course','course_title','is_published','is_public','blocks_count','created_at','updated_at','owner']
         read_only_fields = ['id','created_at','updated_at','owner']
     def get_blocks_count(self, obj):
         return len(obj.blocks) if obj.blocks else 0
@@ -24,7 +24,7 @@ class LessonSerializer(serializers.ModelSerializer):
     owner = serializers.ReadOnlyField(source='owner.id')
     class Meta:
         model = Lesson
-        fields = ['id','title','description','subject','subject_name','subject_color','subject_icon','course','course_title','is_published','blocks','blocks_count','created_at','updated_at','owner']
+        fields = ['id','title','description','subject','subject_name','subject_color','subject_icon','course','course_title','is_published','is_public','blocks','blocks_count','created_at','updated_at','owner']
         read_only_fields = ['id','created_at','updated_at','owner']
     def get_blocks_count(self, obj):
         return len(obj.blocks) if obj.blocks else 0

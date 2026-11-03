@@ -8,6 +8,8 @@ class Lesson(models.Model):
     course = models.ForeignKey('catalog.Course', on_delete=models.SET_NULL, null=True, blank=True, related_name='lessons')
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name='lessons')
     is_published = models.BooleanField(default=True)
+    # Публичный урок: доступен всем по ссылке даже без входа; приватный — только на платформе
+    is_public = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     # blocks JSON for lesson composer: ordered list of blocks

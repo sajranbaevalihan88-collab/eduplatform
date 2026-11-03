@@ -27,6 +27,21 @@ def _visible_classrooms(user):
     return qs.filter(Q(owner=user) | Q(enrollments__student=user)).distinct()
 
 
+def _pay_qr_data_uri(room):
+    """QR-код с реквизитами оплаты курса (PNG data-URI). Сканируется любым банковским приложением."""
+    import base64, io
+    import qrcode
+    price = str(room.price) if room.price is not None else '0'
+    text = (f"Оплата курса «{room.title}» — {price} сом\n"
+            f"Реквизиты: {room.payment_details or 'уточните у учителя'}\n"
+            f"Код класса: {room.code_fmt}\n"
+            f"EduPlatform")
+    img = qrcode.make(text, box_size=8, border=2)
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    return 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
+
+
 class ClassroomViewSet(viewsets.ModelViewSet):
     serializer_class = ClassroomSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -78,9 +93,11 @@ class ClassroomViewSet(viewsets.ModelViewSet):
         except Classroom.DoesNotExist:
             raise NotFound('Класс с таким кодом не найден')
         if room.owner_id == request.user.id:
-            return Response(ClassroomSerializer(room).data)
-        Enrollment.objects.get_or_create(classroom=room, student=request.user)
-        return Response(ClassroomSerializer(room).data)
+            return Response(ClassroomSerializer(room, context={'request': request}).data)
+        # платный класс: запись создаётся в статусе «ожидает оплаты» — доступ откроет учитель
+        Enrollment.objects.get_or_create(classroom=room, student=request.user,
+                                         defaults={'status': 'pending' if room.is_paid else 'active'})
+        return Response(ClassroomSerializer(room, context={'request': request}).data)
 
     @action(detail=True, methods=['post'])
     def leave(self, request, pk=None):
@@ -123,8 +140,67 @@ class ClassroomViewSet(viewsets.ModelViewSet):
             raise NotFound(f'Пользователь {username} не найден')
         if user.id == room.owner_id:
             raise ValidationError({'username': 'Это владелец класса'})
-        Enrollment.objects.get_or_create(classroom=room, student=user)
+        # владелец добавляет сам — сразу активен, оплаты не ждём
+        Enrollment.objects.update_or_create(classroom=room, student=user, defaults={'status': 'active'})
         return Response({'ok': True, 'username': user.username})
+
+    @action(detail=True, methods=['get'])
+    def pay_info(self, request, pk=None):
+        """Информация об оплате + QR-код. Доступно участникам, включая ожидающих оплату."""
+        room = self.get_object()
+        if not room.is_member(request.user):
+            raise PermissionDenied('Ты не участник класса')
+        my = 'owner' if room.owner_id == request.user.id else (
+            room.enrollments.filter(student=request.user).values_list('status', flat=True).first())
+        return Response({
+            'is_paid': room.is_paid, 'price': room.price,
+            'payment_details': room.payment_details, 'title': room.title,
+            'code_fmt': room.code_fmt, 'my_status': my,
+            'qr': _pay_qr_data_uri(room) if room.is_paid else '',
+        })
+
+    @action(detail=True, methods=['post'])
+    def request_paid_access(self, request, pk=None):
+        """Ученик нажал «Я оплатил» — уходит в очередь подтверждения к учителю."""
+        room = self.get_object()
+        if not room.is_paid:
+            raise ValidationError({'detail': 'Класс бесплатный'})
+        e = room.enrollments.filter(student=request.user).first()
+        if not e:
+            raise NotFound('Сначала присоединись к классу по коду')
+        e.paid_requested_at = timezone.now()
+        e.save(update_fields=['paid_requested_at'])
+        return Response({'ok': True, 'status': e.status})
+
+    @action(detail=True, methods=['get'])
+    def pending_payments(self, request, pk=None):
+        """Очередь «Я оплатил» для владельца."""
+        room = self._get_owned()
+        qs = room.enrollments.filter(status='pending').select_related('student').order_by('paid_requested_at')
+        return Response([{'id': e.id, 'student': e.student_id, 'student_name': e.student.username,
+                          'paid_requested_at': e.paid_requested_at} for e in qs])
+
+    @action(detail=True, methods=['post'])
+    def approve_payment(self, request, pk=None):
+        """Подтвердить оплату ученика → доступ к курсу."""
+        room = self._get_owned()
+        e = room.enrollments.filter(student_id=request.data.get('student')).first()
+        if not e:
+            raise NotFound('Ученик не найден')
+        e.status = 'active'
+        e.save(update_fields=['status'])
+        return Response({'ok': True, 'student': e.student_id, 'status': 'active'})
+
+    @action(detail=True, methods=['post'])
+    def decline_payment(self, request, pk=None):
+        """Отклонить «Я оплатил» (деньги не пришли) — снимаем пометку, ждём дальше."""
+        room = self._get_owned()
+        e = room.enrollments.filter(student_id=request.data.get('student')).first()
+        if not e:
+            raise NotFound('Ученик не найден')
+        e.paid_requested_at = None
+        e.save(update_fields=['paid_requested_at'])
+        return Response({'ok': True})
 
     @action(detail=True, methods=['post'])
     def remove_member(self, request, pk=None):
@@ -141,7 +217,8 @@ class ClassroomViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def gradebook(self, request, pk=None):
         room = self._get_owned()
-        students = list(room.enrollments.select_related('student').all())
+        # в журнал идут только активные (оплатившие) ученики платного класса
+        students = list(room.enrollments.filter(status='active').select_related('student').all())
         assignments = list(room.assignments.order_by('deadline', '-created_at', 'id'))
         # колонки журнала: сначала автозадания с дедлайнами, ручные — после, по порядку создания
         assignments.sort(key=lambda a: (
@@ -221,7 +298,7 @@ class ClassroomViewSet(viewsets.ModelViewSet):
     def my_tasks(self, request, pk=None):
         """Задания класса со статусом текущего ученика (для виджета 'осталось сдать')."""
         room = self.get_object()
-        if not room.is_member(request.user):
+        if not room.has_access(request.user):
             raise PermissionDenied('Ты не участник класса')
         assignments = list(room.assignments.exclude(kind='manual').order_by('deadline', '-created_at', 'id'))
         sub_map = {s.assignment_id: s for s in Submission.objects.filter(

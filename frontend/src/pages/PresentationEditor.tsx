@@ -96,6 +96,8 @@ export default function PresentationEditor(){
   const isNew=!id
   const [title,setTitle]=useState('Новая презентация')
   const [desc,setDesc]=useState('')
+  // публичность: приватная = только внутри платформы, публичная = в каталоге и по ссылке
+  const [isPublic,setIsPublic]=useState(false)
   const [subject,setSubject]=useState<any>(null)
   const [subjects,setSubjects]=useState<any[]>([])
   const [slides,setSlides]=useState<Slide[]>([{order:0, background:'#ffffff', backgroundType:'solid', layout:'title', transition:'fade', content:{blocks:[
@@ -171,7 +173,7 @@ export default function PresentationEditor(){
     }).catch(()=>{})
     if(!isNew){
       client.get(`/presentations/${id}/`).then(r=>{
-        setTitle(r.data.title); setDesc(r.data.description||'')
+        setTitle(r.data.title); setDesc(r.data.description||''); setIsPublic(!!r.data.is_public)
         setSubject(r.data.subject?? r.data.subject_id ?? null)
         if(r.data.pdf_url) setPdfUrl(resolveSrc(r.data.pdf_url))
         if(r.data.slides?.length){
@@ -540,21 +542,21 @@ export default function PresentationEditor(){
       if(isNew){
         if(importedId){
           // публикация черновика
-          await client.patch(`/presentations/${importedId}/`,{title:title.trim(),description:desc.trim(), subject: subject||null, is_public:true})
+          await client.patch(`/presentations/${importedId}/`,{title:title.trim(),description:desc.trim(), subject: subject||null, is_public:isPublic})
           const existing=await client.get(`/presentations/${importedId}/`).then(r=>r.data.slides||[])
           for(const s of existing) await client.delete(`/slides/${s.id}/`).catch(()=>{})
           for(let i=0;i<slides.length;i++) await client.post(`/presentations/${importedId}/slides/`,{order:i, background:slides[i].background, backgroundType:slides[i].backgroundType, gradient:slides[i].gradient, bgImage:slides[i].bgImage, content:slides[i].content, notes:slides[i].notes||'', layout:slides[i].layout, transition:slides[i].transition})
           nav(`/presentations/${importedId}`)
           alert('Презентация опубликована')
         } else {
-          const r=await client.post('/presentations/',{title:title.trim(),description:desc.trim(), subject: subject||null, is_public:true})
+          const r=await client.post('/presentations/',{title:title.trim(),description:desc.trim(), subject: subject||null, is_public:isPublic})
           const pid=r.data.id
           for(let i=0;i<slides.length;i++) await client.post(`/presentations/${pid}/slides/`,{order:i, background:slides[i].background, backgroundType:slides[i].backgroundType, gradient:slides[i].gradient, bgImage:slides[i].bgImage, content:slides[i].content, notes:slides[i].notes||'', layout:slides[i].layout, transition:slides[i].transition})
           nav(`/presentations/${pid}`)
           alert('Презентация создана')
         }
       } else {
-        await client.patch(`/presentations/${id}/`,{title:title.trim(),description:desc.trim(), subject: subject||null})
+        await client.patch(`/presentations/${id}/`,{title:title.trim(),description:desc.trim(), subject: subject||null, is_public:isPublic})
         const existing=await client.get(`/presentations/${id}/`).then(r=>r.data.slides||[])
         for(const s of existing) await client.delete(`/slides/${s.id}/`).catch(()=>{})
         for(let i=0;i<slides.length;i++) await client.post(`/presentations/${id}/slides/`,{order:i, background:slides[i].background, backgroundType:slides[i].backgroundType, gradient:slides[i].gradient, bgImage:slides[i].bgImage, content:slides[i].content, notes:slides[i].notes||'', layout:slides[i].layout, transition:slides[i].transition})
@@ -769,6 +771,10 @@ export default function PresentationEditor(){
         <div className="w-8 h-8 rounded bg-[#d24726] flex items-center justify-center text-white font-bold text-sm shrink-0">P</div>
         <input value={title} onChange={e=>setTitle(e.target.value)} className="flex-1 min-w-0 max-w-none sm:max-w-[280px] px-3 py-2 max-sm:py-1.5 rounded border bg-white font-semibold text-sm truncate" title={title}/>
         <input value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Описание" className="hidden xl:block flex-1 min-w-[160px] max-w-[260px] px-3 py-1.5 rounded border bg-white text-sm truncate" title={desc}/>
+        <button onClick={()=>setIsPublic(v=>!v)} data-testid="pres-visibility" title={isPublic?'Публичная: видна всем в каталоге и по ссылке':'Приватная: только вы и уроки, где она назначена'}
+          className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium whitespace-nowrap shrink-0 ${isPublic?'bg-emerald-50 border-emerald-300 text-emerald-700':'bg-white border-slate-300 text-slate-600'}`}>
+          {isPublic ? '🌐 Публичная' : '🔒 Приватная'}
+        </button>
         <span className="hidden md:inline text-xs text-slate-500 whitespace-nowrap shrink-0">{slides.length} слайдов</span>
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <button onClick={()=>pptxInputRef.current?.click()} disabled={importing} className="px-2.5 py-1.5 rounded-lg bg-white border border-orange-200 text-orange-700 flex items-center gap-1 text-xs font-medium hover:bg-orange-50 whitespace-nowrap" title="Загрузить готовый .pptx/.pdf как слайды">{importing ? '⏳' : '⬆'}<span className="hidden lg:inline">Импорт</span></button>

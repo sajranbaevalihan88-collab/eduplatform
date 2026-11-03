@@ -7,12 +7,28 @@ class ClassroomSerializer(serializers.ModelSerializer):
     subject_name = serializers.CharField(source='subject.name', read_only=True, default='')
     members_count = serializers.IntegerField(source='enrollments.count', read_only=True)
     assignments_count = serializers.IntegerField(source='assignments.count', read_only=True)
+    my_status = serializers.SerializerMethodField()
+    pending_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Classroom
         fields = ['id', 'title', 'description', 'subject', 'subject_name', 'owner', 'owner_name',
-                  'invite_code', 'code_fmt', 'color', 'created_at', 'members_count', 'assignments_count']
+                  'invite_code', 'code_fmt', 'color', 'created_at', 'members_count', 'assignments_count',
+                  'is_paid', 'price', 'payment_details', 'my_status', 'pending_count']
         read_only_fields = ['id', 'owner', 'invite_code', 'created_at']
+
+    def get_my_status(self, obj):
+        """owner | active | pending | None — статус текущего пользователя в классе."""
+        u = self.context.get('request').user if self.context.get('request') else None
+        if not u or not u.is_authenticated:
+            return None
+        if obj.owner_id == u.id:
+            return 'owner'
+        e = obj.enrollments.filter(student=u).first()
+        return e.status if e else None
+
+    def get_pending_count(self, obj):
+        return obj.enrollments.filter(status='pending').count()
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
@@ -20,7 +36,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Enrollment
-        fields = ['id', 'classroom', 'student', 'student_name', 'created_at']
+        fields = ['id', 'classroom', 'student', 'student_name', 'status', 'paid_requested_at', 'created_at']
         read_only_fields = ['id', 'created_at']
 
 
