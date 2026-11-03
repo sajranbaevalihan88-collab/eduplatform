@@ -91,6 +91,9 @@ export default function ClassroomDetail(){
   const [pPrice,setPPrice]=useState('')
   const [pDetails,setPDetails]=useState('')
   const [pBusy,setPBusy]=useState(false)
+  // скрин чека от студента
+  const [rcptFile,setRcptFile]=useState<File|null>(null)
+  const [rcptPreview,setRcptPreview]=useState<string|null>(null)
 
   const load=()=>{
     client.get(`/classrooms/${id}/`).then(r=>setRoom(r.data)).catch(()=>nav('/classes'))
@@ -125,8 +128,18 @@ export default function ClassroomDetail(){
 
   const markPaid=async()=>{
     setPBusy(true)
-    try{ await client.post(`/classrooms/${id}/request_paid_access/`); toast('Заявка отправлена учителю','success'); load() }
-    catch(e:any){ toast(e?.response?.data?.detail||'err','error') } finally{ setPBusy(false) }
+    try{
+      if(rcptFile){
+        const fd=new FormData(); fd.append('file', rcptFile)
+        await client.post(`/classrooms/${id}/payment_receipt/`, fd, {headers:{'Content-Type':'multipart/form-data'}})
+        toast('Чек отправлен учителю','success')
+      } else {
+        await client.post(`/classrooms/${id}/request_paid_access/`)
+        toast('Заявка отправлена учителю','success')
+      }
+      setRcptFile(null); setRcptPreview(null); load()
+    }
+    catch(e:any){ toast(e?.response?.data?.file||e?.response?.data?.detail||'err','error') } finally{ setPBusy(false) }
   }
   // 5000.00 -> «5000» для красивого бейджа
   const fmtSom=(v:any)=> (v===null||v===undefined||v==='') ? '' : String(parseFloat(String(v)))
@@ -385,7 +398,7 @@ export default function ClassroomDetail(){
         <div className="rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 p-4 sm:p-5" data-testid="pay-banner">
           <div className="flex flex-wrap items-start gap-4">
             {payInfo?.payment_qr ? (
-              <a href={mediaUrl(payInfo.payment_qr)} target="_blank" rel="noopener noreferrer" title="Открыть в полном размере">
+              <a href={mediaUrl(payInfo.payment_qr)} target="_blank" rel="noopener noreferrer" title="Открыть QR в полном размере">
                 <img src={mediaUrl(payInfo.payment_qr)} alt="QR банка для оплаты" className="w-44 h-44 object-contain rounded-xl border border-amber-300 bg-white" data-testid="pay-qr"/>
               </a>
             ) : payInfo?.qr && (
@@ -393,26 +406,57 @@ export default function ClassroomDetail(){
             )}
             <div className="min-w-0 flex-1">
               <div className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2"><Lock size={16}/> Платный курс — доступ ожидает оплаты</div>
-              {payInfo?.payment_qr ? (
-                <div className="text-sm text-amber-800 dark:text-amber-300 mt-1">
-                  Отсканируй QR камерой или приложением банка (<b>Мбанк / О!Деньги / Элсом</b>) и переведи <b>{fmtSom(payInfo?.price ?? room.price)} сом</b> учителю курса.
+
+              {payInfo?.my_receipt ? (
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <a href={mediaUrl(payInfo.my_receipt)} target="_blank" rel="noopener noreferrer">
+                      <img src={mediaUrl(payInfo.my_receipt)} alt="Твой чек" className="w-16 h-16 object-cover rounded-lg border border-amber-300" data-testid="pay-receipt-thumb"/>
+                    </a>
+                    <div className="text-sm text-amber-800 dark:text-amber-300">
+                      <b>Чек отправлен</b> — учитель проверит перевод и откроет доступ. Обычно это занимает немного времени.
+                    </div>
+                  </div>
+                  <label className="inline-block px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-xs font-semibold text-amber-800 dark:text-amber-300 cursor-pointer">
+                    📎 Отправить другой чек
+                    <input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files?.[0]||null; setRcptFile(f); setRcptPreview(f?URL.createObjectURL(f):null)}}/>
+                  </label>
+                  <div>
+                    <button onClick={markPaid} disabled={pBusy} data-testid="pay-mark-paid" className="px-5 py-2.5 min-h-[44px] rounded-xl bg-amber-600 text-white font-semibold disabled:opacity-50">
+                      {pBusy ? '…' : '✅ Я оплатил — отправить'}
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <div className="text-sm text-amber-800 dark:text-amber-300 mt-1">
-                  Цена: <b>{fmtSom(payInfo?.price ?? room.price)} сом</b>. Переведи по реквизитам: {payInfo?.payment_details || room.payment_details || '—'}
+                <div className="mt-2 space-y-2">
+                  <div className="text-sm text-amber-800 dark:text-amber-300">
+                    {payInfo?.payment_qr
+                      ? <>1️⃣ Отсканируй QR камерой или приложением банка (<b>Мбанк / О!Деньги / Элсом</b>) → 2️⃣ переведи <b>{fmtSom(payInfo?.price ?? room.price)} сом</b> → 3️⃣ сфотографируй чек и отправь учителю.</>
+                      : <>Цена: <b>{fmtSom(payInfo?.price ?? room.price)} сом</b>. Переведи по реквизитам ниже → приложи скрин чека → отправь.</>}
+                  </div>
+                  {(payInfo?.payment_details || room.payment_details) && (
+                    <button onClick={copyDetails} className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-xs font-semibold text-amber-800 dark:text-amber-300" data-testid="pay-copy-details">
+                      📋 {payInfo?.payment_details || room.payment_details} — копировать
+                    </button>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {rcptPreview && (
+                      <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700">
+                        <img src={rcptPreview} alt="Превью чека" className="w-10 h-10 object-cover rounded"/>
+                        <button onClick={()=>{setRcptFile(null); setRcptPreview(null)}} className="text-xs text-slate-400 hover:text-red-500" title="Убрать чек">✕</button>
+                      </div>
+                    )}
+                    <label className="px-4 py-2.5 min-h-[44px] rounded-xl bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 text-sm font-semibold cursor-pointer inline-flex items-center gap-1" data-testid="pay-attach">
+                      📎 Прикрепить скрин чека
+                      <input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files?.[0]||null; setRcptFile(f); setRcptPreview(f?URL.createObjectURL(f):null)}}/>
+                    </label>
+                    <button onClick={markPaid} disabled={pBusy} data-testid="pay-mark-paid" className="px-5 py-2.5 min-h-[44px] rounded-xl bg-amber-600 text-white font-semibold disabled:opacity-50">
+                      {pBusy ? '…' : '✅ Я оплатил — отправить учителю'}
+                    </button>
+                  </div>
+                  <div className="text-xs text-amber-700 dark:text-amber-400">Чек ускоряет подтверждение: учитель увидит перевод и откроет доступ. Пока материалы класса закрыты.</div>
                 </div>
               )}
-              {(payInfo?.payment_details || room.payment_details) && (
-                <button onClick={copyDetails} className="mt-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-xs font-semibold text-amber-800 dark:text-amber-300" data-testid="pay-copy-details">
-                  📋 {payInfo?.payment_details || room.payment_details} — копировать
-                </button>
-              )}
-              <div>
-                <button onClick={markPaid} disabled={pBusy} data-testid="pay-mark-paid" className="mt-3 px-5 py-2.5 min-h-[44px] rounded-xl bg-amber-600 text-white font-semibold disabled:opacity-50">
-                  {pBusy ? '…' : '✅ Я оплатил — жду подтверждения'}
-                </button>
-              </div>
-              <div className="text-xs text-amber-700 dark:text-amber-400 mt-2">Учитель проверит перевод и откроет доступ. Пока материалы класса закрыты.</div>
             </div>
           </div>
         </div>
@@ -662,9 +706,18 @@ export default function ClassroomDetail(){
                     <div className="mt-3 pt-3 border-t dark:border-slate-700">
                       <div className="text-sm font-semibold dark:text-white mb-1">«Я оплатил» — ждут подтверждения:</div>
                       {pendingPays.map((p:any)=>(
-                        <div key={p.id} className="flex items-center gap-2 py-1.5">
-                          <span className="text-sm dark:text-slate-200">{p.student_name}</span>
-                          <span className="text-xs text-slate-400">{p.paid_requested_at ? new Date(p.paid_requested_at).toLocaleString() : ''}</span>
+                        <div key={p.id} className="flex items-center gap-2.5 py-1.5">
+                          {p.receipt ? (
+                            <a href={mediaUrl(p.receipt)} target="_blank" rel="noopener noreferrer" title="Открыть чек полностью">
+                              <img src={mediaUrl(p.receipt)} alt={`Чек: ${p.student_name}`} className="w-12 h-12 object-cover rounded-lg border dark:border-slate-600" data-testid={`receipt-${p.student}`}/>
+                            </a>
+                          ) : (
+                            <div className="w-12 h-12 rounded-lg border border-dashed dark:border-slate-600 flex items-center justify-center text-slate-400 text-xs">нет чека</div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold dark:text-slate-200">{p.student_name}</div>
+                            <div className="text-xs text-slate-400">{p.paid_requested_at ? new Date(p.paid_requested_at).toLocaleString() : ''}</div>
+                          </div>
                           <button onClick={()=>approvePay(p.student)} data-testid={`pay-approve-${p.student}`} className="ml-auto px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold">Принять</button>
                           <button onClick={()=>declinePay(p.student)} className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold">Отклонить</button>
                         </div>
@@ -688,7 +741,9 @@ export default function ClassroomDetail(){
                   <div key={m.id} className="py-2.5 flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 dark:text-white flex items-center justify-center font-bold">{m.student_name?.[0]?.toUpperCase()}</div>
                     <div className="font-semibold dark:text-white">{m.student_name}</div>
-                    {m.status==='pending' && <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">не оплатил</span>}
+                    {m.status==='pending' && (m.receipt
+                      ? <a href={mediaUrl(m.receipt)} target="_blank" rel="noopener noreferrer" title="Открыть чек"><span className="text-[11px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">чек отправлен 📎</span></a>
+                      : <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">не оплатил</span>)}
                     {isOwner && (
                       <div className="ml-auto flex items-center gap-2">
                         {m.status==='pending' && (

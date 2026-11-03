@@ -155,16 +155,47 @@ class ClassroomViewSet(viewsets.ModelViewSet):
         room = self.get_object()
         if not room.is_member(request.user):
             raise PermissionDenied('Ты не участник класса')
-        my = 'owner' if room.owner_id == request.user.id else (
-            room.enrollments.filter(student=request.user).values_list('status', flat=True).first())
+        my = 'owner' if room.owner_id == request.user.id else None
+        my_receipt = ''
+        if not my:
+            e = room.enrollments.filter(student=request.user).first()
+            if e:
+                my = 'pending' if (room.is_paid and not e.access_granted) else 'active'
+                my_receipt = e.receipt.url if e.receipt else ''
         return Response({
             'is_paid': room.is_paid, 'price': room.price,
             'payment_details': room.payment_details, 'title': room.title,
-            'code_fmt': room.code_fmt, 'my_status': my,
+            'code_fmt': room.code_fmt, 'my_status': my, 'my_receipt': my_receipt,
             # СВОЙ QR учителя приоритетнее: ученики сканируют его в приложении банка
             'payment_qr': (room.payment_qr.url if room.payment_qr else ''),
             'qr': _pay_qr_data_uri(room) if room.is_paid else '',
         })
+
+    @action(detail=True, methods=['post'])
+    def payment_receipt(self, request, pk=None):
+        """Студент отправляет скрин чека/перевода. Многократно: можно заменить."""
+        room = self.get_object()
+        if not room.is_paid:
+            raise ValidationError({'detail': 'Класс бесплатный — чек не нужен'})
+        e = room.enrollments.filter(student=request.user).first()
+        if not e:
+            raise NotFound('Сначала присоединись к классу по коду')
+        if e.access_granted:
+            raise ValidationError({'detail': 'Оплата уже подтверждена'})
+        f = request.FILES.get('file')
+        if not f:
+            raise ValidationError({'file': 'Приложи скрин чека'})
+        if f.size > 5 * 1024 * 1024:
+            raise ValidationError({'file': 'Файл больше 5 МБ'})
+        if not str(f.content_type or '').startswith('image/'):
+            raise ValidationError({'file': 'Нужна картинка (скрин чека)'})
+        if e.receipt:
+            e.receipt.delete(save=False)
+        e.receipt = f
+        e.receipt_at = timezone.now()
+        e.paid_requested_at = e.paid_requested_at or e.receipt_at
+        e.save(update_fields=['receipt', 'receipt_at', 'paid_requested_at'])
+        return Response({'ok': True, 'receipt': e.receipt.url, 'receipt_at': e.receipt_at})
 
     @action(detail=True, methods=['post', 'delete'])
     def payment_qr_upload(self, request, pk=None):
@@ -203,12 +234,14 @@ class ClassroomViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def pending_payments(self, request, pk=None):
-        """Очередь «Я оплатил» для владельца: нажали кнопку, но оплата ещё не подтверждена."""
+        """Очередь «Я оплатил» для владельца: чек + время, доступ ещё не открыт."""
         room = self._get_owned()
         qs = (room.enrollments.filter(paid_requested_at__isnull=False, access_granted=False)
               .select_related('student').order_by('paid_requested_at'))
         return Response([{'id': e.id, 'student': e.student_id, 'student_name': e.student.username,
-                          'paid_requested_at': e.paid_requested_at} for e in qs])
+                          'paid_requested_at': e.paid_requested_at,
+                          'receipt': (e.receipt.url if e.receipt else ''),
+                          'receipt_at': e.receipt_at} for e in qs])
 
     @action(detail=True, methods=['post'])
     def approve_payment(self, request, pk=None):

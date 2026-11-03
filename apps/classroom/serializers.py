@@ -44,7 +44,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Enrollment
         fields = ['id', 'classroom', 'student', 'student_name', 'status', 'access_granted',
-                  'paid_requested_at', 'created_at']
+                  'receipt', 'receipt_at', 'paid_requested_at', 'created_at']
         read_only_fields = ['id', 'created_at']
 
     def get_status(self, obj):

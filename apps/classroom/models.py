@@ -84,6 +84,10 @@ class Enrollment(models.Model):
     # Для платного класса: True — владелец подтвердил оплату, доступ открыт.
     # null/False у платного класса = «ждёт оплаты». Для бесплатных не используется.
     access_granted = models.BooleanField(null=True, blank=True)
+    # Скрин чека/перевода от студента — владелец смотрит и подтверждает
+    receipt = models.ImageField(upload_to='payment_receipts/', null=True, blank=True,
+                                help_text='Скрин чека об оплате от студента')
+    receipt_at = models.DateTimeField(null=True, blank=True)
     # время, когда ученик нажал «Я оплатил» (для очереди подтверждений у учителя)
     paid_requested_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
