@@ -69,7 +69,16 @@ class ClassroomViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._get_owned()
+        was_paid = serializer.instance.is_paid
         serializer.save()
+        room = serializer.instance  # тот же экземпляр, что обновил save() — свежие значения
+        # включили платный режим: все текущие ученики переходят в «ждёт оплаты» —
+        # кого уже заплатил, учитель подтверждает вручную в очереди/списке
+        if room.is_paid and not was_paid:
+            room.enrollments.exclude(student_id=room.owner_id).filter(status='active').update(status='pending')
+        # выключили платный режим: всех ждущих возвращаем в активные
+        elif not room.is_paid and was_paid:
+            room.enrollments.filter(status='pending').update(status='active')
 
     def perform_destroy(self, instance):
         self._get_owned()

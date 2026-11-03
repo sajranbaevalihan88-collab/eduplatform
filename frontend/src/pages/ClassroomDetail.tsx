@@ -615,8 +615,9 @@ export default function ClassroomDetail(){
                     <div className="mt-3 space-y-3">
                       <label className="flex items-center gap-2 text-sm dark:text-white">
                         <input type="checkbox" checked={!!room.is_paid} onChange={e=>savePaid({is_paid:e.target.checked})} className="w-4 h-4"/>
-                        Включить платный доступ (ученики ждут подтверждения оплаты)
+                        Включить платный доступ
                       </label>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 -mt-2">При включении <b>все текущие ученики</b> перейдут в статус «ждёт оплаты» — кто уже заплатил, подтверди кнопкой «Оплату принял» в списке ниже.</div>
                       <div className="grid sm:grid-cols-2 gap-2">
                         <input value={pPrice} onChange={e=>setPPrice(e.target.value)} placeholder="Цена, сом (например 500)" inputMode="decimal" data-testid="paid-price" className="px-3 py-2 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white"/>
                         <input value={pDetails} onChange={e=>setPDetails(e.target.value)} placeholder="Реквизиты: Мбанк 0500123456 / карта" data-testid="paid-details" className="px-3 py-2 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white"/>
@@ -688,7 +689,14 @@ export default function ClassroomDetail(){
                     <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 dark:text-white flex items-center justify-center font-bold">{m.student_name?.[0]?.toUpperCase()}</div>
                     <div className="font-semibold dark:text-white">{m.student_name}</div>
                     {m.status==='pending' && <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">не оплатил</span>}
-                    {isOwner && <button onClick={async()=>{ await client.post(`/classrooms/${id}/remove_member/`, {username:m.student_name}).catch(()=>{}); load() }} className="ml-auto text-xs text-red-500 hover:text-red-700">✕</button>}
+                    {isOwner && (
+                      <div className="ml-auto flex items-center gap-2">
+                        {m.status==='pending' && (
+                          <button onClick={()=>approvePay(m.student)} data-testid={`approve-${m.student_name}`} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold">Оплату принял</button>
+                        )}
+                        <button onClick={async()=>{ await client.post(`/classrooms/${id}/remove_member/`, {username:m.student_name}).catch(()=>{}); load() }} className="text-xs text-red-500 hover:text-red-700">✕</button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
