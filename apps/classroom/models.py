@@ -61,7 +61,10 @@ class Classroom(models.Model):
         e = self.enrollments.filter(student=user).first()
         if not e:
             return False
-        return e.status == 'active' or not self.is_paid
+        # платный класс: доступ только с подтверждённой оплатой
+        if self.is_paid:
+            return bool(e.access_granted)
+        return True
 
     @property
     def code_fmt(self):
@@ -78,6 +81,9 @@ class Enrollment(models.Model):
     classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='enrollments')
     student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='enrollments')
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
+    # Для платного класса: True — владелец подтвердил оплату, доступ открыт.
+    # null/False у платного класса = «ждёт оплаты». Для бесплатных не используется.
+    access_granted = models.BooleanField(null=True, blank=True)
     # время, когда ученик нажал «Я оплатил» (для очереди подтверждений у учителя)
     paid_requested_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

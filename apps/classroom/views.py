@@ -69,16 +69,10 @@ class ClassroomViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._get_owned()
-        was_paid = serializer.instance.is_paid
+        # Никаких транзишнов при включении/выключении платности не нужно:
+        # доступ определяется флагом access_granted у каждой записи, состояние
+        # согласовано само — включил платность, и все без access_granted сразу «ждут оплаты».
         serializer.save()
-        room = serializer.instance  # тот же экземпляр, что обновил save() — свежие значения
-        # включили платный режим: все текущие ученики переходят в «ждёт оплаты» —
-        # кого уже заплатил, учитель подтверждает вручную в очереди/списке
-        if room.is_paid and not was_paid:
-            room.enrollments.exclude(student_id=room.owner_id).filter(status='active').update(status='pending')
-        # выключили платный режим: всех ждущих возвращаем в активные
-        elif not room.is_paid and was_paid:
-            room.enrollments.filter(status='pending').update(status='active')
 
     def perform_destroy(self, instance):
         self._get_owned()
@@ -103,9 +97,10 @@ class ClassroomViewSet(viewsets.ModelViewSet):
             raise NotFound('Класс с таким кодом не найден')
         if room.owner_id == request.user.id:
             return Response(ClassroomSerializer(room, context={'request': request}).data)
-        # платный класс: запись создаётся в статусе «ожидает оплаты» — доступ откроет учитель
+        # платный класс: вступивший сразу «ждёт оплаты» (access_granted=False) —
+        # увидит QR и кнопку «Я оплатил»; бесплатный — сразу активен
         Enrollment.objects.get_or_create(classroom=room, student=request.user,
-                                         defaults={'status': 'pending' if room.is_paid else 'active'})
+                                         defaults={'access_granted': not room.is_paid})
         return Response(ClassroomSerializer(room, context={'request': request}).data)
 
     @action(detail=True, methods=['post'])
@@ -149,8 +144,9 @@ class ClassroomViewSet(viewsets.ModelViewSet):
             raise NotFound(f'Пользователь {username} не найден')
         if user.id == room.owner_id:
             raise ValidationError({'username': 'Это владелец класса'})
-        # владелец добавляет сам — сразу активен, оплаты не ждём
-        Enrollment.objects.update_or_create(classroom=room, student=user, defaults={'status': 'active'})
+        # владелец добавляет сам — сразу с доступом
+        Enrollment.objects.update_or_create(classroom=room, student=user,
+                                            defaults={'status': 'active', 'access_granted': True})
         return Response({'ok': True, 'username': user.username})
 
     @action(detail=True, methods=['get'])
@@ -207,9 +203,10 @@ class ClassroomViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def pending_payments(self, request, pk=None):
-        """Очередь «Я оплатил» для владельца."""
+        """Очередь «Я оплатил» для владельца: нажали кнопку, но оплата ещё не подтверждена."""
         room = self._get_owned()
-        qs = room.enrollments.filter(status='pending').select_related('student').order_by('paid_requested_at')
+        qs = (room.enrollments.filter(paid_requested_at__isnull=False, access_granted=False)
+              .select_related('student').order_by('paid_requested_at'))
         return Response([{'id': e.id, 'student': e.student_id, 'student_name': e.student.username,
                           'paid_requested_at': e.paid_requested_at} for e in qs])
 
@@ -220,19 +217,20 @@ class ClassroomViewSet(viewsets.ModelViewSet):
         e = room.enrollments.filter(student_id=request.data.get('student')).first()
         if not e:
             raise NotFound('Ученик не найден')
-        e.status = 'active'
-        e.save(update_fields=['status'])
+        e.access_granted = True
+        e.save(update_fields=['access_granted'])
         return Response({'ok': True, 'student': e.student_id, 'status': 'active'})
 
     @action(detail=True, methods=['post'])
     def decline_payment(self, request, pk=None):
-        """Отклонить «Я оплатил» (деньги не пришли) — снимаем пометку, ждём дальше."""
+        """Отклонить (деньги не пришли) — закрываем доступ снова."""
         room = self._get_owned()
         e = room.enrollments.filter(student_id=request.data.get('student')).first()
         if not e:
             raise NotFound('Ученик не найден')
+        e.access_granted = False
         e.paid_requested_at = None
-        e.save(update_fields=['paid_requested_at'])
+        e.save(update_fields=['access_granted', 'paid_requested_at'])
         return Response({'ok': True})
 
     @action(detail=True, methods=['post'])
@@ -250,8 +248,8 @@ class ClassroomViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def gradebook(self, request, pk=None):
         room = self._get_owned()
-        # в журнал идут только активные (оплатившие) ученики платного класса
-        students = list(room.enrollments.filter(status='active').select_related('student').all())
+        # в журнал идут только те, кому открыт доступ (для платного — оплатившие)
+        students = list(room.enrollments.exclude(access_granted=False).select_related('student').all())
         assignments = list(room.assignments.order_by('deadline', '-created_at', 'id'))
         # колонки журнала: сначала автозадания с дедлайнами, ручные — после, по порядку создания
         assignments.sort(key=lambda a: (

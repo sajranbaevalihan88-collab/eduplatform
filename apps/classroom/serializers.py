@@ -18,14 +18,19 @@ class ClassroomSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'owner', 'invite_code', 'created_at']
 
     def get_my_status(self, obj):
-        """owner | active | pending | None — статус текущего пользователя в классе."""
+        """owner | active | pending | None — статус текущего пользователя в классе.
+        pending = платный класс и оплата ещё не подтверждена владельцем."""
         u = self.context.get('request').user if self.context.get('request') else None
         if not u or not u.is_authenticated:
             return None
         if obj.owner_id == u.id:
             return 'owner'
         e = obj.enrollments.filter(student=u).first()
-        return e.status if e else None
+        if not e:
+            return None
+        if obj.is_paid and not e.access_granted:
+            return 'pending'
+        return 'active'
 
     def get_pending_count(self, obj):
         return obj.enrollments.filter(status='pending').count()
@@ -33,11 +38,19 @@ class ClassroomSerializer(serializers.ModelSerializer):
 
 class EnrollmentSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.username', read_only=True, default='')
+    # статус под платный класс адаптирован: не оплатил -> 'pending' независимо от legacy-поля
+    status = serializers.SerializerMethodField()
 
     class Meta:
         model = Enrollment
-        fields = ['id', 'classroom', 'student', 'student_name', 'status', 'paid_requested_at', 'created_at']
+        fields = ['id', 'classroom', 'student', 'student_name', 'status', 'access_granted',
+                  'paid_requested_at', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+    def get_status(self, obj):
+        if obj.classroom.is_paid and not obj.access_granted:
+            return 'pending'
+        return obj.status if obj.status == 'active' else 'active'
 
 
 class AssignmentSerializer(serializers.ModelSerializer):
