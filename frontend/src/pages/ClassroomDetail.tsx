@@ -373,7 +373,7 @@ export default function ClassroomDetail(){
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
-      <div className="rounded-2xl p-4 sm:p-6 text-white flex flex-wrap items-end justify-between gap-3" style={{background:`linear-gradient(135deg, ${room.color}, ${room.color}99)`}}>
+      <div className="rounded-2xl p-4 sm:p-6 text-white flex flex-wrap items-end justify-between gap-3" style={{backgroundColor: room.color}}>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-white/80 text-xs sm:text-sm"><GraduationCap size={16} className="shrink-0"/>{room.owner_name} • {room.subject_name||t('cls_no_subject')}</div>
           <h1 className="text-xl sm:text-2xl font-bold mt-1 break-words">{room.title}</h1>
@@ -526,7 +526,7 @@ export default function ClassroomDetail(){
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50/70 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50" data-testid="stu-progress">
                     <span className="text-sm font-bold text-blue-800 dark:text-blue-200 whitespace-nowrap">{t('cls_submitted_of').replace('{x}', String(done)).replace('{y}', String(tasks.length))}</span>
                     <div className="flex-1 h-2.5 rounded-full bg-blue-100 dark:bg-blue-900/50 overflow-hidden">
-                      <div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 transition-all duration-500" style={{ width: `${pct}%` }} />
+                      <div className="h-full rounded-full bg-blue-600 transition-all duration-500" style={{ width: `${pct}%` }} />
                     </div>
                     <span className="text-xs font-bold text-blue-700 dark:text-blue-300">{pct}%</span>
                   </div>
@@ -565,7 +565,7 @@ export default function ClassroomDetail(){
                   )}
                   {akind==='test' && (
                     <button type="button" onClick={()=>setQbOpen(true)} data-testid="open-quiz-builder"
-                      className="w-full px-4 py-3 min-h-[48px] rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold text-sm flex items-center justify-center gap-2 hover:opacity-95 shadow-md">
+                      className="w-full px-4 py-3 min-h-[48px] rounded-xl bg-rose-600 text-white font-bold text-sm flex items-center justify-center gap-2 hover:opacity-95 shadow-md">
                       <FlaskConical size={17}/>{t('cls_new_quiz')}
                     </button>
                   )}
@@ -763,7 +763,7 @@ export default function ClassroomDetail(){
               {AI_FEATURES && (
               <div className="flex flex-wrap gap-2">
                 <button onClick={genReport} disabled={repBusy}
-                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold flex items-center gap-2 disabled:opacity-50" data-testid="cls-report">
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-2 disabled:opacity-50" data-testid="cls-report">
                   <Sparkles size={17}/> {repBusy? t('cls_report_busy') : t('cls_report')}
                 </button>
                 <span className="text-xs text-slate-400 self-center">{t('cls_report_hint')}</span>

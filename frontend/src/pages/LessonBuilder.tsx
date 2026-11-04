@@ -293,7 +293,7 @@ export default function LessonBuilder(){
       const p=options.presentations.find((x:any)=>String(x.id)===String(b.data.presentation_id))
       if(!b.data.presentation_id) return <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 mt-1">{t('lb_pres_not_picked')}</div>
       if(!p) return <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-3 mt-1">{t('lb_pres_missing_a')}{String(b.data.presentation_id)}{t('lb_pres_missing_b')}</div>
-      return <Link to={withFrom(`/presentations/${p.id}`)} target="_blank" className="block mt-1 p-4 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-600 text-white hover:shadow-lg transition"><div className="flex items-center gap-2 font-semibold"><Presentation size={20}/>{p.title}</div><div className="text-sm opacity-80">{p.slides_count ?? p.slides?.length ?? 0} {t('pres_slides')}{t('lb_open_arrow')}</div></Link>
+      return <Link to={withFrom(`/presentations/${p.id}`)} target="_blank" className="block mt-1 p-4 rounded-xl bg-blue-700 text-white hover:shadow-lg transition"><div className="flex items-center gap-2 font-semibold"><Presentation size={20}/>{p.title}</div><div className="text-sm opacity-80">{p.slides_count ?? p.slides?.length ?? 0} {t('pres_slides')}{t('lb_open_arrow')}</div></Link>
     }
     if(b.type==='test'){
       const tst=options.tests.find((x:any)=>String(x.id)===String(b.data.test_id))
@@ -434,7 +434,7 @@ export default function LessonBuilder(){
         </div>
       )}
 
-      <div className="bg-gradient-to-br from-blue-600 to-cyan-600 rounded-[24px] p-6 text-white">
+      <div className="bg-slate-900 rounded-[24px] p-6 text-white">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <h1 className="text-2xl font-display font-bold flex items-center gap-2"><Sparkles size={20}/> {isNew?t('lb_hero_new'):t('lb_hero_edit')}</h1>
@@ -687,7 +687,7 @@ export default function LessonBuilder(){
                         {AI_FEATURES && (
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 space-y-2" data-testid="lb-ai">
                           <button onClick={()=>setLtAiOpen(p=>({...p,[b.id]:!p[b.id]}))}
-                            className="px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold flex items-center gap-1.5" data-testid="lb-ai-btn">
+                            className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5" data-testid="lb-ai-btn">
                             ✨ Создать вопросы с ИИ {ltAiOpen[b.id] ? '▾' : '▸'}
                           </button>
                           {ltAiOpen[b.id] && (
@@ -809,7 +809,7 @@ export default function LessonBuilder(){
 
           <div className="flex gap-3">
             <button onClick={handleCancel} type="button" className="flex-1 py-4 rounded-2xl bg-white border border-slate-300 text-slate-700 font-bold text-lg hover:bg-slate-50">Отмена</button>
-            <button onClick={save} disabled={saving} className="flex-[2] py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-lg flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"><Save size={20}/>{saving?'Сохранение...':(isNew?'Опубликовать урок':'Сохранить изменения')}</button>
+            <button onClick={save} disabled={saving} className="flex-[2] py-4 rounded-2xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-lg flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"><Save size={20}/>{saving?'Сохранение...':(isNew?'Опубликовать урок':'Сохранить изменения')}</button>
           </div>
           <div className="text-center">
             <Link to="/lessons" className="text-sm text-slate-500 hover:text-blue-600">← К списку уроков</Link>

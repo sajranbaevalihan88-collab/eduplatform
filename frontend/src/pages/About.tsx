@@ -109,7 +109,7 @@ export default function About() {
       </div>
 
       {/* История: цифры и правда о цене урока */}
-      <section className="bg-gradient-to-br from-blue-600 to-cyan-600 rounded-3xl p-6 sm:p-8 text-white shadow-xl">
+      <section className="bg-slate-900 rounded-3xl p-6 sm:p-8 text-white">
         <div className="flex items-center gap-2 text-blue-100 text-sm font-semibold mb-3"><Heart size={16}/> {L.ab_story_t}</div>
         <p className="text-lg leading-relaxed font-medium">{L.ab_story_p1}</p>
         <p className="mt-3 leading-relaxed text-blue-50">{L.ab_story_p2}</p>
@@ -172,7 +172,7 @@ export default function About() {
         <h2 className="font-display font-bold text-2xl dark:text-white">{L.ab_cta_t}</h2>
         <p className="text-slate-500 dark:text-slate-400 mt-2 text-sm">{L.ab_cta_sub}</p>
         <div className="flex flex-wrap justify-center gap-3 mt-5">
-          <Link to="/lessons" className="px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold shadow-lg btn-hover inline-flex items-center gap-2">{L.ab_cta_btn} <ArrowRight size={16}/></Link>
+          <Link to="/lessons" className="px-5 py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold shadow-lg btn-hover inline-flex items-center gap-2">{L.ab_cta_btn} <ArrowRight size={16}/></Link>
           <Link to="/login" className="px-5 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 dark:text-white font-bold btn-hover">{L.ab_demo_btn}</Link>
         </div>
         <div className="mt-6 text-xs text-slate-400 flex items-center justify-center gap-1.5"><Zap size={12}/> {L.ab_made}</div>

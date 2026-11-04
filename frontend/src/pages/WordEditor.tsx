@@ -1550,7 +1550,7 @@ export default function WordEditor() {
     <div className="word-editor max-w-6xl mx-auto space-y-4 page-enter">
       <div className="flex flex-wrap items-center gap-3 animate-fadeIn">
         {/* счётчик — вне h1: из h1 собирается заголовок вкладки браузера («Word 0» смотрелся как баг) */}
-        <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white"><FileText size={20}/></span> Word</h1>
+        <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-blue-700 text-white"><FileText size={20}/></span> Word</h1>
         <span className="text-sm font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-300 px-2.5 py-1 rounded-full" aria-label="Количество документов">{docs.length}</span>
       </div>
       <div className="flex flex-col lg:flex-row gap-4">

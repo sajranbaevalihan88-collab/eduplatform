@@ -153,7 +153,7 @@ export default function Pairs() {
                 ? isMatched
                   ? 'bg-emerald-100 border-emerald-500 dark:bg-emerald-900/40 text-slate-800 dark:text-white'
                   : 'bg-white border-blue-500 dark:bg-slate-700 dark:text-white'
-                : 'bg-gradient-to-br from-blue-600 to-cyan-600 border-blue-600 text-white text-3xl'}`}>
+                : 'bg-blue-700 border-blue-600 text-white text-3xl'}`}>
               {face ? c.label : '?'}
             </button>
           )

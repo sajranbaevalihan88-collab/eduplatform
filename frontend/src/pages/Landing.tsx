@@ -24,19 +24,17 @@ const STEPS = [
 function HeroCollage() {
   return (
     <div className="relative hidden lg:block h-[440px] select-none" aria-hidden="true">
-      <div className="absolute top-8 right-6 w-72 h-72 bg-gradient-to-br from-blue-400/30 to-cyan-300/30 rounded-full blur-3xl" />
-      <div className="absolute bottom-4 left-0 w-60 h-60 bg-gradient-to-br from-violet-400/25 to-fuchsia-300/25 rounded-full blur-3xl" />
       {/* карточка урока */}
       <div className="absolute top-6 left-6 w-[290px] glass dark:!bg-slate-800/85 dark:!border-slate-600 rounded-2xl shadow-2xl p-4 animate-floatSlow" style={{ ['--r' as any]: '-3deg' }}>
         <div className="flex items-center gap-2.5">
-          <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white flex items-center justify-center text-lg">🧊</span>
+          <span className="w-9 h-9 rounded-xl bg-blue-700 text-white flex items-center justify-center text-lg">🧊</span>
           <div>
             <div className="font-bold text-sm text-slate-900 dark:text-white">Урок: Стереометрия</div>
             <div className="text-[11px] text-slate-500 dark:text-slate-400">Геометрия · 12 блоков</div>
           </div>
         </div>
         <div className="mt-3 h-2 rounded-full bg-slate-200/80 dark:bg-slate-700 overflow-hidden">
-          <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 animate-progress" />
+          <div className="h-full rounded-full bg-blue-600 animate-progress" />
         </div>
         <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
           <CheckCircle2 size={13} className="text-emerald-500" /> 8 из 12 блоков пройдено
@@ -75,7 +73,7 @@ function HeroCollage() {
 export default function Landing() {
   const { t } = useLang()
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-white dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 -m-4 lg:-m-8">
+    <div className="min-h-screen bg-white dark:bg-slate-950 -m-4 lg:-m-8">
       {/* Hero */}
       <section className="relative">
         <div className="max-w-7xl mx-auto px-5 sm:px-6 pt-14 pb-10 sm:pt-20 relative">

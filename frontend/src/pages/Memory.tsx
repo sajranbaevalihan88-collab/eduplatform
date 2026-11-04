@@ -207,7 +207,7 @@ export default function Memory() {
                       : phase === 'recall'
                         ? wrongIdx === i
                           ? 'bg-rose-100 border-rose-500 dark:bg-rose-900/40'
-                          : 'bg-gradient-to-br from-blue-600 to-cyan-600 border-blue-600'
+                          : 'bg-blue-700 border-blue-600'
                         : 'bg-gradient-to-br from-slate-300 to-slate-200 dark:from-slate-700 dark:to-slate-800 border-slate-300 dark:border-slate-700'}`}>
                   {n > 0 && showNums ? n : isOpen ? n : ''}
                 </button>

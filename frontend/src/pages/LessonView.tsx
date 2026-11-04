@@ -70,7 +70,7 @@ export default function LessonView(){
       }
       case 'presentation': {
         const p=related.pres.find((x:any)=>String(x.id)===String(block.data.presentation_id))
-        return p ? <Link to={`/presentations/${p.id}`} className="block p-4 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-600 text-white hover:shadow-lg transition"><div className="flex items-center gap-2"><Presentation size={20}/>{p.title}</div><div className="text-sm opacity-80">{p.slides_count ?? p.slides?.length ?? 0} {t('lv_slides_open')}</div></Link> : <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-sm">{t('lv_pres_missing_a')}{String(block.data.presentation_id??'—')}{t('lv_pres_missing_b')} <Link to="/presentations" className="text-blue-600 underline">{t('lv_to_pres')}</Link> {t('lv_or_pick')} <Link to={`/lessons/${id}/edit`} className="underline">{t('lv_editing')}</Link>.</div>
+        return p ? <Link to={`/presentations/${p.id}`} className="block p-4 rounded-xl bg-blue-700 text-white hover:shadow-lg transition"><div className="flex items-center gap-2"><Presentation size={20}/>{p.title}</div><div className="text-sm opacity-80">{p.slides_count ?? p.slides?.length ?? 0} {t('lv_slides_open')}</div></Link> : <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-sm">{t('lv_pres_missing_a')}{String(block.data.presentation_id??'—')}{t('lv_pres_missing_b')} <Link to="/presentations" className="text-blue-600 underline">{t('lv_to_pres')}</Link> {t('lv_or_pick')} <Link to={`/lessons/${id}/edit`} className="underline">{t('lv_editing')}</Link>.</div>
       }
       case 'test': {
         const tst=related.tests.find((x:any)=>String(x.id)===String(block.data.test_id))

@@ -168,7 +168,7 @@ export default function Profile(){
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="bg-gradient-to-br from-blue-600 to-cyan-600 rounded-[24px] p-8 text-white relative overflow-hidden">
+      <div className="bg-blue-700 rounded-[24px] p-8 text-white relative overflow-hidden">
         <div className="flex gap-6 items-center relative">
           <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center text-3xl font-bold">{(me.username||'U')[0].toUpperCase()}</div>
           <div className="flex-1">

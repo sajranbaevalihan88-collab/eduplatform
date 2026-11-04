@@ -592,7 +592,7 @@ export default function Hangman() {
             {AI_FEATURES && (
             <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20 p-3 space-y-2" data-testid="hm-ai">
               <button onClick={() => { setAiOpen(v => !v); sfx('ui.click') }}
-                className="px-3 py-2 min-h-[44px] rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold flex items-center gap-1.5">
+                className="px-3 py-2 min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5">
                 <Sparkles size={15} /> {t('aiw_title')} {aiOpen ? '▾' : '▸'}
               </button>
               {aiOpen && (
@@ -614,7 +614,7 @@ export default function Hangman() {
               <button onClick={playNow} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-blue-600 text-white font-bold flex items-center gap-1.5"><Play size={15} /> {t('hm_play_set')}</button>
               <button onClick={saveSet} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-emerald-600 text-white font-bold flex items-center gap-1.5"><Save size={15} /> {t('hm_save_set')}</button>
               {lessonId && (
-                <button onClick={fromLesson} disabled={genBusy} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold flex items-center gap-1.5 disabled:opacity-50">
+                <button onClick={fromLesson} disabled={genBusy} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold flex items-center gap-1.5 disabled:opacity-50">
                   <Sparkles size={15} /> {t('hm_from_lesson')}
                 </button>
               )}

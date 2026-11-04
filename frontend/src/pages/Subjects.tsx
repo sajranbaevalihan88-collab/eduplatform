@@ -16,7 +16,7 @@ export default function Subjects(){
     <div className="space-y-6 page-enter">
       <div className="flex flex-wrap items-center justify-between gap-3 animate-fadeIn">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 text-white"><BookOpen size={20}/></span> {t('subjects_title')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{list.length}</span></h1>
+          <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-cyan-600 text-white"><BookOpen size={20}/></span> {t('subjects_title')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{list.length}</span></h1>
         </div>
       </div>
       {error && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>}

@@ -82,7 +82,7 @@ export default function Classes(){
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {rooms.map(r=>(
           <div key={r.id} className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 overflow-hidden card-hover">
-            <div className="h-20 flex items-end p-4" style={{background:`linear-gradient(135deg, ${r.color}, ${r.color}88)`}}>
+            <div className="h-20 flex items-end p-4" style={{background:r.color}}>
               <GraduationCap className="text-white/90" size={28}/>
             </div>
             <div className="p-4">

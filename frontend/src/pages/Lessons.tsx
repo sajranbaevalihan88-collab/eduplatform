@@ -50,13 +50,13 @@ export default function Lessons(){
     <div className="space-y-6 page-enter">
       <div className="flex flex-wrap items-center justify-between gap-3 animate-fadeIn">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white"><Layers size={20}/></span> {t('lessons')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{filtered.length}</span></h1>
+          <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-blue-700 text-white"><Layers size={20}/></span> {t('lessons')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{filtered.length}</span></h1>
           {subjectFilter && <span className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-100 text-blue-700 text-sm font-medium">{t('lessons_subject')} {subjectName||subjectFilter} <button onClick={()=>setSearchParams({})} className="p-1 rounded-full hover:bg-blue-200"><X size={14}/></button></span>}
         </div>
         <div className="flex flex-wrap gap-2">
           <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:min-w-[240px]"><div className="relative group flex-1 max-w-full sm:max-w-[260px] md:max-w-[320px]"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('lessons_search_ph')} className="pl-9 pr-4 py-2.5 rounded-xl border bg-white w-full focus-ring"/></div></div>
           {!isStudent() && (
-          <Link to="/lessons/new" className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('create')}</Link>
+          <Link to="/lessons/new" className="px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('create')}</Link>
           )}
         </div>
       </div>
@@ -98,7 +98,7 @@ export default function Lessons(){
             )}
           </div>
           {!q && !isStudent() && (
-            <Link to="/lessons/new" data-testid="lessons-cta" className="inline-flex px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold btn-hover shadow-md"><Plus size={18} className="inline mr-1"/>{t('create_lesson')}</Link>
+            <Link to="/lessons/new" data-testid="lessons-cta" className="inline-flex px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-semibold btn-hover shadow-md"><Plus size={18} className="inline mr-1"/>{t('create_lesson')}</Link>
           )}
         </div>
       )}

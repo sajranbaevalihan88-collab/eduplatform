@@ -24,12 +24,12 @@ export default function Tests(){
     <div className="space-y-6 page-enter">
       <div className="flex flex-wrap items-center justify-between gap-3 animate-fadeIn">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-gradient-to-br from-rose-500 to-amber-400 text-white"><FlaskConical size={20}/></span> {t('tests')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{filtered.length}</span></h1>
+          <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-rose-600 text-white"><FlaskConical size={20}/></span> {t('tests')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{filtered.length}</span></h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:min-w-[240px]"><div className="relative group flex-1 max-w-full sm:max-w-[260px] md:max-w-[320px]"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('tests_search_ph')} className="pl-9 pr-4 py-2.5 rounded-xl border bg-white w-full focus-ring"/></div></div>
           {!isStudent() && (
-          <Link to="/tests/new" className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('tests_create')}</Link>
+          <Link to="/tests/new" className="px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('tests_create')}</Link>
           )}
         </div>
       </div>
@@ -55,7 +55,7 @@ export default function Tests(){
           <div className="text-4xl mb-3">🧪</div>
           <div className="text-slate-400 mb-5">{q ? t('tests_empty_search') : t('tests_empty')}</div>
           {!q && !isStudent() && (
-            <Link to="/tests/new" data-testid="tests-cta" className="inline-flex px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-orange-600 text-white font-semibold btn-hover shadow-md"><Plus size={18} className="inline mr-1"/>{t('dash_new_test')}</Link>
+            <Link to="/tests/new" data-testid="tests-cta" className="inline-flex px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold btn-hover shadow-md"><Plus size={18} className="inline mr-1"/>{t('dash_new_test')}</Link>
           )}
         </div>
       )}
