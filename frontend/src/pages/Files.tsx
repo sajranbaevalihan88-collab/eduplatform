@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import client, { mediaUrl } from '../api/client'
+import client, { mediaUrl, mediaSrc } from '../api/client'
 import { Upload, FileText, Presentation, File, Image as ImgIcon, Trash2, Eye } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 
@@ -90,9 +90,9 @@ export default function Files(){
           <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}>
             <div className="p-4 border-b flex items-center justify-between"><h3 className="font-bold">{preview.title}</h3><button onClick={()=>setPreview(null)} className="px-3 py-1.5 rounded-xl bg-slate-100">{t('close')}</button></div>
             <div className="flex-1 overflow-auto p-4 bg-slate-50">
-              {preview.file_type==='image' ? <img src={mediaUrl(preview.file)} className="max-w-full mx-auto rounded-xl" referrerPolicy="no-referrer"/> :
-               preview.file?.endsWith('.pdf') ? <iframe src={mediaUrl(preview.file)} className="w-full h-[60vh] rounded-xl border bg-white" sandbox="allow-same-origin" title="preview"/> :
-               <div className="text-center py-12"><p className="text-slate-500">{t('files_preview_na')}</p><a href={mediaUrl(preview.file)} target="_blank" rel="noopener noreferrer" className="inline-block mt-4 px-5 py-2.5 rounded-xl bg-indigo-600 text-white">{t('files_download')}</a></div>
+              {preview.file_type==='image' ? <img src={mediaSrc(preview.file)} className="max-w-full mx-auto rounded-xl" referrerPolicy="no-referrer"/> :
+               preview.file?.endsWith('.pdf') ? <iframe src={mediaSrc(preview.file)} className="w-full h-[60vh] rounded-xl border bg-white" sandbox="allow-same-origin" title="preview"/> :
+               <div className="text-center py-12"><p className="text-slate-500">{t('files_preview_na')}</p><a href={mediaSrc(preview.file)} target="_blank" rel="noopener noreferrer" className="inline-block mt-4 px-5 py-2.5 rounded-xl bg-indigo-600 text-white">{t('files_download')}</a></div>
               }
             </div>
           </div>

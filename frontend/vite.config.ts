@@ -22,8 +22,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8001',
-      '/media': 'http://localhost:8001',
+      // 127.0.0.1 вместо localhost: node может резолвить localhost в ::1 (IPv6),
+      // а daphne слушает только на IPv4 — прокси получал отказ соединения
+      '/api': 'http://127.0.0.1:8001',
+      '/media': 'http://127.0.0.1:8001',
     }
   },
   preview: { port: 4173 },

@@ -110,3 +110,18 @@ export const mediaUrl = (path?: string) => {
   if (path.startsWith('/')) return `${API}${path}`
   return `${API}/${path}`
 }
+// То же, но для показа ВНУТРИ СТРАНИЦЫ (iframe/img): в dev файл на localhost-бэкенде
+// берём относительно текущего origin — vite проксирует /media на бэкенд. Chrome иногда
+// отказывает iframe'ам в прямом коннекте к localhost:8001, а same-origin запрос идёт
+// всегда (страница же открыта). В проде URL на другой домен — возвращаем как есть.
+export const mediaSrc = (path?: string) => {
+  const u = mediaUrl(path)
+  if (!u) return ''
+  try {
+    const parsed = new URL(u, window.location.origin)
+    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+      return parsed.pathname + parsed.search
+    }
+  } catch {}
+  return u
+}
