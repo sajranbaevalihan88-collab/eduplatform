@@ -86,16 +86,20 @@ function buildPreviewDoc(files: VFile[], entryName?: string){
     missing.push(`${href} (CSS)`)
     return m
   })
-  // <script src="app.js"></script> → inline
+  // <script src="app.js"></script> → выносим в КОНЕЦ <body> (как defer).
+  // Если вставить код на месте (например, тег был в <head>), скрипт выполнится
+  // до <body> — DOM ещё пуст, getElementById вернёт null и «код не работает».
+  const deferredJs: string[] = []
   html = html.replace(/<script\b[^>]*src=["']([^"']+\.js)["'][^>]*>\s*<\/script>/gi, (m, src: string)=>{
     const f = find(src)
-    if(f){ inline.add(f.name); return `<script>\n${f.content}\n\n</script>` }
+    if(f){ inline.add(f.name); deferredJs.push(f.content); return `<!-- ${norm(src)}: inline -->` }
     missing.push(`${src} (JS)`)
     return m
   })
-  // куда вставлять: перед </head> для css и перед </body> для js
+  // куда вставлять: css — перед </head>, все js — перед </body> (в порядке подключения)
   const headCss = files.filter(f=>getLang(f.name)==='css' && !f.name.toLowerCase().startsWith('_') && !inline.has(f.name)).map(f=>`<style>/* ${f.name} */\n${f.content}\n</style>`).join('\n')
-  const bodyJs = files.filter(f=>getLang(f.name)==='javascript' && !inline.has(f.name)).map(f=>`<script>/* ${f.name} */\n${f.content}\n\n</script>`).join('\n')
+  const restJs = files.filter(f=>getLang(f.name)==='javascript' && !inline.has(f.name)).map(f=>`<script>/* ${f.name} */\n${f.content}\n\n</script>`).join('\n')
+  const bodyJs = deferredJs.map(c=>`<script>\n${c}\n\n</script>`).join('\n') + (deferredJs.length && restJs ? '\n' : '') + restJs
   // одиночный css без html: рисуем демо-разметку по найденным селекторам
   if(!entry){
     const css = files.filter(f=>getLang(f.name)==='css').map(f=>f.content).join('\n')
@@ -114,8 +118,15 @@ function buildPreviewDoc(files: VFile[], entryName?: string){
     else if(/<body[^>]*>/i.test(html)) html = html.replace(/<body([^>]*)>/i, (m, attrs: string)=>`<head>${headCss}</head>${m}`)
     else html = `${headCss}\n${html}`
   }
-  if(bodyJs) html = html.replace(/<\/body>/i, `${bodyJs}\n</body>`)
-  return html.replace(/<head[^>]*>/i, m=>m + '\n' + previewHookScript(missing))
+  if(bodyJs){
+    if(/<\/body>/i.test(html)) html = html.replace(/<\/body>/i, `${bodyJs}\n</body>`)
+    else html += '\n' + bodyJs
+  }
+  // хук консоли: в <head>, иначе в <body>, иначе в начало документа
+  const hook = previewHookScript(missing)
+  if(/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, m=>m + '\n' + hook)
+  if(/<body[^>]*>/i.test(html)) return html.replace(/<body[^>]*>/i, m=>m + '\n' + hook)
+  return hook + '\n' + html
 }
 function FileIcon({name}:{name:string}){
   const lang=getLang(name)
@@ -159,21 +170,12 @@ export default function VSCodeEditor(){
   const active = useMemo(()=> files.find(f=>f.id===activeId) || files[0], [files, activeId])
   const [output,setOutput]=useState('')
   const [running,setRunning]=useState(false)
-  // Перетаскиваемая перегородка редактор/превью (ширина кода в %)
+  // Перетаскиваемая перегородка редактор/превью (ширина кода в %).
+  // Pointer Capture: события идут в ручку даже когда курсор над iframe —
+  // обычный mousemove/mouseup там теряется и перетаскивание «застревает».
   const [splitPct,setSplitPct]=useState(55)
   const splitBoxRef=useRef<HTMLDivElement|null>(null)
   const splitDrag=useRef(false)
-  useEffect(()=>{
-    const move=(e:MouseEvent)=>{
-      if(!splitDrag.current||!splitBoxRef.current) return
-      const r=splitBoxRef.current.getBoundingClientRect()
-      const pct=Math.min(80,Math.max(20,((e.clientX-r.left)/r.width)*100))
-      setSplitPct(pct)
-    }
-    const up=()=>{ if(splitDrag.current){ splitDrag.current=false; document.body.style.cursor=''; document.body.style.userSelect='' } }
-    window.addEventListener('mousemove',move); window.addEventListener('mouseup',up)
-    return ()=>{ window.removeEventListener('mousemove',move); window.removeEventListener('mouseup',up) }
-  },[])
   const [explanation,setExplanation]=useState<any>(null)
   const [explaining,setExplaining]=useState(false)
   const [useLive,setUseLive]=useState(false)
@@ -670,7 +672,20 @@ export default function VSCodeEditor(){
             />
             </div>
             {(active.lang==='html' || active.lang==='css') && (
-              <div onMouseDown={e=>{ if(e.button===0){ splitDrag.current=true; e.preventDefault(); document.body.style.cursor='col-resize'; document.body.style.userSelect='none' } }} className="hidden lg:block w-1.5 cursor-col-resize bg-[#2d2d2d] hover:bg-[#007acc] shrink-0" title="Потяни, чтобы изменить размер"/>
+              <div
+                onPointerDown={e=>{ if(e.button!==0) return; e.preventDefault(); try{ e.currentTarget.setPointerCapture(e.pointerId) }catch{}; splitDrag.current=true; document.body.style.cursor='col-resize'; document.body.style.userSelect='none' }}
+                onPointerMove={e=>{
+                  if(!splitDrag.current || !splitBoxRef.current) return
+                  const r=splitBoxRef.current.getBoundingClientRect()
+                  const pct=Math.min(80,Math.max(20,((e.clientX-r.left)/r.width)*100))
+                  setSplitPct(pct)
+                }}
+                onPointerUp={e=>{ try{ e.currentTarget.releasePointerCapture(e.pointerId) }catch{}; splitDrag.current=false; document.body.style.cursor=''; document.body.style.userSelect='' }}
+                onPointerCancel={()=>{ splitDrag.current=false; document.body.style.cursor=''; document.body.style.userSelect='' }}
+                className="hidden lg:block w-1.5 cursor-col-resize bg-[#2d2d2d] hover:bg-[#007acc] active:bg-[#007acc] shrink-0"
+                style={{touchAction:'none'}}
+                title="Потяни, чтобы изменить размер"
+              />
             )}
             {(active.lang==='html' || active.lang==='css') && (
               <div style={{width: mobPrev?'100%':`${100-splitPct}%`}} className={`${mobPrev?'flex':'hidden lg:flex'} bg-white flex-col shrink-0`}>
@@ -678,6 +693,14 @@ export default function VSCodeEditor(){
                   <span>Preview — live</span>
                   <div className="flex gap-1">
                     <button onClick={()=>refreshPreview(active.lang==='css'?undefined:active.name)} className="px-2 py-0.5 rounded bg-[#007acc] text-white text-xs">{t('vsc_refresh')}</button>
+                    <button onClick={()=>{
+                      try{
+                        const blob=new Blob([previewSrcDoc],{type:'text/html'})
+                        const url=URL.createObjectURL(blob)
+                        window.open(url,'_blank')
+                        setTimeout(()=>URL.revokeObjectURL(url),60000)
+                      }catch{}
+                    }} className="px-2 py-0.5 rounded bg-[#3c3c3c] hover:bg-[#505050] text-white text-xs" title={t('vsc_open_tab')}>{t('vsc_open_tab')}</button>
                   </div>
                 </div>
                 <iframe ref={iframeRef} srcDoc={previewSrcDoc} className="flex-1 w-full border-0 min-h-0" sandbox="allow-scripts allow-same-origin allow-modals allow-forms" allow="fullscreen"/>
