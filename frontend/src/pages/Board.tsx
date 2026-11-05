@@ -719,7 +719,7 @@ export default function Board() {
           <input value={title} onChange={e => setTitle(e.target.value)} aria-label={t('board_title')}
             className="sm:hidden flex-1 min-w-0 px-3 py-2 rounded-xl bg-white/10 text-white text-sm font-medium placeholder:text-white/50" />
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={save} aria-label={t('save')} className="px-3 sm:px-4 py-2.5 min-h-[44px] min-w-[44px] rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center gap-1">
+            <button onClick={save} aria-label={t('save')} className="px-3 sm:px-4 py-2.5 min-h-[44px] min-w-[44px] rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center gap-1">
               <Save size={17} /> <span className="hidden sm:inline">{t('save')}</span>
             </button>
             <button onClick={() => setShowActions(v => !v)} aria-label={t('board_actions')} aria-expanded={showActions}
@@ -781,7 +781,7 @@ export default function Board() {
           <button onClick={download} className="px-3 py-2 min-h-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border flex items-center gap-1.5 text-sm"><Download size={16} /> {t('board_download')}</button>
           <button onClick={clearPage} className="p-2.5 min-h-[44px] min-w-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border text-amber-700 dark:text-amber-400 flex items-center justify-center"><Trash2 size={16} /></button>
           <button onClick={() => setShowBoards(v => !v)} className="px-3 py-2 min-h-[44px] rounded-lg bg-slate-100 dark:bg-slate-800 dark:text-white border text-sm font-medium flex items-center gap-1.5">🗂 {t('board_mine')} <span className="px-1.5 py-0.5 rounded-full bg-slate-900 text-white text-[10px]">{boards.length}</span></button>
-          <button onClick={save} className="px-4 py-2 min-h-[44px] rounded-lg bg-blue-600 text-white font-bold flex items-center gap-1.5 text-sm"><Save size={16} /> {t('save')}</button>
+          <button onClick={save} className="px-4 py-2 min-h-[44px] rounded-lg bg-indigo-600 text-white font-bold flex items-center gap-1.5 text-sm"><Save size={16} /> {t('save')}</button>
         </div>
       </div>
       {mode === '2d' && !isFullscreen && (

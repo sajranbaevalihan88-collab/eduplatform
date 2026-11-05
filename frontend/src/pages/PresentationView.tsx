@@ -457,9 +457,9 @@ export default function PresentationView(){
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-2 text-sm text-slate-500">
         {fromPath ? (
-          <Link to={fromPath} className="px-3 py-1.5 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700">{t('tt_back_lesson')}</Link>
+          <Link to={fromPath} className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-600">{t('tt_back_lesson')}</Link>
         ) : (
-          <Link to="/presentations" className="hover:text-blue-600">{t('presentations')}</Link>
+          <Link to="/presentations" className="hover:text-indigo-600">{t('presentations')}</Link>
         )}
         <span>›</span>
         <span className="text-slate-900 font-medium truncate">{pres.title}</span>
@@ -472,13 +472,13 @@ export default function PresentationView(){
           <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
             <span className="px-2 py-1 rounded-full bg-slate-100">{slides.length} {t('pres_slides')}</span>
             <span>• {new Date(pres.updated_at).toLocaleDateString()}</span>
-            {pres.is_public ? <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{t('pv_public')}</span> : pres.is_lesson_private ? <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200" title={t('pv_lesson_only_hint')}>{t('pv_lesson_only')}</span> : <span className="px-2 py-1 rounded-full bg-amber-50 text-amber-700">{t('pv_private')}</span>}
+            {pres.is_public ? <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{t('pv_public')}</span> : pres.is_lesson_private ? <span className="px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200" title={t('pv_lesson_only_hint')}>{t('pv_lesson_only')}</span> : <span className="px-2 py-1 rounded-full bg-amber-50 text-amber-700">{t('pv_private')}</span>}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex">
-          <button onClick={()=>setSlideshow(true)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-700 text-white flex items-center justify-center gap-2 text-sm"><Play size={16}/> {t('pv_slideshow')}</button>
+          <button onClick={()=>setSlideshow(true)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 text-white flex items-center justify-center gap-2 text-sm"><Play size={16}/> {t('pv_slideshow')}</button>
           {isOwner ? (
-            <Link to={`/presentations/${id}/edit`} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-600 text-white flex items-center justify-center gap-2 text-sm"><Edit size={16}/> {t('edit')}</Link>
+            <Link to={`/presentations/${id}/edit`} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 text-white flex items-center justify-center gap-2 text-sm"><Edit size={16}/> {t('edit')}</Link>
           ) : (
             <span className="px-4 py-2.5 min-h-[44px] rounded-xl bg-slate-100 text-slate-400 text-sm flex items-center justify-center" title={t('lessons_edit_lock')}>{t('pv_readonly')}</span>
           )}
@@ -501,7 +501,7 @@ export default function PresentationView(){
               </div>
             )}
             <button onClick={()=>setSlideshow(true)} className="px-3 py-2 min-h-[44px] rounded-xl bg-white border flex items-center gap-1.5 text-sm"><Maximize2 size={16}/> <span className="hidden sm:inline">{t('pv_fullscreen')}</span><span className="sm:hidden">{t('pv_slideshow')}</span></button>
-            {isOwner && <Link to={`/presentations/${id}/edit`} className="px-3 py-2 min-h-[44px] rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm flex items-center gap-1"><Edit size={16}/> {t('edit')}</Link>}
+            {isOwner && <Link to={`/presentations/${id}/edit`} className="px-3 py-2 min-h-[44px] rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 text-sm flex items-center gap-1"><Edit size={16}/> {t('edit')}</Link>}
           </div>
         </div>
 
@@ -539,7 +539,7 @@ export default function PresentationView(){
             const thumbIsDark = thumbBg && !isLight(thumbBg) && !thumbBg.startsWith('linear-gradient')
             const thumbHasGeom = (s.content?.blocks||[]).some((b:any)=> b.style?.x!==undefined)
             return (
-            <button key={i} onClick={()=>setIdx(i)} className={`shrink-0 w-32 aspect-video rounded-lg border-2 overflow-hidden text-left relative ${i===idx?'border-blue-600 ring-2 ring-blue-100':'border-slate-200 hover:border-slate-300'}`}>
+            <button key={i} onClick={()=>setIdx(i)} className={`shrink-0 w-32 aspect-video rounded-lg border-2 overflow-hidden text-left relative ${i===idx?'border-indigo-600 ring-2 ring-blue-100':'border-slate-200 hover:border-slate-300'}`}>
               <div className="h-full w-full relative overflow-hidden" style={bgStyle(s)}>
                 {mode==='orig' && hasPdf ? (
                   <PdfThumb url={pdfUrl} page={i+1} active={i===idx}/>

@@ -22,16 +22,16 @@ export default function Subjects(){
       {error && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {list.map(s=>(
-          <Link key={s.id} to={`/lessons?subject=${s.slug}`} className="bg-white rounded-2xl border overflow-hidden hover:shadow-md transition hover:border-blue-200 group block">
+          <Link key={s.id} to={`/lessons?subject=${s.slug}`} className="bg-white rounded-2xl border overflow-hidden hover:shadow-md transition hover:border-indigo-200 group block">
             <div className="h-2" style={{background:s.color}} />
             <div className="p-5">
               <div className="flex items-start justify-between">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl border group-hover:scale-105 transition" style={{background:`${s.color}15`}}>{s.icon}</div>
                 <span className="text-xs px-2 py-1 rounded-full bg-slate-100">{s.slug}</span>
               </div>
-              <h3 className="font-bold text-lg mt-3 group-hover:text-blue-600 transition">{s.name}</h3>
+              <h3 className="font-bold text-lg mt-3 group-hover:text-indigo-600 transition">{s.name}</h3>
               <p className="text-sm text-slate-500 line-clamp-2">{s.description||t('subj_no_desc')}</p>
-              <div className="mt-3 flex items-center justify-between text-xs text-slate-400"><span>{s.courses?.length||0} {t('subj_courses')}</span><span className="text-blue-600 font-medium opacity-0 group-hover:opacity-100 transition">{t('subj_go')}</span></div>
+              <div className="mt-3 flex items-center justify-between text-xs text-slate-400"><span>{s.courses?.length||0} {t('subj_courses')}</span><span className="text-indigo-600 font-medium opacity-0 group-hover:opacity-100 transition">{t('subj_go')}</span></div>
             </div>
           </Link>
         ))}

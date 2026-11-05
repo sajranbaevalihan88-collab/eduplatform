@@ -154,7 +154,7 @@ export default function Memory() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 dark:text-blue-400">
+      <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-indigo-600 dark:text-indigo-400">
         {t('mem_to_games')}
       </a>
       <h1 className="font-display font-bold text-2xl dark:text-white">{t('mem_title')} 🙈</h1>
@@ -162,12 +162,12 @@ export default function Memory() {
       {phase === 'idle' && (
         <>
           <p className="text-slate-500 dark:text-slate-400">{t('mem_desc')}</p>
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-2xl p-4 space-y-1.5 text-sm dark:text-slate-200">
+          <div className="bg-indigo-50 dark:bg-blue-900/20 border border-indigo-200 dark:border-indigo-700 rounded-2xl p-4 space-y-1.5 text-sm dark:text-slate-200">
             <div>• {t('mem_rule1')}</div>
             <div>• {t('mem_rule2')}</div>
             <div>• {t('mem_rule3')}</div>
           </div>
-          <button onClick={startGame} className="w-full px-6 py-4 min-h-[56px] rounded-2xl bg-blue-600 text-white font-bold text-lg">
+          <button onClick={startGame} className="w-full px-6 py-4 min-h-[56px] rounded-2xl bg-indigo-600 text-white font-bold text-lg">
             🐒 {t('mem_start')}
           </button>
           {best != null && <div className="text-sm font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1"><Trophy size={15} /> {t('mem_best')}: {t('mem_level')} {best}</div>}
@@ -181,7 +181,7 @@ export default function Memory() {
             <span>{'❤️'.repeat(Math.max(0, lives))}</span>
             {phase === 'recall' && <span className="text-emerald-600 dark:text-emerald-400">{found.length}/{levelCount(level)}</span>}
             {(phase === 'show' || phase === 'recall') && (
-              <span aria-live="polite" className={phase === 'show' ? 'text-blue-600 dark:text-blue-400' : 'text-rose-600 dark:text-rose-400'}>
+              <span aria-live="polite" className={phase === 'show' ? 'text-indigo-600 dark:text-indigo-400' : 'text-rose-600 dark:text-rose-400'}>
                 {secs}s
               </span>
             )}
@@ -207,7 +207,7 @@ export default function Memory() {
                       : phase === 'recall'
                         ? wrongIdx === i
                           ? 'bg-rose-100 border-rose-500 dark:bg-rose-900/40'
-                          : 'bg-blue-700 border-blue-600'
+                          : 'bg-indigo-600 border-indigo-600'
                         : 'bg-gradient-to-br from-slate-300 to-slate-200 dark:from-slate-700 dark:to-slate-800 border-slate-300 dark:border-slate-700'}`}>
                   {n > 0 && showNums ? n : isOpen ? n : ''}
                 </button>
@@ -223,7 +223,7 @@ export default function Memory() {
           <div className="font-display font-bold text-2xl dark:text-white">{t('mem_gameover')}</div>
           <div className="text-slate-500 dark:text-slate-400">{t('mem_level')} {level} • {lives <= 0 ? t('mem_no_lives') : ''}</div>
           {best != null && <div className="font-bold text-amber-600 dark:text-amber-400 mt-1">{t('mem_best')}: {t('mem_level')} {best}</div>}
-          <button onClick={startGame} className="mt-4 px-6 py-3 min-h-[52px] rounded-xl bg-blue-600 text-white font-bold inline-flex items-center gap-2 mx-auto"><RotateCcw size={17} /> {t('mem_again')}</button>
+          <button onClick={startGame} className="mt-4 px-6 py-3 min-h-[52px] rounded-xl bg-indigo-600 text-white font-bold inline-flex items-center gap-2 mx-auto"><RotateCcw size={17} /> {t('mem_again')}</button>
         </div>
       )}
       <div className="sr-only" aria-live="polite">{hintPhase}</div>

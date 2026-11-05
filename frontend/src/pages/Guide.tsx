@@ -72,7 +72,7 @@ export default function Guide() {
           {t('guide_sub')}
         </p>
         {!tour ? (
-          <button onClick={startTour} className="px-8 py-4 min-h-[64px] rounded-2xl bg-blue-600 text-white font-bold text-xl inline-flex items-center gap-2">
+          <button onClick={startTour} className="px-8 py-4 min-h-[64px] rounded-2xl bg-indigo-600 text-white font-bold text-xl inline-flex items-center gap-2">
             <Volume2 size={22} /> {t('guide_start')}
           </button>
         ) : (
@@ -88,7 +88,7 @@ export default function Guide() {
             role="listitem"
             className={`bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 ${tour && i === idx ? 'border-blue-500 ring-2 ring-blue-300' : ''}`}>
             <div className="flex items-start gap-3 flex-1 min-w-0">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg shrink-0 ${tour && i === idx ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 dark:text-white'}`}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg shrink-0 ${tour && i === idx ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-700 dark:text-white'}`}>
                 {i + 1}
               </div>
               <div className="flex-1 min-w-0">
@@ -98,7 +98,7 @@ export default function Guide() {
             </div>
             <div className="flex sm:flex-col gap-2 shrink-0 justify-between">
               <button onClick={() => speak(`${s.title}. ${s.text}`)} className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 dark:text-white" aria-label={`${t('guide_narrate')}: ${s.title}`}>🔊</button>
-              <Link to={s.to} className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-bold inline-flex items-center gap-1">
+              <Link to={s.to} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold inline-flex items-center gap-1">
                 {s.link} <ArrowRight size={14} />
               </Link>
             </div>

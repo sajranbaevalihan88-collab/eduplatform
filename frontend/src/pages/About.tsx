@@ -144,7 +144,7 @@ export default function About() {
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700 text-left">
                 <th className="p-3 font-semibold dark:text-white min-w-[220px]"></th>
-                <th className="p-3 text-center font-bold text-blue-700 dark:text-blue-300 whitespace-nowrap">EduPlatform</th>
+                <th className="p-3 text-center font-bold text-indigo-700 dark:text-indigo-300 whitespace-nowrap">EduPlatform</th>
                 <th className="p-3 text-center font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">Google Classroom</th>
                 <th className="p-3 text-center font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">Kahoot</th>
                 <th className="p-3 text-center font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">Moodle</th>
@@ -172,7 +172,7 @@ export default function About() {
         <h2 className="font-display font-bold text-2xl dark:text-white">{L.ab_cta_t}</h2>
         <p className="text-slate-500 dark:text-slate-400 mt-2 text-sm">{L.ab_cta_sub}</p>
         <div className="flex flex-wrap justify-center gap-3 mt-5">
-          <Link to="/lessons" className="px-5 py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold shadow-lg btn-hover inline-flex items-center gap-2">{L.ab_cta_btn} <ArrowRight size={16}/></Link>
+          <Link to="/lessons" className="px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg btn-hover inline-flex items-center gap-2">{L.ab_cta_btn} <ArrowRight size={16}/></Link>
           <Link to="/login" className="px-5 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 dark:text-white font-bold btn-hover">{L.ab_demo_btn}</Link>
         </div>
         <div className="mt-6 text-xs text-slate-400 flex items-center justify-center gap-1.5"><Zap size={12}/> {L.ab_made}</div>

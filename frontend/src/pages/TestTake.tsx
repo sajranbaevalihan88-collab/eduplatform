@@ -165,7 +165,7 @@ export default function TestTake(){
           <p className="text-slate-500 dark:text-slate-400 mt-2">{show.blocked ? (blockedMsg || t('tt_already_msg')) : `${t('tt_earned_pre')} ${show.earned ?? 0} ${t('tt_earned_mid')} ${show.total ?? 0} ${t('tt_earned_post')}`}</p>
           {violations>0 && <p data-testid="tt-sshot-count" className="mt-2 text-sm font-semibold text-red-600 dark:text-red-300">🚫 {t('tt_shot_violations')}: {violations}</p>}
           <div className="mt-6 p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">{t('tt_no_retry')}</div>
-          <a href="/tests" className="mt-4 inline-block px-5 py-2.5 rounded-xl bg-blue-700 text-white">{t('tt_to_tests')}</a>
+          <a href="/tests" className="mt-4 inline-block px-5 py-2.5 rounded-xl bg-indigo-600 text-white">{t('tt_to_tests')}</a>
           </div>
         </div>
       )
@@ -175,7 +175,7 @@ export default function TestTake(){
         <div className="max-w-2xl mx-auto bg-white rounded-2xl border p-8 text-center">
           <h2 className="text-xl font-bold dark:text-white">{t('tt_already_done')}</h2>
           <p className="text-slate-500 mt-2">{blockedMsg}</p>
-          <a href="/tests" className="mt-4 inline-block px-5 py-2.5 rounded-xl bg-blue-700 text-white">{t('tt_to_tests')}</a>
+          <a href="/tests" className="mt-4 inline-block px-5 py-2.5 rounded-xl bg-indigo-600 text-white">{t('tt_to_tests')}</a>
         </div>
       )
     }
@@ -185,7 +185,7 @@ export default function TestTake(){
   const answeredCount = test.questions.filter((x:any)=>answers[x.id]!==undefined && answers[x.id]!=='' && (!Array.isArray(answers[x.id]) || answers[x.id].length>0)).length
   return (
     <div className="max-w-3xl mx-auto space-y-4">
-      {fromPath && <Link to={fromPath} className="inline-block px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">{t('tt_back_lesson')}</Link>}
+      {fromPath && <Link to={fromPath} className="inline-block px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-600">{t('tt_back_lesson')}</Link>}
       <div className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-2xl border p-4 sm:p-6">
         <h1 className="text-xl sm:text-2xl font-bold dark:text-white">{test.title}</h1>
         <p className="text-slate-500 dark:text-slate-400 text-sm sm:text-base">{test.description}</p>
@@ -195,12 +195,12 @@ export default function TestTake(){
           {violations>0 && <span data-testid="tt-violations-chip" className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/40 dark:text-red-300 dark:border-red-800">🚫 {t('tt_shot_violations')}: {violations}</span>}
         </div>
         <div className="mt-3 h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
-          <div className="h-full bg-blue-600 transition-all" style={{width:`${((qi+1)/test.questions.length)*100}%`}} />
+          <div className="h-full bg-indigo-600 transition-all" style={{width:`${((qi+1)/test.questions.length)*100}%`}} />
         </div>
         <div className="mt-3 flex flex-wrap gap-1 sm:gap-2">
           {test.questions.map((x:any,i:number)=>(
             <button key={x.id} onClick={()=>setQi(i)} aria-label={`${t('tt_q')} ${i+1}`} aria-current={i===qi ? 'step' : undefined}
-              className={`w-11 h-11 rounded-lg text-sm font-bold shrink-0 ${i===qi ? 'bg-blue-600 text-white' : answers[x.id]!==undefined && answers[x.id]!=='' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'}`}>
+              className={`w-11 h-11 rounded-lg text-sm font-bold shrink-0 ${i===qi ? 'bg-indigo-600 text-white' : answers[x.id]!==undefined && answers[x.id]!=='' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'}`}>
               {i+1}
             </button>
           ))}
@@ -209,8 +209,8 @@ export default function TestTake(){
       {q && (
       <div key={q.id} className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-2xl border p-4 sm:p-5 motion-safe:animate-slide">
         <div className="flex items-start gap-2">
-          <div className="font-semibold flex-1 text-base sm:text-lg dark:text-white">#{qi+1} {q.text} <span className="text-xs px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-700 dark:text-slate-300 ml-2">{q.points} {t('points')}</span> <button onClick={()=>speak(`${t('tt_q')} ${qi+1}. ${q.text}. ${t('tt_variants')}: ${(q.options||[]).map((o:any)=>o.text).join(', ')}`)} className="ml-1 inline-flex items-center justify-center align-middle min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-blue-100 dark:bg-slate-700 dark:text-white text-base" title={t('tt_read_aloud')}>🔊</button>
-            <button onClick={toggleAutoRead} aria-pressed={autoRead} title={t('tt_autoread_title')} className={`ml-1 inline-flex items-center justify-center align-middle min-w-[44px] min-h-[44px] rounded-xl text-sm font-bold ${autoRead ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 dark:text-white'}`}>{autoRead ? '🔊 Авто' : '🔇 Авто'}</button>
+          <div className="font-semibold flex-1 text-base sm:text-lg dark:text-white">#{qi+1} {q.text} <span className="text-xs px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-700 dark:text-slate-300 ml-2">{q.points} {t('points')}</span> <button onClick={()=>speak(`${t('tt_q')} ${qi+1}. ${q.text}. ${t('tt_variants')}: ${(q.options||[]).map((o:any)=>o.text).join(', ')}`)} className="ml-1 inline-flex items-center justify-center align-middle min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-indigo-100 dark:bg-slate-700 dark:text-white text-base" title={t('tt_read_aloud')}>🔊</button>
+            <button onClick={toggleAutoRead} aria-pressed={autoRead} title={t('tt_autoread_title')} className={`ml-1 inline-flex items-center justify-center align-middle min-w-[44px] min-h-[44px] rounded-xl text-sm font-bold ${autoRead ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-700 dark:text-white'}`}>{autoRead ? '🔊 Авто' : '🔇 Авто'}</button>
           </div>
           {perQ>0 && (
             <span className={`shrink-0 font-mono font-bold text-lg sm:text-xl px-2.5 sm:px-3 py-1 rounded-xl ${left<=5 ? 'bg-red-100 text-red-600 motion-safe:animate-pulse dark:bg-red-900/40 dark:text-red-300' : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-white'}`} role="timer" title={t('tt_left_title')}>0:{String(Math.max(0,left)).padStart(2,'0')}</span>
@@ -223,7 +223,7 @@ export default function TestTake(){
         )}
         <div className="mt-3 space-y-2">
           {(q.type==='single' || q.type==='true_false') && q.options.map((o:any)=>(
-            <label key={o.id} className={`flex items-center gap-2 sm:gap-3 p-3 max-lg:min-h-[56px] rounded-xl border cursor-pointer text-sm sm:text-base dark:text-white ${answers[q.id]!==undefined && String(answers[q.id])===String(o.id)?'border-blue-600 bg-blue-50 dark:bg-blue-900/30':'bg-slate-50 hover:bg-white dark:bg-slate-700/50 dark:border-slate-600'}`}>
+            <label key={o.id} className={`flex items-center gap-2 sm:gap-3 p-3 max-lg:min-h-[56px] rounded-xl border cursor-pointer text-sm sm:text-base dark:text-white ${answers[q.id]!==undefined && String(answers[q.id])===String(o.id)?'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30':'bg-slate-50 hover:bg-white dark:bg-slate-700/50 dark:border-slate-600'}`}>
               <input type="radio" name={`q${q.id}`} value={o.id} checked={answers[q.id]!==undefined && String(answers[q.id])===String(o.id)} onChange={()=>{
                 const next = {...answers, [q.id]: o.id}
                 setAnswers(next)
@@ -254,7 +254,7 @@ export default function TestTake(){
               if(result||alreadyAttempted) return
               if(qi+1>=test.questions.length) doSubmit(answers)
               else setQi(qi+1)
-            }} disabled={!(answers[q.id]||[]).length} title={t('tt_next_title')} className={`w-full py-2.5 rounded-xl font-bold text-sm sm:text-base ${((answers[q.id]||[]).length) ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-100 text-slate-400 dark:bg-slate-700 dark:text-slate-500 cursor-not-allowed'}`}>{t('tt_next')}</button>
+            }} disabled={!(answers[q.id]||[]).length} title={t('tt_next_title')} className={`w-full py-2.5 rounded-xl font-bold text-sm sm:text-base ${((answers[q.id]||[]).length) ? 'bg-indigo-600 text-white hover:bg-indigo-600' : 'bg-slate-100 text-slate-400 dark:bg-slate-700 dark:text-slate-500 cursor-not-allowed'}`}>{t('tt_next')}</button>
           )}
           {q.type==='text' && <div className="text-sm px-4 py-2.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200">Вопрос старого типа (текст) — оценка не требуется, жми «Отправить ответы».</div>}
         </div>
@@ -270,11 +270,11 @@ export default function TestTake(){
             <div className="flex-1 min-w-0 text-center">
               <div className="text-xs font-bold text-slate-600 dark:text-slate-300">{t('tt_q')} {qi + 1} {t('tt_of')} {test.questions.length}</div>
               <div className="mt-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden" role="progressbar" aria-valuemin={1} aria-valuemax={test.questions.length} aria-valuenow={qi + 1}>
-                <div className="h-full bg-blue-600 transition-all" style={{ width: `${((qi + 1) / test.questions.length) * 100}%` }} />
+                <div className="h-full bg-indigo-600 transition-all" style={{ width: `${((qi + 1) / test.questions.length) * 100}%` }} />
               </div>
             </div>
             <button onClick={() => setQi(cur => Math.min(test.questions.length - 1, cur + 1))} disabled={qi + 1 >= test.questions.length} aria-label={t('tt_next_title')}
-              className="min-h-[56px] px-4 rounded-xl bg-blue-600 text-white font-bold text-sm disabled:opacity-40">
+              className="min-h-[56px] px-4 rounded-xl bg-indigo-600 text-white font-bold text-sm disabled:opacity-40">
               →
             </button>
           </div>
@@ -282,7 +282,7 @@ export default function TestTake(){
       )}
       <div className="text-center text-xs text-slate-400">{t('tt_hint')}</div>
       {qi+1 >= test.questions.length && (
-        <button data-testid="tt-submit" onClick={submit} disabled={answeredCount===0} title={answeredCount===0? t('tt_need_answer'):undefined} className={`w-full py-3 rounded-xl font-bold text-lg ${answeredCount===0 ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-blue-600 text-white font-bold text-lg hover:bg-blue-700'}`}>{t('tt_submit')}</button>
+        <button data-testid="tt-submit" onClick={submit} disabled={answeredCount===0} title={answeredCount===0? t('tt_need_answer'):undefined} className={`w-full py-3 rounded-xl font-bold text-lg ${answeredCount===0 ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 text-white font-bold text-lg hover:bg-indigo-600'}`}>{t('tt_submit')}</button>
       )}
     </div>
   )

@@ -395,7 +395,7 @@ export default function Hangman() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 dark:text-blue-400">
+      <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-indigo-600 dark:text-indigo-400">
         {t('hm_to_games')}
       </a>
       <h1 className="font-display font-bold text-2xl dark:text-white">{t('hm_title')} 🎯</h1>
@@ -405,11 +405,11 @@ export default function Hangman() {
           <p className="text-slate-500 dark:text-slate-400">{t('hm_desc')}</p>
           <div className="flex flex-wrap gap-2">
             <button onClick={() => setDiff('easy')} aria-pressed={diff === 'easy'}
-              className={`px-4 py-3 min-h-[52px] rounded-xl text-sm font-bold border ${diff === 'easy' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-800 dark:text-white dark:border-slate-700'}`}>
+              className={`px-4 py-3 min-h-[52px] rounded-xl text-sm font-bold border ${diff === 'easy' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-800 dark:text-white dark:border-slate-700'}`}>
               {t('hm_diff_e')} (4–5)
             </button>
             <button onClick={() => setDiff('hard')} aria-pressed={diff === 'hard'}
-              className={`px-4 py-3 min-h-[52px] rounded-xl text-sm font-bold border ${diff === 'hard' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-800 dark:text-white dark:border-slate-700'}`}>
+              className={`px-4 py-3 min-h-[52px] rounded-xl text-sm font-bold border ${diff === 'hard' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-800 dark:text-white dark:border-slate-700'}`}>
               {t('hm_diff_h')} (6–8)
             </button>
             <button onClick={() => { setPanel('build'); setCErr(''); sfx('ui.click') }}
@@ -418,11 +418,11 @@ export default function Hangman() {
               ✏️ {t('hm_build')}
             </button>
           </div>
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-2xl p-4 space-y-1.5 text-sm dark:text-slate-200">
+          <div className="bg-indigo-50 dark:bg-blue-900/20 border border-indigo-200 dark:border-indigo-700 rounded-2xl p-4 space-y-1.5 text-sm dark:text-slate-200">
             <div>• {t('hm_rule1')}</div>
             <div>• {t('hm_rule2')}</div>
           </div>
-          <button onClick={startGame} className="w-full px-6 py-4 min-h-[56px] rounded-2xl bg-blue-600 text-white font-bold text-lg">
+          <button onClick={startGame} className="w-full px-6 py-4 min-h-[56px] rounded-2xl bg-indigo-600 text-white font-bold text-lg">
             🎯 {t('hm_start')}
           </button>
           {(bestDiff || best) && <div className="text-sm font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1"><Trophy size={15} /> {t('hm_best')}: {bestDiff || best} {t('hm_solved_n')}</div>}
@@ -484,7 +484,7 @@ export default function Hangman() {
                       ? 'bg-emerald-500 border-emerald-600 text-white'
                       : used
                         ? 'bg-rose-100 border-rose-200 text-rose-400 dark:bg-rose-950/40 dark:border-rose-900'
-                        : 'bg-white border-slate-300 hover:bg-blue-50 dark:bg-slate-800 dark:text-white dark:border-slate-700 dark:hover:bg-slate-700'}`}>
+                        : 'bg-white border-slate-300 hover:bg-indigo-50 dark:bg-slate-800 dark:text-white dark:border-slate-700 dark:hover:bg-slate-700'}`}>
                     {al}
                   </button>
                 )
@@ -501,7 +501,7 @@ export default function Hangman() {
           <div className="font-bold text-slate-700 dark:text-slate-300 mb-1">{word}</div>
           <div className="text-slate-500 dark:text-slate-400">{t('hm_solved_n')}: {solved}{best ? ` • ${t('hm_best')}: ${best}` : ''}</div>
           <div className="mt-4 flex flex-col sm:flex-row gap-2 justify-center">
-            <button onClick={startGame} className="px-6 py-3 min-h-[52px] rounded-xl bg-blue-600 text-white font-bold inline-flex items-center justify-center gap-2"><RotateCcw size={17} /> {t('hm_again')}</button>
+            <button onClick={startGame} className="px-6 py-3 min-h-[52px] rounded-xl bg-indigo-600 text-white font-bold inline-flex items-center justify-center gap-2"><RotateCcw size={17} /> {t('hm_again')}</button>
             {custom && (
               <button onClick={exitCustom} className="px-4 py-3 min-h-[52px] rounded-xl bg-white dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 font-bold">✏️ {t('hm_build')}</button>
             )}
@@ -566,7 +566,7 @@ export default function Hangman() {
                       <button key={set.id} onClick={() => { playCustom(set); setEntry(null) }}
                         className="w-full flex items-center gap-2 bg-slate-50 dark:bg-slate-800 rounded-xl px-3 py-2 text-left">
                         <span className="flex-1 min-w-0 truncate font-bold text-sm dark:text-white">✨ {set.name} <span className="text-slate-400 font-normal">({set.words.length})</span></span>
-                        <span className="p-1.5 rounded-lg bg-blue-600 text-white"><Play size={12} /></span>
+                        <span className="p-1.5 rounded-lg bg-indigo-600 text-white"><Play size={12} /></span>
                       </button>
                     ))}
                   </div>
@@ -611,10 +611,10 @@ export default function Hangman() {
             </div>
             )}
             <div className="flex flex-wrap gap-2">
-              <button onClick={playNow} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-blue-600 text-white font-bold flex items-center gap-1.5"><Play size={15} /> {t('hm_play_set')}</button>
+              <button onClick={playNow} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-indigo-600 text-white font-bold flex items-center gap-1.5"><Play size={15} /> {t('hm_play_set')}</button>
               <button onClick={saveSet} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-emerald-600 text-white font-bold flex items-center gap-1.5"><Save size={15} /> {t('hm_save_set')}</button>
               {lessonId && (
-                <button onClick={fromLesson} disabled={genBusy} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold flex items-center gap-1.5 disabled:opacity-50">
+                <button onClick={fromLesson} disabled={genBusy} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1.5 disabled:opacity-50">
                   <Sparkles size={15} /> {t('hm_from_lesson')}
                 </button>
               )}
@@ -639,7 +639,7 @@ export default function Hangman() {
                 {sets.map(set => (
                   <div key={set.id} className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 rounded-xl px-3 py-2">
                     <span className="flex-1 min-w-0 truncate font-bold text-sm dark:text-white">✨ {set.name} <span className="text-slate-400 font-normal">({set.words.length})</span></span>
-                    <button onClick={() => { setPanel(null); playCustom(set) }} aria-label={t('games_play')} className="p-2 min-h-[36px] min-w-[36px] rounded-lg bg-blue-600 text-white"><Play size={14} /></button>
+                    <button onClick={() => { setPanel(null); playCustom(set) }} aria-label={t('games_play')} className="p-2 min-h-[36px] min-w-[36px] rounded-lg bg-indigo-600 text-white"><Play size={14} /></button>
                     <button onClick={() => shareSet(set)} aria-label={t('hm_share')} className={`p-2 min-h-[36px] min-w-[36px] rounded-lg ${shared === set.id ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-700 dark:text-white'}`}><Share2 size={14} /></button>
                     <button onClick={() => delSet(set.id)} aria-label={t('ws_del')} className="p-2 min-h-[36px] min-w-[36px] rounded-lg bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400"><Trash2 size={14} /></button>
                   </div>

@@ -1543,14 +1543,14 @@ export default function WordEditor() {
   // rbBtn(on) — кнопка-иконка; вкл. состояние подсвечено как в Word
   const rbBtn = (on: boolean) =>
     `h-11 w-11 sm:h-9 sm:w-9 shrink-0 rounded-lg border flex items-center justify-center ${on
-      ? 'bg-blue-600 text-white border-blue-600'
-      : `bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 hover:bg-blue-50 dark:hover:bg-slate-600`}`
+      ? 'bg-indigo-600 text-white border-indigo-600'
+      : `bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 hover:bg-indigo-50 dark:hover:bg-slate-600`}`
 
   return (
     <div className="word-editor max-w-6xl mx-auto space-y-4 page-enter">
       <div className="flex flex-wrap items-center gap-3 animate-fadeIn">
         {/* счётчик — вне h1: из h1 собирается заголовок вкладки браузера («Word 0» смотрелся как баг) */}
-        <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-blue-700 text-white"><FileText size={20}/></span> Word</h1>
+        <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-indigo-600 text-white"><FileText size={20}/></span> Word</h1>
         <span className="text-sm font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-300 px-2.5 py-1 rounded-full" aria-label="Количество документов">{docs.length}</span>
       </div>
       <div className="flex flex-col lg:flex-row gap-4">
@@ -1558,7 +1558,7 @@ export default function WordEditor() {
       <aside className="lg:w-64 shrink-0 bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-3 h-fit" aria-label="Мои документы">
         <button onClick={newDoc} title="Чистый лист: начать новый документ. Текущий не удаляется — несохранённое уедет в черновик."
           aria-label="Создать новый документ"
-          className="w-full px-3 py-2.5 rounded-xl bg-blue-600 text-white font-semibold flex items-center justify-center gap-2">
+          className="w-full px-3 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold flex items-center justify-center gap-2">
           <Plus size={16} /> Новый
         </button>
         {hasDraft && (
@@ -1569,7 +1569,7 @@ export default function WordEditor() {
         {/* Файл: открыть .docx / сохранить в .docx — как в Word файловые операции */}
         <div className="mt-2 grid grid-cols-2 gap-2" role="group" aria-label="Файл">
           <button onClick={() => fileRef.current?.click()} disabled={busy} title="Открыть .docx (до 20МБ)"
-            className="px-2 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+            className="px-2 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
             <Upload size={13} /> Импорт
           </button>
           <button onClick={onExport} disabled={busy} title="Сохранить документ как .docx"
@@ -1581,9 +1581,9 @@ export default function WordEditor() {
         <div className="mt-3 space-y-1 max-h-40 lg:max-h-[50vh] overflow-auto overscroll-contain">
           {docs.length === 0 && <div className="text-xs text-slate-400 text-center py-4">Пока пусто</div>}
           {docs.map(d => (
-            <div key={d.id} className={`group flex items-center gap-2 px-2 py-2 rounded-xl text-sm ${currentId === d.id ? 'bg-blue-50 dark:bg-blue-900/30 font-semibold' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+            <div key={d.id} className={`group flex items-center gap-2 px-2 py-2 rounded-xl text-sm ${currentId === d.id ? 'bg-indigo-50 dark:bg-indigo-900/30 font-semibold' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
               <button onClick={() => openDoc(d)} className="flex-1 flex items-center gap-2 min-w-0 text-left dark:text-white" title={d.title}>
-                <FileText size={15} className="shrink-0 text-blue-600" />
+                <FileText size={15} className="shrink-0 text-indigo-600" />
                 <span className="truncate">{d.title}{dirty && currentId === d.id ? ' •' : ''}</span>
               </button>
               <button onClick={() => remove(d.id)} aria-label={`Удалить ${d.title}`}
@@ -1625,9 +1625,9 @@ export default function WordEditor() {
             вставок, только самое нужное. */}
         {poor ? (
           <div role="toolbar" aria-label="Простые инструменты" className="flex flex-wrap items-center gap-1.5 bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-2">
-            <button onMouseDown={keepFocus} onClick={() => cmd('bold')} aria-pressed={!!active.bold} title="Жирный (Ctrl+B)" aria-label="Жирный" className={`h-11 min-w-[52px] px-3 rounded-xl border text-lg font-bold ${!!active.bold ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>Ж</button>
-            <button onMouseDown={keepFocus} onClick={() => cmd('italic')} aria-pressed={!!active.italic} title="Курсив (Ctrl+I)" aria-label="Курсив" className={`h-11 min-w-[52px] px-3 rounded-xl border text-lg italic ${!!active.italic ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>К</button>
-            <button onMouseDown={keepFocus} onClick={() => cmd('underline')} aria-pressed={!!active.underline} title="Подчёркнутый (Ctrl+U)" aria-label="Подчёркнутый" className={`h-11 min-w-[52px] px-3 rounded-xl border text-lg underline ${!!active.underline ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>Ч</button>
+            <button onMouseDown={keepFocus} onClick={() => cmd('bold')} aria-pressed={!!active.bold} title="Жирный (Ctrl+B)" aria-label="Жирный" className={`h-11 min-w-[52px] px-3 rounded-xl border text-lg font-bold ${!!active.bold ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>Ж</button>
+            <button onMouseDown={keepFocus} onClick={() => cmd('italic')} aria-pressed={!!active.italic} title="Курсив (Ctrl+I)" aria-label="Курсив" className={`h-11 min-w-[52px] px-3 rounded-xl border text-lg italic ${!!active.italic ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>К</button>
+            <button onMouseDown={keepFocus} onClick={() => cmd('underline')} aria-pressed={!!active.underline} title="Подчёркнутый (Ctrl+U)" aria-label="Подчёркнутый" className={`h-11 min-w-[52px] px-3 rounded-xl border text-lg underline ${!!active.underline ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>Ч</button>
             <span className="w-px self-stretch bg-slate-200 dark:bg-slate-600 mx-1" />
             <select onChange={e => { setFontSizePt(e.target.value); e.currentTarget.selectedIndex = 0 }} title="Размер шрифта" aria-label="Размер шрифта"
               className="h-11 px-2 rounded-xl border bg-white dark:bg-slate-700 dark:text-white text-base cursor-pointer">
@@ -1636,9 +1636,9 @@ export default function WordEditor() {
             </select>
             <span className="w-px self-stretch bg-slate-200 dark:bg-slate-600 mx-1" />
             <button onMouseDown={keepFocus} onClick={() => cmd('insertUnorderedList')} aria-pressed={!!active.insertUnorderedList} title="Список с точками" aria-label="Маркированный список"
-              className={`h-11 min-w-[48px] px-3 rounded-xl border ${!!active.insertUnorderedList ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}><List size={18} /></button>
+              className={`h-11 min-w-[48px] px-3 rounded-xl border ${!!active.insertUnorderedList ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}><List size={18} /></button>
             <button onMouseDown={keepFocus} onClick={() => cmd('insertOrderedList')} aria-pressed={!!active.insertOrderedList} title="Список с номерами" aria-label="Нумерованный список"
-              className={`h-11 min-w-[48px] px-3 rounded-xl border ${!!active.insertOrderedList ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}><ListOrdered size={18} /></button>
+              className={`h-11 min-w-[48px] px-3 rounded-xl border ${!!active.insertOrderedList ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}><ListOrdered size={18} /></button>
             <span className="w-px self-stretch bg-slate-200 dark:bg-slate-600 mx-1" />
             <button onMouseDown={keepFocus} onClick={() => cmd('justifyLeft')} title="Текст слева" aria-label="По левому краю" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignLeft size={18} /></button>
             <button onMouseDown={keepFocus} onClick={() => cmd('justifyCenter')} title="Текст по центру" aria-label="По центру" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignCenter size={18} /></button>
@@ -1647,10 +1647,10 @@ export default function WordEditor() {
             {selImg && (
               <div role="toolbar" aria-label="Выбранная картинка" className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-200 dark:border-slate-700">
                 <span className="px-1 text-sm font-bold dark:text-white">Картинка:</span>
-                <button onClick={imgFree} title="Открепить от текста" aria-label="Картинка свободно" className={`h-11 px-3 rounded-xl border text-sm font-bold ${isFree(selImg) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>Свободно</button>
-                <button onClick={imgInline} title="Вернуть в текст" aria-label="Картинка в текст" className={`h-11 px-3 rounded-xl border text-sm font-bold ${!isFree(selImg) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>В текст</button>
+                <button onClick={imgFree} title="Открепить от текста" aria-label="Картинка свободно" className={`h-11 px-3 rounded-xl border text-sm font-bold ${isFree(selImg) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>Свободно</button>
+                <button onClick={imgInline} title="Вернуть в текст" aria-label="Картинка в текст" className={`h-11 px-3 rounded-xl border text-sm font-bold ${!isFree(selImg) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>В текст</button>
                 {[25, 50, 100].map(p => (
-                  <button key={p} onClick={() => imgSetWidth(p)} aria-label={`Размер ${p} процентов`} className={`h-11 w-16 rounded-xl border text-sm font-bold ${imgW === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>{p}%</button>
+                  <button key={p} onClick={() => imgSetWidth(p)} aria-label={`Размер ${p} процентов`} className={`h-11 w-16 rounded-xl border text-sm font-bold ${imgW === p ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>{p}%</button>
                 ))}
                 <button onClick={() => imgAlign('left')} title="Слева" aria-label="Картинка слева" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignLeft size={18} /></button>
                 <button onClick={() => imgAlign('center')} title="По центру" aria-label="Картинка по центру" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignCenter size={18} /></button>
@@ -1675,9 +1675,9 @@ export default function WordEditor() {
             {/* табы ленты */}
             <div role="tablist" aria-label="Вкладки ленты" className="flex items-center gap-1 px-2 pt-1 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 overflow-x-auto">
               <button role="tab" aria-selected={tab === 'home'} onClick={() => setTab('home')}
-                className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'home' ? 'bg-white dark:bg-slate-800 text-blue-700 dark:text-blue-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Главная</button>
+                className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'home' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Главная</button>
               <button role="tab" aria-selected={tab === 'insert'} onClick={() => setTab('insert')}
-                className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'insert' ? 'bg-white dark:bg-slate-800 text-blue-700 dark:text-blue-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Вставка</button>
+                className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'insert' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Вставка</button>
               {selImg && (
                 <button role="tab" aria-selected={tab === 'img'} onClick={() => setTab('img')}
                   className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'img' ? 'bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-amber-600 dark:text-amber-400/80 hover:text-amber-800'}`}>Картинка</button>
@@ -1708,12 +1708,12 @@ export default function WordEditor() {
                   <button onMouseDown={keepFocus} onClick={() => cmd('strikeThrough')} aria-pressed={!!active.strikeThrough} title="Зачёркнутый" aria-label="Зачёркнутый" className={rbBtn(!!active.strikeThrough)}><Strikethrough size={16} /></button>
                   <button onMouseDown={keepFocus} onClick={() => cmd('subscript')} title="Нижний индекс" aria-label="Нижний индекс" className={rbBtn(false)}><span className="text-sm font-bold leading-none">x₂</span></button>
                   <button onMouseDown={keepFocus} onClick={() => cmd('superscript')} title="Верхний индекс" aria-label="Верхний индекс" className={rbBtn(false)}><span className="text-sm font-bold leading-none">x²</span></button>
-                  <label className="h-9 w-9 shrink-0 rounded-lg hover:bg-blue-50 dark:hover:bg-slate-600 dark:text-white cursor-pointer flex flex-col items-center justify-center" title="Цвет текста">
+                  <label className="h-9 w-9 shrink-0 rounded-lg hover:bg-indigo-50 dark:hover:bg-slate-600 dark:text-white cursor-pointer flex flex-col items-center justify-center" title="Цвет текста">
                     <span className="text-sm font-bold leading-none">A</span>
                     <span className="block w-4 h-1 rounded-sm bg-red-600" />
                     <input type="color" className="sr-only" aria-label="Цвет текста" onChange={e => cmd('foreColor', e.target.value)} />
                   </label>
-                  <label className="h-9 w-9 shrink-0 rounded-lg hover:bg-blue-50 dark:hover:bg-slate-600 dark:text-white cursor-pointer flex flex-col items-center justify-center" title="Выделить маркером">
+                  <label className="h-9 w-9 shrink-0 rounded-lg hover:bg-indigo-50 dark:hover:bg-slate-600 dark:text-white cursor-pointer flex flex-col items-center justify-center" title="Выделить маркером">
                     <span className="text-sm font-bold leading-none">A</span>
                     <span className="block w-4 h-1 rounded-sm bg-yellow-300" />
                     <input type="color" defaultValue="#ffff00" className="sr-only" aria-label="Цвет выделения маркером" onChange={e => cmd('hiliteColor', e.target.value)} />
@@ -1765,7 +1765,7 @@ export default function WordEditor() {
                 <RibbonSep />
                 <RibbonGroup label="Таблицы">
                   <button onClick={() => setShowTblPicker(v => !v)} title="Вставить таблицу: выбрать строки и столбцы" aria-label="Вставить таблицу" aria-expanded={showTblPicker}
-                    className={`${rbBtn(false)} ${showTblPicker ? 'bg-blue-600 text-white border-blue-600' : ''}`}><TableIcon size={16} /></button>
+                    className={`${rbBtn(false)} ${showTblPicker ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}><TableIcon size={16} /></button>
                   {showTblPicker && (
                     <span className="flex items-center gap-1.5 h-9 px-1">
                       <input type="number" min={1} max={10} value={tblRows} onChange={e => setTblRows(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
@@ -1796,14 +1796,14 @@ export default function WordEditor() {
               <div role="toolbar" aria-label="Настройки картинки" className="flex flex-nowrap sm:flex-wrap items-stretch gap-0 p-1.5 overflow-x-auto sm:overflow-visible scrollbar-thin">
                 <RibbonGroup label="Режим">
                   <button onClick={imgFree} title="Открепить от текста — таскать мышью"
-                    className={`h-9 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 ${isFree(selImg) ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}><Move size={13} /> Свободно</button>
+                    className={`h-9 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 ${isFree(selImg) ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}><Move size={13} /> Свободно</button>
                   <button onClick={imgInline} title="Вернуть в текст"
-                    className={`h-9 px-2.5 rounded-lg text-xs font-bold ${!isFree(selImg) ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}>В текст</button>
+                    className={`h-9 px-2.5 rounded-lg text-xs font-bold ${!isFree(selImg) ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}>В текст</button>
                 </RibbonGroup>
                 <RibbonSep />
                 <RibbonGroup label="Размер">
                   {[25, 50, 75, 100].map(p => (
-                    <button key={p} onClick={() => imgSetWidth(p)} className={`h-9 px-2 rounded-lg text-xs font-bold ${imgW === p && !isFree(selImg) ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}>{p}%</button>
+                    <button key={p} onClick={() => imgSetWidth(p)} className={`h-9 px-2 rounded-lg text-xs font-bold ${imgW === p && !isFree(selImg) ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}>{p}%</button>
                   ))}
                   <input type="range" min={isFree(selImg) ? 30 : 10} max={isFree(selImg) ? 1200 : 100} step={isFree(selImg) ? 10 : 5} value={imgW}
                     onChange={e => imgSizeChange(parseInt(e.target.value))} aria-label="Размер картинки" className="w-24 sm:w-32" />
@@ -1877,13 +1877,13 @@ export default function WordEditor() {
                   aria-label={`Перейти к листу ${k + 1}`}
                   onClick={() => gotoSheet(k + 1)}
                   title={`Перейти к листу ${k + 1}`}
-                  className={`min-w-[44px] min-h-[44px] shrink-0 px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${curPage === k + 1 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 hover:bg-blue-50 dark:hover:bg-slate-600'}`}
+                  className={`min-w-[44px] min-h-[44px] shrink-0 px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${curPage === k + 1 ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 hover:bg-indigo-50 dark:hover:bg-slate-600'}`}
                 >
                   <span className="hidden sm:inline">Лист </span>{k + 1}
                 </button>
               ))}
             </div>
-            <button onClick={addPage} className="min-h-[44px] shrink-0 px-3 py-2 rounded-xl text-xs font-bold border border-dashed bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 hover:bg-blue-50 dark:hover:bg-slate-600" title="Добавить лист в конец">
+            <button onClick={addPage} className="min-h-[44px] shrink-0 px-3 py-2 rounded-xl text-xs font-bold border border-dashed bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 hover:bg-indigo-50 dark:hover:bg-slate-600" title="Добавить лист в конец">
               + Лист
             </button>
           </div>

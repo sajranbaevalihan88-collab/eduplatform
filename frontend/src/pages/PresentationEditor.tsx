@@ -794,7 +794,7 @@ export default function PresentationEditor(){
           {subjects.map((s:any)=><option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
         </select>
         {subject ? (
-          <span className="shrink-0 text-xs text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1 rounded-full">Выбран: {subjects.find((x:any)=>String(x.id)===String(subject))?.icon} {subjects.find((x:any)=>String(x.id)===String(subject))?.name}</span>
+          <span className="shrink-0 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-1 rounded-full">Выбран: {subjects.find((x:any)=>String(x.id)===String(subject))?.icon} {subjects.find((x:any)=>String(x.id)===String(subject))?.name}</span>
         ) : (
           <span className="hidden sm:inline text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-full">Без предмета презентация не появится в уроках — можно выбрать позже</span>
         )}
@@ -814,7 +814,7 @@ export default function PresentationEditor(){
             <>
               <div className="flex items-center gap-1 pr-3 border-r shrink-0">
                 <button onClick={()=>{ if(selectedBlock && curSelected?.type==='text') setEditingText(selectedBlock) }} disabled={!selectedBlock || curSelected?.type!=='text'} title="Править выделенный текст" aria-label="Править выделенный текст"
-                  className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 disabled:opacity-35 ${editingText?'bg-blue-600 text-white':''}`}><Pencil size={16}/></button>
+                  className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 disabled:opacity-35 ${editingText?'bg-indigo-600 text-white':''}`}><Pencil size={16}/></button>
                 <select value={curSelected?.style?.fontFamily||runStyleOf(curSelected).fontFamily||'Inter'} onChange={e=>selectedBlock && updateSelectedStyle({fontFamily:e.target.value})} className="px-2 py-2 rounded border bg-white text-xs w-[110px] shrink-0">
                   {FONTS.map(f=><option key={f} value={f}>{f}</option>)}
                 </select>
@@ -827,8 +827,8 @@ export default function PresentationEditor(){
                 <button onClick={()=>selectedBlock && updateSelectedStyle({align:'left'})} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.align==='left'?'bg-slate-200':''}`}><AlignLeft size={16}/></button>
                 <button onClick={()=>selectedBlock && updateSelectedStyle({align:'center'})} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.align==='center'?'bg-slate-200':''}`}><AlignCenter size={16}/></button>
                 <button onClick={()=>selectedBlock && updateSelectedStyle({align:'right'})} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.align==='right'?'bg-slate-200':''}`}><AlignRight size={16}/></button>
-                <button onClick={()=>selectedBlock && updateSelectedStyle({bullet:!curSelected?.style?.bullet})} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.bullet?'bg-blue-200':''}`}><List size={16}/></button>
-                <button onClick={()=>selectedBlock && updateSelectedStyle({numbered:!curSelected?.style?.numbered})} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.numbered?'bg-blue-200':''}`}><ListOrdered size={16}/></button>
+                <button onClick={()=>selectedBlock && updateSelectedStyle({bullet:!curSelected?.style?.bullet})} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.bullet?'bg-indigo-200':''}`}><List size={16}/></button>
+                <button onClick={()=>selectedBlock && updateSelectedStyle({numbered:!curSelected?.style?.numbered})} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.numbered?'bg-indigo-200':''}`}><ListOrdered size={16}/></button>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <input type="color" value={curSelected?.style?.color||'#1e293b'} onChange={e=>selectedBlock && updateSelectedStyle({color:e.target.value})} className="w-10 h-10 max-lg:w-9 max-lg:h-9 rounded border shrink-0" title="Цвет текста"/>
@@ -861,9 +861,9 @@ export default function PresentationEditor(){
             <div className="flex max-lg:flex-nowrap items-center gap-2 shrink-0">
               <span className="text-sm font-medium shrink-0">Фон:</span>
               {['#ffffff','#f8fafc','#fef3c7','#dbeafe','#fde68a','#fecaca','#dcfce7','#e0e7ff','#ddd6fe','#fce7f3'].map(c=>(
-                <button key={c} onClick={()=>setSlides(sl=>sl.map((s,i)=>i===active?{...s,background:c, backgroundType:'solid'}:s))} className={`w-9 h-9 max-lg:w-8 max-lg:h-8 rounded-full border-2 shrink-0 ${cur.background===c && cur.backgroundType==='solid'?'border-blue-600':'border-white shadow'}`} style={{background:c}}/>
+                <button key={c} onClick={()=>setSlides(sl=>sl.map((s,i)=>i===active?{...s,background:c, backgroundType:'solid'}:s))} className={`w-9 h-9 max-lg:w-8 max-lg:h-8 rounded-full border-2 shrink-0 ${cur.background===c && cur.backgroundType==='solid'?'border-indigo-600':'border-white shadow'}`} style={{background:c}}/>
               ))}
-              <button onClick={()=>setSlides(sl=>sl.map((s,i)=>i===active?{...s, backgroundType:'gradient', gradient:'linear-gradient(135deg,#667eea 0%,#764ba2 100%)'}:s))} className="px-2 py-1 rounded bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs">Градиент</button>
+              <button onClick={()=>setSlides(sl=>sl.map((s,i)=>i===active?{...s, backgroundType:'gradient', gradient:'linear-gradient(135deg,#667eea 0%,#764ba2 100%)'}:s))} className="px-2 py-1 rounded bg-gradient-to-r from-indigo-500 to-cyan-500 text-white text-xs">Градиент</button>
               <label className="px-2 py-1 rounded bg-white border text-xs cursor-pointer">Картинка <input ref={bgImageRef} type="file" accept="image/*" className="hidden" onChange={handleBgImage}/></label>
               <input type="color" value={cur.background.startsWith('#')? cur.background:'#ffffff'} onChange={e=>setSlides(sl=>sl.map((s,i)=>i===active?{...s,background:e.target.value, backgroundType:'solid'}:s))} className="w-8 h-8 rounded-full border"/>
             </div>
@@ -872,7 +872,7 @@ export default function PresentationEditor(){
             <div className="flex max-lg:flex-nowrap items-center gap-2 shrink-0">
               <span className="text-sm font-medium shrink-0">Переход слайда:</span>
               {TRANSITIONS.map(t=>(
-                <button key={t} onClick={()=>setSlides(sl=>sl.map((s,i)=>i===active?{...s,transition:t}:s))} className={`px-3 py-2 min-h-[44px] max-lg:min-h-[40px] rounded-lg border text-sm capitalize shrink-0 ${cur.transition===t?'bg-blue-600 text-white border-blue-600':'bg-white hover:bg-slate-50'}`}>{t}</button>
+                <button key={t} onClick={()=>setSlides(sl=>sl.map((s,i)=>i===active?{...s,transition:t}:s))} className={`px-3 py-2 min-h-[44px] max-lg:min-h-[40px] rounded-lg border text-sm capitalize shrink-0 ${cur.transition===t?'bg-indigo-600 text-white border-indigo-600':'bg-white hover:bg-slate-50'}`}>{t}</button>
               ))}
             </div>
           )}
@@ -880,7 +880,7 @@ export default function PresentationEditor(){
             <div className="flex max-lg:flex-nowrap items-center gap-2 shrink-0">
               <span className="text-sm font-medium shrink-0">Анимация блока:</span>
               {ANIMATIONS.map(a=>(
-                <button key={a} onClick={()=>selectedBlock && updateSelected({animation:a})} className={`px-3 py-2 min-h-[44px] max-lg:min-h-[40px] rounded-lg border text-sm capitalize shrink-0 ${curSelected?.animation===a?'bg-blue-600 text-white':'bg-white'}`}>{a}</button>
+                <button key={a} onClick={()=>selectedBlock && updateSelected({animation:a})} className={`px-3 py-2 min-h-[44px] max-lg:min-h-[40px] rounded-lg border text-sm capitalize shrink-0 ${curSelected?.animation===a?'bg-indigo-600 text-white':'bg-white'}`}>{a}</button>
               ))}
             </div>
           )}
@@ -947,7 +947,7 @@ export default function PresentationEditor(){
             })}
           </div>
           <div className="hidden lg:flex gap-1 mt-2">
-            <button onClick={()=>addSlide('blank')} className="flex-1 py-2 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center gap-2 text-sm"><Plus size={14}/> Новый слайд</button>
+            <button onClick={()=>addSlide('blank')} className="flex-1 py-2 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center gap-2 text-sm"><Plus size={14}/> Новый слайд</button>
             <button onClick={deleteSlide} disabled={slides.length<=1} title={slides.length<=1? 'Минимум один слайд':'Удалить текущий слайд'} className={`px-3 py-2 rounded-xl border font-bold flex items-center justify-center gap-1 text-sm ${slides.length<=1? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-white text-red-600 border-red-200 hover:bg-red-50'}`}><Trash2 size={14}/></button>
           </div>
         </div>
@@ -958,7 +958,7 @@ export default function PresentationEditor(){
             <button onClick={()=>setZoom(z=>Math.max(60,z-10))} className="p-1 rounded bg-white border"><ZoomOut size={12}/></button>
             <button onClick={()=>setZoom(z=>Math.min(140,z+10))} className="p-1 rounded bg-white border"><ZoomIn size={12}/></button>
             <button onClick={undo} className="ml-2 p-1 rounded bg-white border text-xs flex items-center gap-1"><RotateCw size={12}/> Отменить</button>
-            <button onClick={()=>setShowGrid(v=>!v)} className={`ml-2 p-1 rounded border text-xs flex items-center gap-1 ${showGrid?'bg-blue-600 text-white border-blue-600':'bg-white'}`}>{showGrid?'⊞ Сетка вкл':'⊞ Сетка'}</button>
+            <button onClick={()=>setShowGrid(v=>!v)} className={`ml-2 p-1 rounded border text-xs flex items-center gap-1 ${showGrid?'bg-indigo-600 text-white border-indigo-600':'bg-white'}`}>{showGrid?'⊞ Сетка вкл':'⊞ Сетка'}</button>
           </div>
 
           {isAbsolute ? (
@@ -999,7 +999,7 @@ export default function PresentationEditor(){
                           <button data-pe-overlay onClick={(e)=>{e.stopPropagation(); setSelectedBlock(b.id); deleteBlock(b.id)}} className={`absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center ${isSelected?'opacity-100':'opacity-0 group-hover:opacity-100'}`}><Trash2 size={9}/></button>
                           <button data-pe-overlay onClick={(e)=>{e.stopPropagation(); setSelectedBlock(b.id); setEditingText(b.id)}}
                             title="Править текст (двойной клик)" aria-label="Править текст"
-                            className={`absolute -top-2 -right-9 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center ${isSelected?'opacity-100':'opacity-0 group-hover:opacity-100'}`}><Pencil size={9}/></button>
+                            className={`absolute -top-2 -right-9 w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center ${isSelected?'opacity-100':'opacity-0 group-hover:opacity-100'}`}><Pencil size={9}/></button>
                           {isSelected && ['nw','n','ne','e','se','s','sw','w'].map((h:any)=>(
                             <div key={h} className="absolute z-10" style={{left: h.includes('w') ? 0 : h.includes('e') ? undefined : '50%', right: h.includes('e') ? 0 : undefined, top: h.includes('n') ? 0 : h.includes('s') ? undefined : '50%', bottom: h.includes('s') ? 0 : undefined, transform: (h==='n'||h==='s') ? 'translateX(-50%)' : (h==='e'||h==='w') ? 'translateY(-50%)' : undefined, width:0, height:0}}>
                               <span data-resize-handle={h} onMouseDown={(e)=>handleResizeStart(e,b.id,h)} onPointerDown={(e:any)=>handleResizeStart(e,b.id,h)} className="absolute block w-6 h-6 touch-none" style={{left:-12, top:-12, cursor: h==='nw'||h==='se' ? 'nwse-resize' : h==='ne'||h==='sw' ? 'nesw-resize' : h==='n'||h==='s' ? 'ns-resize' : 'ew-resize'}}>
@@ -1080,7 +1080,7 @@ export default function PresentationEditor(){
                           <div className={`grid gap-px w-full h-full ${((cells||[]).some((row:any)=>row.some((c:any)=>c?.style?.background)))?'bg-slate-200':'bg-transparent'}`} style={{gridTemplateColumns:`repeat(${cols},1fr)`, gridTemplateRows:`repeat(${rows},1fr)`}}>
                             {(cells||[]).flatMap((row:any[],ri:number)=>row.filter((cell:any)=>!cell?.merged).map((cell:any,ki:number)=>{
                               const k=`${ri}-${ki}`
-                              return <div key={k} contentEditable suppressContentEditableWarning onBlur={e=>updateCell(ri,ki,(e.target as HTMLElement).innerText)} onMouseDown={e=>e.stopPropagation()} className="p-1 text-[11px] leading-tight flex items-center overflow-hidden outline-none focus:bg-blue-50 min-h-[24px]" style={{gridColumn:`span ${cell?.colspan||1}`, gridRow:`span ${cell?.rowspan||1}`, background: cell?.style?.background||'transparent', color: cell?.style?.color||'#1e293b'}}>{cell?.text||''}</div>
+                              return <div key={k} contentEditable suppressContentEditableWarning onBlur={e=>updateCell(ri,ki,(e.target as HTMLElement).innerText)} onMouseDown={e=>e.stopPropagation()} className="p-1 text-[11px] leading-tight flex items-center overflow-hidden outline-none focus:bg-indigo-50 min-h-[24px]" style={{gridColumn:`span ${cell?.colspan||1}`, gridRow:`span ${cell?.rowspan||1}`, background: cell?.style?.background||'transparent', color: cell?.style?.color||'#1e293b'}}>{cell?.text||''}</div>
                             }))}
                           </div>
                           <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 hidden group-hover:flex gap-1 bg-white border rounded-full shadow px-1 py-1">
@@ -1094,14 +1094,14 @@ export default function PresentationEditor(){
                     if(b.type==='chart'){
                       const chartType=b.style?.chartType||'bar'
                       return <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} onPointerDown={(e:any)=>handleDragStart(e,b.id)} style={{...common, cursor:'move', touchAction:'none'}} className={`group border-2 ${selCls} rounded-lg bg-white flex flex-col items-center justify-center p-2 overflow-hidden ${getAnimationClass(b.animation||'нет')}`}>
-                        <div className="flex items-center gap-1 text-xs font-bold text-blue-700"><BarChart3 size={14}/> {chartType}</div>
+                        <div className="flex items-center gap-1 text-xs font-bold text-indigo-700"><BarChart3 size={14}/> {chartType}</div>
                         <div className="mt-1 w-full flex-1 flex items-end justify-center gap-1 min-h-[60px]">
                           {chartType==='pie' ? (
                             <div className="w-16 h-16 rounded-full border-4 border-blue-500 relative overflow-hidden" style={{background:`conic-gradient(#8b5cf6 0% 40%, #f59e0b 40% 70%, #10b981 70% 100%)`}}><div className="absolute inset-2 bg-white rounded-full flex items-center justify-center text-xs font-bold">pie</div></div>
                           ) : chartType==='line' ? (
                             <svg className="w-full h-12" viewBox="0 0 100 40"><polyline points="0,30 20,10 40,25 60,5 80,20 100,10" fill="none" stroke="#8b5cf6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
                           ) : (
-                            [40,70,50,80,60].map((h,i)=><div key={i} className="flex-1 bg-blue-500 rounded-t" style={{height:`${h}%`, background: '#8b5cf6'}}></div>)
+                            [40,70,50,80,60].map((h,i)=><div key={i} className="flex-1 bg-indigo-500 rounded-t" style={{height:`${h}%`, background: '#8b5cf6'}}></div>)
                           )}
                         </div>
                         <select value={chartType} onChange={e=>{e.stopPropagation(); setSlides(sl=>sl.map((s,i)=> i!==active? s: {...s, content:{...s.content, blocks:s.content.blocks.map(bb=> bb.id===b.id? {...bb, style:{...bb.style, chartType:e.target.value}}:bb)}}))}} onMouseDown={e=>e.stopPropagation()} onClick={e=>e.stopPropagation()} className="mt-1 text-xs border rounded px-1 py-0.5 bg-white">
@@ -1170,16 +1170,16 @@ export default function PresentationEditor(){
                               if(!cells[r]) cells[r]=[]
                               cells[r][c]={text:val, style: cells[r][c]?.style||{}}
                               setSlides(sl=>sl.map((s,i)=> i!==active? s: {...s, content:{...s.content, blocks:s.content.blocks.map(x=>x.id===b.id? {...x, table:{rows, cols, cells}}:x)}}))
-                            }} onFocus={()=>setSelectedBlock(b.id)} className="bg-white p-2 text-sm min-h-[32px] outline-none focus:bg-blue-50" style={{background: cell?.style?.background||'#fff'}}>{cell?.text||'Ячейка'}</div>
+                            }} onFocus={()=>setSelectedBlock(b.id)} className="bg-white p-2 text-sm min-h-[32px] outline-none focus:bg-indigo-50" style={{background: cell?.style?.background||'#fff'}}>{cell?.text||'Ячейка'}</div>
                           })}
                         </div>
                       </div>
                     )}
                     {b.type==='chart' && (
                       <div className="h-28 rounded-xl border-2 bg-white flex flex-col items-center justify-center gap-1 p-2">
-                        <div className="flex items-center gap-1 text-xs font-bold text-blue-700"><BarChart3 size={14}/> {b.style?.chartType||'bar'}</div>
+                        <div className="flex items-center gap-1 text-xs font-bold text-indigo-700"><BarChart3 size={14}/> {b.style?.chartType||'bar'}</div>
                         <div className="w-full h-12 flex items-end justify-center gap-1 mt-1">
-                          {(b as any).chartData?.values?.length ? (b as any).chartData.values.map((v:any,i:number)=><div key={i} className="flex-1 bg-blue-500 rounded-t" style={{height:`${Math.max(10, Math.min(100, v))}%`}}></div>) : [40,70,50,80,60].map((h,i)=><div key={i} className="flex-1 bg-blue-500 rounded-t" style={{height:`${h}%`}}></div>)}
+                          {(b as any).chartData?.values?.length ? (b as any).chartData.values.map((v:any,i:number)=><div key={i} className="flex-1 bg-indigo-500 rounded-t" style={{height:`${Math.max(10, Math.min(100, v))}%`}}></div>) : [40,70,50,80,60].map((h,i)=><div key={i} className="flex-1 bg-indigo-500 rounded-t" style={{height:`${h}%`}}></div>)}
                         </div>
                         <div className="text-xs text-slate-400 mt-1">Данные в Свойствах →</div>
                       </div>

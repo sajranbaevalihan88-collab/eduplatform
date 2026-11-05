@@ -56,8 +56,8 @@ export default function Dashboard(){
     }
   },[])
   const cards=[
-    {label:t('subjects'),value:stats.subjects,icon:BookOpen,color:'bg-blue-600',to:'/subjects'},
-    {label:t('lessons'),value:stats.lessons,icon:Layers,color:'bg-blue-600',to:'/lessons'},
+    {label:t('subjects'),value:stats.subjects,icon:BookOpen,color:'bg-indigo-600',to:'/subjects'},
+    {label:t('lessons'),value:stats.lessons,icon:Layers,color:'bg-indigo-600',to:'/lessons'},
     {label:t('presentations'),value:stats.presentations,icon:PresIcon,color:'bg-orange-500',to:'/presentations'},
     {label:t('tests'),value:stats.tests,icon:FlaskConical,color:'bg-rose-600',to:'/tests'},
     {label:t('classes'),value:stats.classes,icon:GraduationCap,color:'bg-violet-600',to:'/classes'},
@@ -85,7 +85,7 @@ export default function Dashboard(){
               <div className={`w-12 h-12 rounded-xl ${c.color} flex items-center justify-center text-white`}><c.icon size={22}/></div>
               <span className="text-3xl font-display font-extrabold"><CountUp value={c.value} /></span>
             </div>
-            <div className="mt-3 font-semibold group-hover:text-blue-600 transition-colors">{c.label}</div>
+            <div className="mt-3 font-semibold group-hover:text-indigo-600 transition-colors">{c.label}</div>
             <div className="text-sm text-slate-500 flex items-center gap-1 mt-1 group-hover:gap-2 transition-all">{t('dash_go')} <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform"/></div>
           </Link>
         ))}
@@ -101,17 +101,17 @@ export default function Dashboard(){
         <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 p-6 card-hover">
           <h3 className="font-bold text-lg flex items-center gap-2">{t('dash_how')}</h3>
           <ol className="mt-4 space-y-3 text-sm stagger">
-            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors"><span className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0">1</span> {t('dash_step1')}</li>
-            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors"><span className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0">2</span> {t('dash_step2')}</li>
-            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors"><span className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0">3</span> {t('dash_step3')}</li>
-            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors"><span className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0">4</span> {t('dash_step4')}</li>
+            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors"><span className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">1</span> {t('dash_step1')}</li>
+            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors"><span className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">2</span> {t('dash_step2')}</li>
+            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors"><span className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">3</span> {t('dash_step3')}</li>
+            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors"><span className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">4</span> {t('dash_step4')}</li>
           </ol>
         </div>
         <div className="bg-white rounded-2xl border border-slate-100 p-6 card-hover">
           <h3 className="font-bold flex items-center gap-2">{t('dash_quick')}</h3>
           <div className="grid grid-cols-2 gap-3 mt-4 stagger">
-            <Link to="/lessons/new" className="p-4 rounded-xl bg-blue-700 text-white text-center font-medium flex flex-col items-center gap-2 shadow-md btn-hover"><Layers size={24}/>{t('dash_new_lesson')}</Link>
-            <Link to="/board" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-blue-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><PenTool size={24}/>{t('board')}</Link>
+            <Link to="/lessons/new" className="p-4 rounded-xl bg-indigo-600 text-white text-center font-medium flex flex-col items-center gap-2 shadow-md btn-hover"><Layers size={24}/>{t('dash_new_lesson')}</Link>
+            <Link to="/board" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-indigo-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><PenTool size={24}/>{t('board')}</Link>
             <Link to="/presentations/new" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-orange-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><Cuboid size={24}/>{t('dash_pres_one')}</Link>
             <Link to="/tests/new" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-rose-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><FlaskConical size={24}/>{t('dash_test_one')}</Link>
           </div>

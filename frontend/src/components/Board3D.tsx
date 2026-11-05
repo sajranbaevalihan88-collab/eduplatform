@@ -376,21 +376,21 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
       {!hudOpen && (
         <button onClick={() => setHudOpen(true)} title={t('bd3_panel_title')} aria-label={t('bd3_panel_title')}
           className="absolute top-2 left-2 z-10 w-12 h-12 rounded-2xl bg-white/95 dark:bg-slate-800/95 backdrop-blur border shadow-lg flex items-center justify-center">
-          <Shapes size={22} className="text-blue-600" />
+          <Shapes size={22} className="text-indigo-600" />
         </button>
       )}
       {hudOpen && (
       <div className="absolute top-2 left-2 z-10 flex flex-col gap-2 bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl rounded-2xl border p-2 shadow-lg max-w-[210px]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 px-1 text-[11px] font-bold text-slate-500 dark:text-slate-400">
-            <span className="w-2 h-2 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400" aria-hidden="true" />
+            <span className="w-2 h-2 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-400" aria-hidden="true" />
             {t('bd3_panel_title')}
           </div>
           <button onClick={() => setHudOpen(false)} title={t('a11y_close')} aria-label={t('a11y_close')} className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"><X size={16} /></button>
         </div>
         <div className="grid grid-cols-5 gap-1">
           {shapeBtns.map(([ty, label, Icon]) => (
-            <button key={ty} onClick={() => setType(ty)} title={label} aria-label={label} className={`h-11 rounded-xl border flex items-center justify-center ${type === ty ? 'bg-blue-600 text-white border-blue-600' : 'bg-white hover:bg-slate-50'}`}><Icon size={18} /></button>
+            <button key={ty} onClick={() => setType(ty)} title={label} aria-label={label} className={`h-11 rounded-xl border flex items-center justify-center ${type === ty ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white hover:bg-slate-50'}`}><Icon size={18} /></button>
           ))}
         </div>
         <div className="flex items-center gap-1.5">
@@ -406,7 +406,7 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
           <button onClick={del} disabled={sel == null} title={t('bd3_del')} className="flex-1 px-2 py-2.5 min-h-[44px] rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-40"><Trash2 size={14} /> {t('bd3_del')}</button>
           <button onClick={reset} className="px-2 py-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center" title={t('bd3_reset')}><RotateCcw size={16} /></button>
         </div>
-        <button onClick={snap} className="px-2 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-1 min-h-[44px]"><Camera size={14} /> {t('bd3_snap')}</button>
+        <button onClick={snap} className="px-2 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold flex items-center justify-center gap-1 min-h-[44px]"><Camera size={14} /> {t('bd3_snap')}</button>
         <div className="text-[10px] text-slate-400 px-1 text-center">{count ? `${count}` : ''} {sel != null ? `• ${t('bd3_sel')}` : t('bd3_none')}</div>
       </div>
       )}

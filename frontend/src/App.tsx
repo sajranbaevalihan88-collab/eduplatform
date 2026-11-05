@@ -24,7 +24,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-function ErrorFallback(){ return <div className="p-8 text-center"><h2 className="text-xl font-bold">Что-то пошло не так</h2><a href="/" className="text-blue-600 underline">На главную</a></div> }
+function ErrorFallback(){ return <div className="p-8 text-center"><h2 className="text-xl font-bold">Что-то пошло не так</h2><a href="/" className="text-indigo-600 underline">На главную</a></div> }
 
 // Только для учителей: ученик видит заглушку (создавать нельзя, бэк тоже запретит)
 function TeacherRoute({ children }: { children: React.ReactNode }) {
@@ -35,7 +35,7 @@ function TeacherRoute({ children }: { children: React.ReactNode }) {
       <div className="text-5xl">🔒</div>
       <h2 className="text-xl font-bold">Только для учителей</h2>
       <p className="text-slate-500 text-sm">Ученики могут открывать уроки, тесты, игры и код, а создавать — нет. Word и заметки доступны в профиле.</p>
-      <Link to="/" className="inline-block px-5 py-2.5 rounded-xl bg-blue-600 text-white font-semibold">На главную</Link>
+      <Link to="/" className="inline-block px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold">На главную</Link>
     </div>
   )
   return <>{children}</>
@@ -66,7 +66,7 @@ import Games from './pages/Games'
 import Guide from './pages/Guide'
 import Arkan from './pages/Arkan'
 import Sprint from './pages/Sprint'
-import Pairs from './pages/Pairs'
+
 import Memory from './pages/Memory'
 import ColorMatch from './pages/ColorMatch'
 import Hangman from './pages/Hangman'
@@ -114,8 +114,7 @@ export default function App() {
                 <Route path="/guide" element={<Guide />} />
                 <Route path="/games/arkan" element={<Arkan />} />
                 <Route path="/games/sprint" element={<Sprint />} />
-                <Route path="/games/pairs" element={<Pairs />} />
-                <Route path="/games/memory" element={<Memory />} />
+                                <Route path="/games/memory" element={<Memory />} />
                 <Route path="/games/colormatch" element={<ColorMatch />} />
                 <Route path="/games/hangman" element={<Hangman />} />
                 <Route path="/games/word-search" element={<WordSearch />} />

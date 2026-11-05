@@ -27,9 +27,9 @@ export default function Tests(){
           <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-rose-600 text-white"><FlaskConical size={20}/></span> {t('tests')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{filtered.length}</span></h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:min-w-[240px]"><div className="relative group flex-1 max-w-full sm:max-w-[260px] md:max-w-[320px]"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('tests_search_ph')} className="pl-9 pr-4 py-2.5 rounded-xl border bg-white w-full focus-ring"/></div></div>
+          <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:min-w-[240px]"><div className="relative group flex-1 max-w-full sm:max-w-[260px] md:max-w-[320px]"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('tests_search_ph')} className="pl-9 pr-4 py-2.5 rounded-xl border bg-white w-full focus-ring"/></div></div>
           {!isStudent() && (
-          <Link to="/tests/new" className="px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('tests_create')}</Link>
+          <Link to="/tests/new" className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('tests_create')}</Link>
           )}
         </div>
       </div>
@@ -37,14 +37,14 @@ export default function Tests(){
         {filtered.map(item=>(
           <div key={item.id} className="bg-white rounded-2xl border p-5 hover:shadow-md transition">
             <div className="flex items-start justify-between">
-              <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center"><FlaskConical size={20}/></div>
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center"><FlaskConical size={20}/></div>
               <span className="text-xs px-2 py-1 rounded-full bg-slate-100">{item.questions_count||item.questions?.length||0} {t('tests_questions')}</span>
             </div>
             <h3 className="font-bold mt-3">{item.title}</h3>
             <p className="text-sm text-slate-500 line-clamp-2">{item.description||t('tests_no_desc')}</p>
             <div className="flex gap-2 text-xs mt-3 text-slate-500"><span className="flex items-center gap-1"><Target size={12}/> {t('tests_pass')} {item.pass_score}%</span><span className="flex items-center gap-1"><Clock size={12}/> {item.time_limit||t('tests_no_limit')} {t('tests_min')}</span></div>
             <div className="flex gap-2 mt-4">
-              <Link to={`/tests/${item.id}/take`} onClick={()=>requestGuardFullscreen()} className="flex-1 px-3 py-2.5 min-h-[44px] rounded-xl bg-blue-600 text-white text-sm font-semibold text-center flex items-center justify-center">{t('tests_take')}</Link>
+              <Link to={`/tests/${item.id}/take`} onClick={()=>requestGuardFullscreen()} className="flex-1 px-3 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 text-white text-sm font-semibold text-center flex items-center justify-center">{t('tests_take')}</Link>
               {canEdit(item) ? <Link to={`/tests/${item.id}`} className="px-3 py-2.5 min-h-[44px] rounded-xl bg-slate-100 text-sm font-medium flex items-center justify-center">{t('edit')}</Link> : <span className="px-3 py-2.5 min-h-[44px] rounded-xl bg-slate-50 text-slate-400 text-sm flex items-center justify-center" title={t('tests_lock')}>🔒</span>}
             </div>
           </div>

@@ -301,7 +301,7 @@ export default function Sprint() {
           ? <div className="font-bold text-emerald-600">{t('sprint_beat')}</div>
           : <div className="text-slate-500 dark:text-slate-400">{t('sprint_miss_a')} {ghostWpm - wpm}{t('sprint_miss_b')}</div>}
         <div className="flex gap-3 justify-center">
-          <button onClick={() => start()} autoFocus className="px-6 py-3 min-h-[56px] rounded-2xl bg-blue-600 text-white font-bold flex items-center gap-2">
+          <button onClick={() => start()} autoFocus className="px-6 py-3 min-h-[56px] rounded-2xl bg-indigo-600 text-white font-bold flex items-center gap-2">
             <RotateCcw size={18} /> {t('sprint_again')}
           </button>
           <a href="/games" className="px-6 py-3 min-h-[56px] rounded-2xl bg-white border dark:bg-slate-800 dark:text-white dark:border-slate-700 font-bold">{t('sprint_to_games')}</a>
@@ -313,13 +313,13 @@ export default function Sprint() {
   return (
     <div className="max-w-3xl mx-auto space-y-4">
       <h1 className="sr-only">{t('sprint_sr')}</h1>
-      <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 dark:text-blue-400">
+      <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-indigo-600 dark:text-indigo-400">
         {t('sprint_to_games_arrow')}
       </a>
       <div className="flex flex-wrap items-center gap-2">
         {[15, 30, 60].map(m => (
           <button key={m} onClick={() => { setMode(m); start(m); }}
-            className={`px-4 py-2.5 min-h-[48px] rounded-xl font-bold ${mode === m ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-800 dark:text-white border dark:border-slate-700'}`}>{m}{t('sprint_sec')}</button>
+            className={`px-4 py-2.5 min-h-[48px] rounded-xl font-bold ${mode === m ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 dark:text-white border dark:border-slate-700'}`}>{m}{t('sprint_sec')}</button>
         ))}
         <select value={src} onChange={e => { const v = e.target.value as Src; setSrc(v); // смена набора сразу даёт новый текст, без «перезапуска вручную»
           if (v === 'ru' || v === 'kg' || v === 'en') start(mode, v) }} aria-label={t('sprint_words_aria')}
@@ -332,7 +332,7 @@ export default function Sprint() {
         </select>
         <label className="flex items-center gap-2 text-sm font-bold dark:text-slate-200">
           <button onClick={() => setGhost(g => !g)} aria-pressed={ghost}
-            className={`w-12 h-7 rounded-full transition ${ghost ? 'bg-blue-600' : 'bg-slate-300'} relative`}>
+            className={`w-12 h-7 rounded-full transition ${ghost ? 'bg-indigo-600' : 'bg-slate-300'} relative`}>
             <span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${ghost ? 'left-6' : 'left-1'}`} />
           </button>
           {t('sprint_ghost')}
@@ -363,7 +363,7 @@ export default function Sprint() {
               <div ref={wrapRef} className="relative text-2xl sm:text-3xl leading-[48px] font-medium select-none transition-transform duration-150"
                 style={{ transform: `translateY(${-shiftY}px)` }}>
                 {words.map((w, i) => renderWord(w, i))}
-                <div className="mt-caret bg-blue-600" style={{
+                <div className="mt-caret bg-indigo-600" style={{
                   position: 'absolute', left: caret.left, top: caret.top,
                   width: 3, height: caret.h, borderRadius: 2,
                 }} />

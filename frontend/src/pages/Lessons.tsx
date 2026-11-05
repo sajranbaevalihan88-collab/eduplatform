@@ -50,18 +50,18 @@ export default function Lessons(){
     <div className="space-y-6 page-enter">
       <div className="flex flex-wrap items-center justify-between gap-3 animate-fadeIn">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-blue-700 text-white"><Layers size={20}/></span> {t('lessons')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{filtered.length}</span></h1>
-          {subjectFilter && <span className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-100 text-blue-700 text-sm font-medium">{t('lessons_subject')} {subjectName||subjectFilter} <button onClick={()=>setSearchParams({})} className="p-1 rounded-full hover:bg-blue-200"><X size={14}/></button></span>}
+          <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-indigo-600 text-white"><Layers size={20}/></span> {t('lessons')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{filtered.length}</span></h1>
+          {subjectFilter && <span className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-sm font-medium">{t('lessons_subject')} {subjectName||subjectFilter} <button onClick={()=>setSearchParams({})} className="p-1 rounded-full hover:bg-indigo-200"><X size={14}/></button></span>}
         </div>
         <div className="flex flex-wrap gap-2">
-          <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:min-w-[240px]"><div className="relative group flex-1 max-w-full sm:max-w-[260px] md:max-w-[320px]"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('lessons_search_ph')} className="pl-9 pr-4 py-2.5 rounded-xl border bg-white w-full focus-ring"/></div></div>
+          <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:min-w-[240px]"><div className="relative group flex-1 max-w-full sm:max-w-[260px] md:max-w-[320px]"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('lessons_search_ph')} className="pl-9 pr-4 py-2.5 rounded-xl border bg-white w-full focus-ring"/></div></div>
           {!isStudent() && (
-          <Link to="/lessons/new" className="px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('create')}</Link>
+          <Link to="/lessons/new" className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('create')}</Link>
           )}
         </div>
       </div>
       {subjectFilter && (
-        <div className="sm:hidden flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-700">
+        <div className="sm:hidden flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-sm text-indigo-700">
           <span>{t('lessons_filter')} {subjectName||subjectFilter}</span>
           <button onClick={()=>setSearchParams({})} className="ml-auto px-2 py-1 rounded-full bg-white border text-xs">{t('lessons_reset')}</button>
         </div>
@@ -76,9 +76,9 @@ export default function Lessons(){
               <div className="mt-3 flex items-center gap-2 text-xs text-slate-400"><span>{l.blocks_count} {t('lessons_blocks')}</span> • <span>{new Date(l.created_at).toLocaleDateString()}</span></div>
             </div>
             <div className="px-5 py-3 bg-slate-50 border-t flex gap-2" onClick={e=>e.stopPropagation()}>
-              <button onClick={()=>nav(`/lessons/${l.id}`)} className="flex-1 text-sm font-semibold text-blue-700 text-left">{t('lessons_open')}</button>
+              <button onClick={()=>nav(`/lessons/${l.id}`)} className="flex-1 text-sm font-semibold text-indigo-700 text-left">{t('lessons_open')}</button>
               {canEdit(l) ? (
-                <button onClick={()=>nav(`/lessons/${l.id}/edit`)} className="text-sm px-4 py-2 min-h-[44px] rounded-full bg-white border hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors">{t('edit')}</button>
+                <button onClick={()=>nav(`/lessons/${l.id}/edit`)} className="text-sm px-4 py-2 min-h-[44px] rounded-full bg-white border hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 transition-colors">{t('edit')}</button>
               ) : (
                 <span className="text-sm px-3 py-2 text-slate-400" title={t('lessons_edit_lock')}>🔒</span>
               )}
@@ -92,13 +92,13 @@ export default function Lessons(){
           <div className="text-4xl mb-3">📘</div>
           <div className="text-slate-400 mb-5">
             {q ? (
-              <div>{t('lessons_nothing_found')} "<b>{q}</b>" <button onClick={()=>setQ('')} className="ml-2 px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-sm">{t('lessons_reset_short')}</button></div>
+              <div>{t('lessons_nothing_found')} "<b>{q}</b>" <button onClick={()=>setQ('')} className="ml-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 text-sm">{t('lessons_reset_short')}</button></div>
             ) : (
               t('lessons_empty')
             )}
           </div>
           {!q && !isStudent() && (
-            <Link to="/lessons/new" data-testid="lessons-cta" className="inline-flex px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-semibold btn-hover shadow-md"><Plus size={18} className="inline mr-1"/>{t('create_lesson')}</Link>
+            <Link to="/lessons/new" data-testid="lessons-cta" className="inline-flex px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold btn-hover shadow-md"><Plus size={18} className="inline mr-1"/>{t('create_lesson')}</Link>
           )}
         </div>
       )}

@@ -30,7 +30,6 @@ export default function Games() {
 
   const arkanBest = best('edu-arkan-best')
   const sprintBest = best('edu-sprint-best-60') || best('edu-sprint-best-30') || best('edu-sprint-best-15')
-  const pairsBest = best('edu-pairs-best')
   const memoryBest = best('edu-memory-best')
   const colorBest = best('edu-colormatch-best')
   const hangBest = best('edu-hangman-best')
@@ -47,11 +46,6 @@ export default function Games() {
       to: '/games/sprint', icon: '⌨️', title: t('games_sprint'),
       desc: t('games_sprint_desc'),
       best: sprintBest ? `🏆 ${sprintBest} WPM` : null, ready: true,
-    },
-    {
-      to: '/games/pairs', icon: '🃏', title: t('games_pairs'),
-      desc: t('games_pairs_desc'),
-      best: pairsBest ? `🏆 ${pairsBest}` : null, ready: true,
     },
     {
       to: '/games/memory', icon: '🐒', title: t('games_memory'),
@@ -84,7 +78,7 @@ export default function Games() {
     <div className="max-w-4xl mx-auto space-y-5">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="font-display font-bold text-2xl dark:text-white flex items-center gap-2">
-          <span className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-amber-400 text-white"><Gamepad2 size={20} /></span> {t('games')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{cards.length}</span>
+          <span className="p-2 rounded-xl bg-gradient-to-br from-indigo-500 to-amber-400 text-white"><Gamepad2 size={20} /></span> {t('games')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{cards.length}</span>
         </h1>
         <button onClick={toggleProjector} title={t('games_proj_hint')}
           aria-pressed={projector}
@@ -105,15 +99,15 @@ export default function Games() {
             <div className="font-display font-bold text-lg dark:text-white">{c.title}</div>
             <div className="text-sm text-slate-500 dark:text-slate-400 flex-1">{c.desc}</div>
             {c.best && <div className="text-sm font-bold text-amber-600 dark:text-amber-400">{c.best}</div>}
-            <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-bold text-sm">
+            <div className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-bold text-sm">
               {t('games_play')} <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
             </div>
           </Link>
         ))}
       </div>
 
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-2xl p-4 text-sm dark:text-slate-200 flex items-start gap-2">
-        <Zap size={16} className="mt-0.5 shrink-0 text-blue-600" />
+      <div className="bg-indigo-50 dark:bg-blue-900/20 border border-indigo-200 dark:border-indigo-700 rounded-2xl p-4 text-sm dark:text-slate-200 flex items-start gap-2">
+        <Zap size={16} className="mt-0.5 shrink-0 text-indigo-600" />
         <span>{t('games_tip_a')} <b>{t('games_tip_proj')}</b> {t('games_tip_b')}</span>
       </div>
     </div>

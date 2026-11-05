@@ -503,7 +503,7 @@ export default function WordSearch() {
     <div className="min-h-[calc(100vh-64px)] w-full bg-slate-100 dark:bg-slate-950 px-3 py-6 lg:px-8" data-page="wordsearch">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center gap-3">
-          <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 dark:text-blue-400">
+          <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-indigo-600 dark:text-indigo-400">
             {t('hm_to_games')}
           </a>
         </div>
@@ -565,7 +565,7 @@ export default function WordSearch() {
               </div>
               <div className="mt-5 flex flex-col sm:flex-row gap-2">
                 <button onClick={nextLevel}
-                  className="flex-1 px-6 py-3 min-h-[56px] rounded-2xl bg-blue-600 text-white font-bold text-lg">
+                  className="flex-1 px-6 py-3 min-h-[56px] rounded-2xl bg-indigo-600 text-white font-bold text-lg">
                   {t('ws_next')} →
                 </button>
                 {custom && (
@@ -636,7 +636,7 @@ export default function WordSearch() {
                       <button key={set.id} onClick={() => { playSaved(set); setEntry(null) }}
                         className="w-full flex items-center gap-2 bg-slate-50 dark:bg-slate-800 rounded-xl px-3 py-2 text-left">
                         <span className="flex-1 min-w-0 truncate font-bold text-sm dark:text-white">✨ {set.name} <span className="text-slate-400 font-normal">({set.words.length})</span></span>
-                        <span className="p-1.5 rounded-lg bg-blue-600 text-white"><Play size={12} /></span>
+                        <span className="p-1.5 rounded-lg bg-indigo-600 text-white"><Play size={12} /></span>
                       </button>
                     ))}
                   </div>
@@ -681,10 +681,10 @@ export default function WordSearch() {
               </div>
               )}
               <div className="flex flex-wrap gap-2">
-                <button onClick={playNow} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-blue-600 text-white font-bold flex items-center gap-1.5"><Play size={15} /> {t('ws_play_set')}</button>
+                <button onClick={playNow} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-indigo-600 text-white font-bold flex items-center gap-1.5"><Play size={15} /> {t('ws_play_set')}</button>
                 <button onClick={saveSet} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-emerald-600 text-white font-bold flex items-center gap-1.5"><Save size={15} /> {t('ws_save_set')}</button>
                 {lessonId && (
-                  <button onClick={fromLesson} disabled={genBusy} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold flex items-center gap-1.5 disabled:opacity-50">
+                  <button onClick={fromLesson} disabled={genBusy} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1.5 disabled:opacity-50">
                     <Sparkles size={15} /> {t('ws_from_lesson')}
                   </button>
                 )}
@@ -709,7 +709,7 @@ export default function WordSearch() {
                   {sets.map(set => (
                     <div key={set.id} className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 rounded-xl px-3 py-2">
                       <span className="flex-1 min-w-0 truncate font-bold text-sm dark:text-white">✨ {set.name} <span className="text-slate-400 font-normal">({set.words.length})</span></span>
-                      <button onClick={() => playSaved(set)} aria-label={t('games_play')} className="p-2 min-h-[36px] min-w-[36px] rounded-lg bg-blue-600 text-white"><Play size={14} /></button>
+                      <button onClick={() => playSaved(set)} aria-label={t('games_play')} className="p-2 min-h-[36px] min-w-[36px] rounded-lg bg-indigo-600 text-white"><Play size={14} /></button>
                       <button onClick={() => shareSet(set)} aria-label={t('ws_share')} className={`p-2 min-h-[36px] min-w-[36px] rounded-lg ${shared === set.id ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-700 dark:text-white'}`}><Share2 size={14} /></button>
                       <button onClick={() => delSet(set.id)} aria-label={t('ws_del')} className="p-2 min-h-[36px] min-w-[36px] rounded-lg bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400"><Trash2 size={14} /></button>
                     </div>

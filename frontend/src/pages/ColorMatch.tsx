@@ -164,7 +164,7 @@ export default function ColorMatch() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 dark:text-blue-400">
+      <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-indigo-600 dark:text-indigo-400">
         {t('cm_to_games')}
       </a>
       <h1 className="font-display font-bold text-2xl dark:text-white">{t('cm_title')} 🎨</h1>
@@ -174,15 +174,15 @@ export default function ColorMatch() {
           <p className="text-slate-500 dark:text-slate-400">{t('cm_desc')}</p>
           <div className="flex flex-wrap gap-2">
             <button onClick={() => setMode('odd')} aria-pressed={mode === 'odd'}
-              className={`px-4 py-3 min-h-[52px] rounded-xl text-sm font-bold border ${mode === 'odd' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-800 dark:text-white dark:border-slate-700'}`}>
+              className={`px-4 py-3 min-h-[52px] rounded-xl text-sm font-bold border ${mode === 'odd' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-800 dark:text-white dark:border-slate-700'}`}>
               🎨 {t('cm_mode_odd')}
             </button>
             <button onClick={() => setMode('stroop')} aria-pressed={mode === 'stroop'}
-              className={`px-4 py-3 min-h-[52px] rounded-xl text-sm font-bold border ${mode === 'stroop' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-800 dark:text-white dark:border-slate-700'}`}>
+              className={`px-4 py-3 min-h-[52px] rounded-xl text-sm font-bold border ${mode === 'stroop' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-800 dark:text-white dark:border-slate-700'}`}>
               🔤 {t('cm_mode_stroop')}
             </button>
           </div>
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-2xl p-4 space-y-1.5 text-sm dark:text-slate-200">
+          <div className="bg-indigo-50 dark:bg-blue-900/20 border border-indigo-200 dark:border-indigo-700 rounded-2xl p-4 space-y-1.5 text-sm dark:text-slate-200">
             <div>• {mode === 'odd' ? t('cm_rule1') : t('cm_stroop_rule')}</div>
             <div>• {t('cm_rule2')}</div>
           </div>
@@ -190,12 +190,12 @@ export default function ColorMatch() {
             <span className="text-xs font-bold text-slate-500">{t('cm_time')}:</span>
             {TIMES.map(x => (
               <button key={x.v} onClick={() => setTimePick(x.v)}
-                className={`px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-bold border ${timePick === x.v ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-800 dark:text-white dark:border-slate-700'}`}>
+                className={`px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-bold border ${timePick === x.v ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-800 dark:text-white dark:border-slate-700'}`}>
                 {x.label}{x.v >= 60 ? t('cm_min') : t('cm_sec')}
               </button>
             ))}
           </div>
-          <button onClick={startGame} className="w-full px-6 py-4 min-h-[56px] rounded-2xl bg-blue-600 text-white font-bold text-lg">
+          <button onClick={startGame} className="w-full px-6 py-4 min-h-[56px] rounded-2xl bg-indigo-600 text-white font-bold text-lg">
             🎨 {t('cm_start')}
           </button>
           {best && <div className="text-sm font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1"><Trophy size={15} /> {t('cm_best')}: {best}</div>}
@@ -249,7 +249,7 @@ export default function ColorMatch() {
           <div className="font-display font-bold text-2xl dark:text-white">{t('cm_gameover')}</div>
           <div className="text-slate-500 dark:text-slate-400">{t('cm_score')}: {score} • 🔥 {t('cm_maxstreak')}: {maxStreak}</div>
           {best && <div className="font-bold text-amber-600 dark:text-amber-400 mt-1">{t('cm_best')}: {best}</div>}
-          <button onClick={startGame} className="mt-4 px-6 py-3 min-h-[52px] rounded-xl bg-blue-600 text-white font-bold inline-flex items-center gap-2 mx-auto"><RotateCcw size={17} /> {t('cm_start')}</button>
+          <button onClick={startGame} className="mt-4 px-6 py-3 min-h-[52px] rounded-xl bg-indigo-600 text-white font-bold inline-flex items-center gap-2 mx-auto"><RotateCcw size={17} /> {t('cm_start')}</button>
         </div>
       )}
     </div>

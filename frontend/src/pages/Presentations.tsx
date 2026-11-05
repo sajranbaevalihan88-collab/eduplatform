@@ -39,9 +39,9 @@ export default function Presentations(){
           <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-orange-500 text-white"><Icon size={20}/></span> {t('presentations')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{filtered.length}</span></h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:min-w-[240px]"><div className="relative group flex-1 max-w-full sm:max-w-[260px] md:max-w-[320px]"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('pres_search_ph')} className="pl-9 pr-4 py-2.5 rounded-xl border bg-white w-full focus-ring"/></div></div>
+          <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:min-w-[240px]"><div className="relative group flex-1 max-w-full sm:max-w-[260px] md:max-w-[320px]"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('pres_search_ph')} className="pl-9 pr-4 py-2.5 rounded-xl border bg-white w-full focus-ring"/></div></div>
           {!isStudent() && (
-        <Link to="/presentations/new" className="px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('create')}</Link>
+        <Link to="/presentations/new" className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('create')}</Link>
         )}
         </div>
       </div>
@@ -49,7 +49,7 @@ export default function Presentations(){
         {filtered.map(p=>(
           <div key={p.id} className="bg-white rounded-2xl border overflow-hidden hover:shadow-lg transition group relative">
             <Link to={`/presentations/${p.id}`} className="block">
-              <div className="h-40 bg-blue-700 flex items-center justify-center text-white relative">
+              <div className="h-40 bg-indigo-600 flex items-center justify-center text-white relative">
                 <Icon size={48} opacity={0.9}/>
                 <span className="absolute bottom-3 right-3 text-xs bg-black/20 px-2 py-1 rounded-full">{p.slides_count||p.slides?.length||0} {t('pres_slides')}</span>
               </div>
@@ -68,7 +68,7 @@ export default function Presentations(){
           <div className="text-4xl mb-3">🎬</div>
           <div className="text-slate-400 mb-5">{q ? t('pres_empty_search') : t('pres_empty')}</div>
           {!q && !isStudent() && (
-            <Link to="/presentations/new" data-testid="pres-cta" className="inline-flex px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-semibold btn-hover shadow-md"><Plus size={18} className="inline mr-1"/>{t('dash_new_pres')}</Link>
+            <Link to="/presentations/new" data-testid="pres-cta" className="inline-flex px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold btn-hover shadow-md"><Plus size={18} className="inline mr-1"/>{t('dash_new_pres')}</Link>
           )}
         </div>
       )}

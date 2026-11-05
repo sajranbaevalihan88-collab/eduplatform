@@ -4,7 +4,7 @@ import { useLang } from '../context/LangContext'
 import Reveal from '../components/Reveal'
 
 const FEATURES = [
-  { icon: Layers, tint: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300', title: 'Уроки-конструктор', desc: 'Текст, видео, тесты и код — урок собирается из блоков и меняется перетаскиванием.', to: '/lessons' },
+  { icon: Layers, tint: 'bg-indigo-100 text-indigo-700 dark:bg-blue-900/50 dark:text-indigo-300', title: 'Уроки-конструктор', desc: 'Текст, видео, тесты и код — урок собирается из блоков и меняется перетаскиванием.', to: '/lessons' },
   { icon: Presentation, tint: 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300', title: 'Презентации как PowerPoint', desc: '14 фигур, анимации и переходы, импорт .pptx и .pdf, показ на весь экран.', to: '/presentations' },
   { icon: PenTool, tint: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300', title: 'Доска 2D/3D', desc: 'Рисование как в Figma и режим стереометрии с настоящими 3D-фигурами и тенями.', to: '/board' },
   { icon: FlaskConical, tint: 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300', title: 'Тесты с автопроверкой', desc: 'Конструктор вопросов, таймер, режим «как Google Forms», оценки сразу в журнал.', to: '/tests' },
@@ -27,14 +27,14 @@ function HeroCollage() {
       {/* карточка урока */}
       <div className="absolute top-6 left-6 w-[290px] glass dark:!bg-slate-800/85 dark:!border-slate-600 rounded-2xl shadow-2xl p-4 animate-floatSlow" style={{ ['--r' as any]: '-3deg' }}>
         <div className="flex items-center gap-2.5">
-          <span className="w-9 h-9 rounded-xl bg-blue-700 text-white flex items-center justify-center text-lg">🧊</span>
+          <span className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-lg">🧊</span>
           <div>
             <div className="font-bold text-sm text-slate-900 dark:text-white">Урок: Стереометрия</div>
             <div className="text-[11px] text-slate-500 dark:text-slate-400">Геометрия · 12 блоков</div>
           </div>
         </div>
         <div className="mt-3 h-2 rounded-full bg-slate-200/80 dark:bg-slate-700 overflow-hidden">
-          <div className="h-full rounded-full bg-blue-600 animate-progress" />
+          <div className="h-full rounded-full bg-indigo-600 animate-progress" />
         </div>
         <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
           <CheckCircle2 size={13} className="text-emerald-500" /> 8 из 12 блоков пройдено
@@ -46,7 +46,7 @@ function HeroCollage() {
         <div className="mt-1.5 font-semibold text-sm text-slate-900 dark:text-white">Чему равен объём куба?</div>
         <div className="mt-2.5 space-y-1.5">
           <div className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-xs text-slate-600 dark:text-slate-300">a · a · a</div>
-          <div className="px-2.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold flex items-center justify-between">6 · a² <span>✓</span></div>
+          <div className="px-2.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold flex items-center justify-between">6 · a² <span>✓</span></div>
         </div>
       </div>
       {/* карточка кода */}
@@ -80,7 +80,7 @@ export default function Landing() {
           <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-10 items-center">
             <div>
               <Reveal>
-                <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-200 text-xs font-bold shadow-sm">
+                <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-700 text-indigo-700 dark:text-blue-200 text-xs font-bold shadow-sm">
                   <Sparkles size={14} /> {t('new_board_anim')}
                 </span>
               </Reveal>
@@ -95,18 +95,18 @@ export default function Landing() {
               </Reveal>
               <Reveal delay={260}>
                 <div className="mt-8 flex flex-wrap gap-3">
-                  <Link to="/lessons" className="px-6 py-3.5 min-h-[48px] rounded-xl bg-blue-700 dark:bg-white dark:text-slate-900 text-white font-bold flex items-center gap-2 hover:bg-blue-800 dark:hover:bg-slate-100 transition-colors">
+                  <Link to="/lessons" className="px-6 py-3.5 min-h-[48px] rounded-xl bg-indigo-600 dark:bg-white dark:text-slate-900 text-white font-bold flex items-center gap-2 hover:bg-indigo-700 dark:hover:bg-slate-100 transition-colors">
                     {t('view_lessons')} <ArrowRight size={18} />
                   </Link>
                   <Link to="/lessons/new" className="px-6 py-3.5 min-h-[48px] rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white font-semibold flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                    <Plus size={18} className="text-blue-700 dark:text-cyan-400" /> {t('create_lesson')}
+                    <Plus size={18} className="text-indigo-700 dark:text-cyan-400" /> {t('create_lesson')}
                   </Link>
                 </div>
               </Reveal>
               <Reveal delay={340}>
                 <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-slate-500 dark:text-slate-400">
                   <span className="flex items-center gap-1.5"><Shield size={15} className="text-emerald-500" /> {t('real_db')}</span>
-                  <span className="flex items-center gap-1.5"><Globe size={15} className="text-blue-500" /> {t('globally')}</span>
+                  <span className="flex items-center gap-1.5"><Globe size={15} className="text-indigo-500" /> {t('globally')}</span>
                   <span className="flex items-center gap-1.5"><Code2 size={15} className="text-violet-500" /> Python · JS · HTML · CSS</span>
                   <span className="flex items-center gap-1.5"><Zap size={15} className="text-amber-500" /> RU · EN · KG</span>
                 </div>
@@ -135,13 +135,13 @@ export default function Landing() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 mt-10">
           {FEATURES.map((f, i) => (
             <Reveal key={f.title} delay={i * 70}>
-              <Link to={f.to} className="group block h-full bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6 card-hover hover:border-blue-400 dark:hover:border-blue-600 transition-colors">
+              <Link to={f.to} className="group block h-full bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6 card-hover hover:border-blue-400 dark:hover:border-indigo-600 transition-colors">
                 <div className={`w-11 h-11 rounded-lg ${f.tint} flex items-center justify-center`}>
                   <f.icon size={22} />
                 </div>
                 <h3 className="font-bold mt-4 text-slate-900 dark:text-white">{f.title}</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">{f.desc}</p>
-                <span className="inline-flex items-center gap-1 text-sm font-semibold text-blue-700 dark:text-cyan-400 mt-3.5">
+                <span className="inline-flex items-center gap-1 text-sm font-semibold text-indigo-700 dark:text-cyan-400 mt-3.5">
                   Открыть <ArrowRight size={15} className="opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
                 </span>
               </Link>
@@ -159,7 +159,7 @@ export default function Landing() {
           {STEPS.map((s, i) => (
             <Reveal key={s.n} delay={i * 90}>
               <div className="relative h-full bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-5 card-hover">
-                <span className="w-10 h-10 rounded-xl bg-blue-700 text-white font-display font-extrabold flex items-center justify-center">{s.n}</span>
+                <span className="w-10 h-10 rounded-xl bg-indigo-600 text-white font-display font-extrabold flex items-center justify-center">{s.n}</span>
                 <h3 className="font-bold mt-3.5 text-slate-900 dark:text-white">{s.title}</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">{s.desc}</p>
               </div>
@@ -177,7 +177,7 @@ export default function Landing() {
                 <h2 className="text-2xl sm:text-3xl font-display font-extrabold tracking-tight">{t('ready')}</h2>
                 <p className="text-white/70 mt-2.5 max-w-xl text-sm sm:text-base">{t('ready_sub')}</p>
               </div>
-              <Link to="/login" className="shrink-0 inline-flex px-7 py-3.5 min-h-[48px] rounded-xl bg-white text-slate-900 font-bold text-sm sm:text-base hover:bg-blue-50 transition-colors w-fit">
+              <Link to="/login" className="shrink-0 inline-flex px-7 py-3.5 min-h-[48px] rounded-xl bg-white text-slate-900 font-bold text-sm sm:text-base hover:bg-indigo-50 transition-colors w-fit">
                 {t('login_btn')} <ArrowRight size={18} className="ml-2" />
               </Link>
             </div>

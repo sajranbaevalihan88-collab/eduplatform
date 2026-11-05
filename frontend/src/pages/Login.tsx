@@ -83,11 +83,11 @@ export default function Login(){
           </div>
           {isReg && <select value={form.role} onChange={e=>setForm({...form,role:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white dark:[color-scheme:dark]"><option value="teacher">{t('login_teacher')}</option><option value="student">{t('login_student')}</option></select>}
           {error && <div role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 whitespace-pre-wrap">{error}</div>}
-          <button disabled={busy} className="w-full min-h-[48px] py-2.5 rounded-xl bg-blue-600 text-white font-bold disabled:opacity-60 flex items-center justify-center gap-2">
+          <button disabled={busy} className="w-full min-h-[48px] py-2.5 rounded-xl bg-indigo-600 text-white font-bold disabled:opacity-60 flex items-center justify-center gap-2">
             {busy ? (<><span className="dot-typing inline-flex gap-1"><span className="w-1.5 h-1.5 rounded-full bg-white inline-block"/><span className="w-1.5 h-1.5 rounded-full bg-white inline-block"/><span className="w-1.5 h-1.5 rounded-full bg-white inline-block"/></span> {t('login_doing')}</>) : (isReg ? t('login_btn_reg') : t('login_submit'))}
           </button>
         </form>
-        <button onClick={()=>{setIsReg(!isReg); setError('')}} className="w-full mt-3 text-sm text-blue-600 font-medium">{isReg?t('login_to_in'):t('login_to_reg')}</button>
+        <button onClick={()=>{setIsReg(!isReg); setError('')}} className="w-full mt-3 text-sm text-indigo-600 font-medium">{isReg?t('login_to_in'):t('login_to_reg')}</button>
         <div className="mt-6 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-slate-700">{t('login_hint')}</div>
       </div>
     </div>

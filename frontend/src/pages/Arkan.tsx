@@ -368,7 +368,7 @@ const tr = useLang().t
             ))}
           </div>
         )}
-        <Link to="/games" className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 dark:text-blue-400">
+        <Link to="/games" className="inline-flex items-center gap-1 text-sm font-bold text-indigo-600 dark:text-indigo-400">
           {tr('arkan_to_games')}
         </Link>
         <div className="arkan-arena p-8 space-y-4">
@@ -383,7 +383,7 @@ const tr = useLang().t
         </div>
         <div className="flex gap-3 justify-center">
           <button onClick={rematch}
-            className="px-6 py-3 min-h-[56px] rounded-2xl bg-blue-600 text-white font-bold flex items-center gap-2">
+            className="px-6 py-3 min-h-[56px] rounded-2xl bg-indigo-600 text-white font-bold flex items-center gap-2">
             <RotateCcw size={18} /> {tr('arkan_rematch')}
           </button>
           <button onClick={() => setPhase('lobby')} className="px-6 py-3 min-h-[56px] rounded-2xl bg-white border dark:bg-slate-800 dark:text-white dark:border-slate-700 font-bold">
@@ -401,18 +401,18 @@ const tr = useLang().t
     return (
       <div className="max-w-4xl mx-auto space-y-4">
         <button onClick={() => setPhase('lobby')}
-          className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 dark:text-blue-400">
+          className="inline-flex items-center gap-1 text-sm font-bold text-indigo-600 dark:text-indigo-400">
           {tr('arkan_exit_battle')}
         </button>
         <div className="arkan-arena p-4 sm:p-6 space-y-4">
           <div className="oimo-strip" />
           {/* счёт + канат */}
           <div className="flex flex-wrap items-center gap-2 font-display font-bold text-lg sm:text-2xl">
-            <span className={`px-3 py-1 rounded-xl bg-white/70 ${turn === 'A' ? 'text-blue-700' : 'text-slate-500'}`}>{mascA} {teamA} {scoreA}</span>
+            <span className={`px-3 py-1 rounded-xl bg-white/70 ${turn === 'A' ? 'text-indigo-700' : 'text-slate-500'}`}>{mascA} {teamA} {scoreA}</span>
             <span className="ml-auto px-3 py-1 rounded-xl bg-white/70 text-slate-500">{scoreB} {teamB} {mascB}</span>
           </div>
         <div ref={ropeRef} className="relative h-14 rounded-2xl overflow-hidden border dark:border-slate-700" aria-label={tr('arkan_rope')}>
-          <div className="absolute inset-y-0 left-0 bg-blue-500/80 transition-all duration-500" style={{ width: `${marker}%` }} />
+          <div className="absolute inset-y-0 left-0 bg-indigo-500/80 transition-all duration-500" style={{ width: `${marker}%` }} />
           <div className="absolute inset-y-0 right-0 bg-red-500/80 transition-all duration-500" style={{ width: `${100 - marker}%` }} />
           <div className="absolute inset-y-0 left-1/2 w-1 bg-white" />
           <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 text-3xl transition-all duration-500" style={{ left: `${marker}%` }}>🪢</div>
@@ -428,7 +428,7 @@ const tr = useLang().t
           </div>
         )}
         <div className="flex items-center gap-3">
-          <span className={`px-4 py-2 rounded-xl font-bold ${turn === 'A' ? 'bg-blue-600 text-white' : 'bg-red-600 text-white'}`}>
+          <span className={`px-4 py-2 rounded-xl font-bold ${turn === 'A' ? 'bg-indigo-600 text-white' : 'bg-red-600 text-white'}`}>
             {tr('arkan_answering')} {turn === 'A' ? `${mascA} ${teamA}` : `${mascB} ${teamB}`}
           </span>
           <span className="ml-auto flex items-center gap-2" role="timer" aria-label={`${tr('arkan_time_a')}${left}${tr('arkan_time_b')}`}>
@@ -448,7 +448,7 @@ const tr = useLang().t
           </span>
           <button onClick={() => speak(q.text)} className="p-2.5 rounded-xl bg-white/80 text-slate-800 border border-sky-200" aria-label={tr('arkan_speak_q')}><Volume2 size={18} /></button>
           <button onClick={toggleAutoRead} aria-pressed={autoRead} title={tr('arkan_autoread_title')}
-            className={`px-3 py-2.5 rounded-xl text-xs font-bold border ${autoRead ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/80 text-slate-800 border-sky-200'}`}>
+            className={`px-3 py-2.5 rounded-xl text-xs font-bold border ${autoRead ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white/80 text-slate-800 border-sky-200'}`}>
             {autoRead ? tr('arkan_auto_on') : tr('arkan_auto_off')}
           </button>
         </div>
@@ -497,7 +497,7 @@ const tr = useLang().t
   // --- лобби ---
   return (
     <div className="max-w-3xl mx-auto space-y-5">
-      <Link to="/games" className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 dark:text-blue-400">
+      <Link to="/games" className="inline-flex items-center gap-1 text-sm font-bold text-indigo-600 dark:text-indigo-400">
         {tr('arkan_to_games')}
       </Link>
       <div className="arkan-arena p-5 sm:p-7 text-center space-y-2">
@@ -546,7 +546,7 @@ const tr = useLang().t
       <div className="flex gap-2" role="tablist" aria-label={tr('arkan_src')}>
         {((noMine ? [['topics', tr('arkan_tab_topics')], ['public', tr('arkan_tab_public')]] : [['topics', tr('arkan_tab_topics')], ['mine', tr('arkan_tab_mine')], ['public', tr('arkan_tab_public')]]) as Array<['topics' | 'mine' | 'public', string]>).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} role="tab" aria-selected={tab === k}
-            className={`flex-1 px-4 py-3 min-h-[52px] rounded-xl font-bold ${tab === k ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-800 dark:text-white border dark:border-slate-700'}`}>{l}</button>
+            className={`flex-1 px-4 py-3 min-h-[52px] rounded-xl font-bold ${tab === k ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 dark:text-white border dark:border-slate-700'}`}>{l}</button>
         ))}
       </div>
 
@@ -568,7 +568,7 @@ const tr = useLang().t
           {(tab === 'mine' ? mine : pub).length === 0 && <div className="text-slate-400 text-center py-4">{tr('arkan_empty_mine')}</div>}
           {(tab === 'mine' ? mine : pub).map(t => (
             <button key={t.id} onClick={() => pickTest(t)} disabled={busy}
-              className={`w-full text-left px-4 py-3 min-h-[56px] rounded-xl border font-semibold dark:text-white ${sel?.id === t.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'bg-white dark:bg-slate-800 dark:border-slate-700'}`}>
+              className={`w-full text-left px-4 py-3 min-h-[56px] rounded-xl border font-semibold dark:text-white ${sel?.id === t.id ? 'border-blue-500 bg-indigo-50 dark:bg-indigo-900/30' : 'bg-white dark:bg-slate-800 dark:border-slate-700'}`}>
               {t.title}
             </button>
           ))}

@@ -293,7 +293,7 @@ export default function LessonBuilder(){
       const p=options.presentations.find((x:any)=>String(x.id)===String(b.data.presentation_id))
       if(!b.data.presentation_id) return <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 mt-1">{t('lb_pres_not_picked')}</div>
       if(!p) return <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-3 mt-1">{t('lb_pres_missing_a')}{String(b.data.presentation_id)}{t('lb_pres_missing_b')}</div>
-      return <Link to={withFrom(`/presentations/${p.id}`)} target="_blank" className="block mt-1 p-4 rounded-xl bg-blue-700 text-white hover:shadow-lg transition"><div className="flex items-center gap-2 font-semibold"><Presentation size={20}/>{p.title}</div><div className="text-sm opacity-80">{p.slides_count ?? p.slides?.length ?? 0} {t('pres_slides')}{t('lb_open_arrow')}</div></Link>
+      return <Link to={withFrom(`/presentations/${p.id}`)} target="_blank" className="block mt-1 p-4 rounded-xl bg-indigo-600 text-white hover:shadow-lg transition"><div className="flex items-center gap-2 font-semibold"><Presentation size={20}/>{p.title}</div><div className="text-sm opacity-80">{p.slides_count ?? p.slides?.length ?? 0} {t('pres_slides')}{t('lb_open_arrow')}</div></Link>
     }
     if(b.type==='test'){
       const tst=options.tests.find((x:any)=>String(x.id)===String(b.data.test_id))
@@ -306,7 +306,7 @@ export default function LessonBuilder(){
       if(!b.data.file_id) return <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 mt-1">{t('lb_file_not_picked')}</div>
       if(!f) return <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-3 mt-1">{t('lb_file_missing_a')}{String(b.data.file_id)}{t('lb_file_missing_b')}</div>
       const url=mediaUrl(f.file||f.url)
-      return <div className="flex items-center gap-3 p-4 rounded-xl bg-white border mt-1"><FileText/><div><div className="font-semibold">{f.title}</div>{url ? <a href={url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600">{t('lv_open_file')} ↗</a> : <div className="text-xs text-slate-400">{t('lb_link_na')}</div>}</div></div>
+      return <div className="flex items-center gap-3 p-4 rounded-xl bg-white border mt-1"><FileText/><div><div className="font-semibold">{f.title}</div>{url ? <a href={url} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-600">{t('lv_open_file')} ↗</a> : <div className="text-xs text-slate-400">{t('lb_link_na')}</div>}</div></div>
     }
     if(b.type==='code'){
       const c=options.codes.find((x:any)=>String(x.id)===String(b.data.code_id))
@@ -413,7 +413,7 @@ export default function LessonBuilder(){
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3 text-sm text-slate-500">
-        <Link to="/lessons" className="hover:text-blue-600">{t('lessons')}</Link>
+        <Link to="/lessons" className="hover:text-indigo-600">{t('lessons')}</Link>
         <span>›</span>
         <span className="text-slate-900 font-medium">{isNew?t('lb_new'):t('lb_editing')}</span>
       </div>
@@ -440,7 +440,7 @@ export default function LessonBuilder(){
             <h1 className="text-2xl font-display font-bold flex items-center gap-2"><Sparkles size={20}/> {isNew?t('lb_hero_new'):t('lb_hero_edit')}</h1>
             <p className="text-white/80 text-sm mt-1">{t('lb_hero_sub')}</p>
           </div>
-          <button onClick={()=>setPreview(!preview)} className="px-4 py-2 rounded-xl bg-white text-blue-700 font-semibold flex items-center gap-2 text-sm"><Eye size={16}/>{preview?t('lb_editor'):t('lb_preview')}</button>
+          <button onClick={()=>setPreview(!preview)} className="px-4 py-2 rounded-xl bg-white text-indigo-700 font-semibold flex items-center gap-2 text-sm"><Eye size={16}/>{preview?t('lb_editor'):t('lb_preview')}</button>
         </div>
       </div>
 
@@ -449,25 +449,25 @@ export default function LessonBuilder(){
           <div className="bg-white rounded-2xl border p-6 space-y-4">
             <div id="lesson-title-field">
               <label className="text-sm font-semibold text-slate-700">Название урока *</label>
-              <input ref={titleInputRef} value={title} onChange={e=>{setTitle(e.target.value); if(errors.title) setErrors(prev=>({...prev, title:undefined}))}} placeholder="Например: Квадратные уравнения — 8 класс" className={`w-full mt-1 px-4 py-3 rounded-xl border font-bold text-lg focus:outline-none focus:ring-2 ${errors.title ? 'bg-red-50 border-red-300 focus:border-red-400 focus:ring-red-200' : 'bg-slate-50 focus:border-blue-400 focus:ring-blue-200'}`}/>
+              <input ref={titleInputRef} value={title} onChange={e=>{setTitle(e.target.value); if(errors.title) setErrors(prev=>({...prev, title:undefined}))}} placeholder="Например: Квадратные уравнения — 8 класс" className={`w-full mt-1 px-4 py-3 rounded-xl border font-bold text-lg focus:outline-none focus:ring-2 ${errors.title ? 'bg-red-50 border-red-300 focus:border-red-400 focus:ring-red-200' : 'bg-slate-50 focus:border-indigo-400 focus:ring-indigo-200'}`}/>
               {errors.title ? <div className="mt-1 text-xs font-medium text-red-600 flex items-center gap-1">⚠ {errors.title}</div> : <div className="text-xs text-slate-400 mt-1">{title.length}/100 {title.length===0 && <span className="text-slate-500">— это поле обязательно, не путай с заголовком блока «Введение» ниже</span>}</div>}
             </div>
             <div>
               <label className="text-sm font-semibold text-slate-700">О чём урок?</label>
-              <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Коротко: цели, для кого, что узнают. Это покажется в списке уроков." rows={3} className="w-full mt-1 px-4 py-3 rounded-xl border bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"/>
+              <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Коротко: цели, для кого, что узнают. Это покажется в списке уроков." rows={3} className="w-full mt-1 px-4 py-3 rounded-xl border bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-200"/>
             </div>
             <div>
               <label className="text-sm font-semibold text-slate-700">Кому доступен урок</label>
               <div className="mt-1 grid grid-cols-2 gap-2">
                 <button type="button" onClick={()=>setIsPublic(false)} data-testid="lb-private"
-                  className={`px-3 py-2.5 rounded-xl border text-sm text-left ${!isPublic?'border-blue-600 bg-blue-50 font-semibold':'bg-slate-50 hover:bg-slate-100'}`}>
+                  className={`px-3 py-2.5 rounded-xl border text-sm text-left ${!isPublic?'border-indigo-600 bg-indigo-50 font-semibold':'bg-slate-50 hover:bg-slate-100'}`}>
                   <span className="block">🔒 Приватный</span>
-                  <span className={`block text-xs mt-0.5 ${!isPublic?'text-blue-700':'text-slate-400'}`}>Только на платформе: класс, где урок назначен</span>
+                  <span className={`block text-xs mt-0.5 ${!isPublic?'text-indigo-700':'text-slate-400'}`}>Только на платформе: класс, где урок назначен</span>
                 </button>
                 <button type="button" onClick={()=>setIsPublic(true)} data-testid="lb-public"
-                  className={`px-3 py-2.5 rounded-xl border text-sm text-left ${isPublic?'border-blue-600 bg-blue-50 font-semibold':'bg-slate-50 hover:bg-slate-100'}`}>
+                  className={`px-3 py-2.5 rounded-xl border text-sm text-left ${isPublic?'border-indigo-600 bg-indigo-50 font-semibold':'bg-slate-50 hover:bg-slate-100'}`}>
                   <span className="block">🌐 Публичный</span>
-                  <span className={`block text-xs mt-0.5 ${isPublic?'text-blue-700':'text-slate-400'}`}>Всем по ссылке, даже без входа</span>
+                  <span className={`block text-xs mt-0.5 ${isPublic?'text-indigo-700':'text-slate-400'}`}>Всем по ссылке, даже без входа</span>
                 </button>
               </div>
             </div>
@@ -475,7 +475,7 @@ export default function LessonBuilder(){
               <label className="text-sm font-semibold text-slate-700">Предмет *</label>
               {errors.subject && <div className="mt-1 text-xs font-medium text-red-600">⚠ {errors.subject}</div>}
               {subjectsLoading ? (
-                <div className="mt-2 flex items-center gap-2 text-sm text-slate-500"><span className="w-4 h-4 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin"/> Загрузка предметов...</div>
+                <div className="mt-2 flex items-center gap-2 text-sm text-slate-500"><span className="w-4 h-4 border-2 border-indigo-300 border-t-blue-600 rounded-full animate-spin"/> Загрузка предметов...</div>
               ) : subjectsError ? (
                 <div className="mt-2 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-center justify-between gap-2">
                   <span>{subjectsError}</span>
@@ -487,21 +487,21 @@ export default function LessonBuilder(){
                   <p className="text-xs text-amber-700 mt-1">Без предмета урок не опубликуется. Введи название и нажми «Создать».</p>
                   <div className="flex gap-2 mt-3">
                     <input value={inlineSubjectName} onChange={e=>setInlineSubjectName(e.target.value)} onKeyDown={e=>e.key==='Enter' && createInlineSubject()} placeholder="Например: Математика" className="flex-1 px-3 py-2 rounded-xl border bg-white text-sm"/>
-                    <button onClick={createInlineSubject} className="px-4 py-2 rounded-xl bg-blue-700 text-white text-sm font-semibold">Создать</button>
+                    <button onClick={createInlineSubject} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Создать</button>
                     <Link to="/subjects" className="px-4 py-2 rounded-xl bg-white border text-sm">Все предметы →</Link>
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
                   {subjects.map(s=>(
-                    <button key={s.id} onClick={()=>setSubject(s.id)} className={`p-3 rounded-xl border text-left flex items-center gap-2 ${String(subject)===String(s.id)?'bg-blue-50 border-blue-300 ring-2 ring-blue-200':'bg-slate-50 hover:bg-white'}`}>
+                    <button key={s.id} onClick={()=>setSubject(s.id)} className={`p-3 rounded-xl border text-left flex items-center gap-2 ${String(subject)===String(s.id)?'bg-indigo-50 border-indigo-300 ring-2 ring-blue-200':'bg-slate-50 hover:bg-white'}`}>
                       <span className="text-lg">{s.icon}</span>
                       <span className="font-medium text-sm">{s.name}</span>
                     </button>
                   ))}
                 </div>
               )}
-              {selectedSubject && <div className="mt-2 text-sm text-blue-700">Выбран: {selectedSubject.icon} {selectedSubject.name}</div>}
+              {selectedSubject && <div className="mt-2 text-sm text-indigo-700">Выбран: {selectedSubject.icon} {selectedSubject.name}</div>}
               {!!subjects.length && !selectedSubject && subject && <div className="mt-2 text-xs text-amber-600">Предмет с id={String(subject)} не найден — выбери из списка выше</div>}
               {errors.subject && !selectedSubject && <div className="mt-2 p-2 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">Без предмета урок не сохранится — кликни на карточку предмета выше или создай новый.</div>}
             </div>
@@ -514,14 +514,14 @@ export default function LessonBuilder(){
             </div>
             <p className="text-sm text-slate-500 mt-1">Каждый блок — часть урока. Меняй порядок стрелками. Презентации/тесты можно создать тут же.</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
-              <button onClick={()=>addBlock('text')} className="p-3 rounded-xl bg-blue-700 text-white flex flex-col items-center gap-1 text-sm font-medium"><Type size={20}/> Текст</button>
+              <button onClick={()=>addBlock('text')} className="p-3 rounded-xl bg-indigo-600 text-white flex flex-col items-center gap-1 text-sm font-medium"><Type size={20}/> Текст</button>
               <button onClick={()=>addBlock('presentation')} className="p-3 rounded-xl bg-orange-50 border border-orange-200 text-orange-700 flex flex-col items-center gap-1 text-sm font-medium"><Presentation size={20}/> Презентация { !options.presentations.length && <span className="text-[10px]">(создать)</span>}</button>
               <button onClick={()=>addBlock('test')} className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex flex-col items-center gap-1 text-sm font-medium"><FlaskConical size={20}/> Тест { !options.tests.length && <span className="text-[10px]">(создать)</span>}</button>
               <button onClick={()=>addBlock('board')} className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex flex-col items-center gap-1 text-sm font-medium"><PenTool size={20}/> Доска 2D/3D</button>
               <button onClick={()=>addBlock('file')} className="p-3 rounded-xl bg-slate-50 border flex flex-col items-center gap-1 text-sm"><FileText size={18}/> Файл</button>
               <button onClick={()=>addBlock('video')} className="p-3 rounded-xl bg-slate-50 border flex flex-col items-center gap-1 text-sm"><Video size={18}/> Видео</button>
               <button onClick={()=>addBlock('code')} className="p-3 rounded-xl bg-slate-50 border flex flex-col items-center gap-1 text-sm"><Code2 size={18}/> Код</button>
-              <Link to={subject ? `/presentations/new?subject=${selectedSubject?.slug||subject}` : "/presentations/new"} className="p-3 rounded-xl bg-blue-50 border border-blue-200 flex flex-col items-center gap-1 text-sm text-blue-700 font-medium"><Plus size={18}/> Создать презент.</Link>
+              <Link to={subject ? `/presentations/new?subject=${selectedSubject?.slug||subject}` : "/presentations/new"} className="p-3 rounded-xl bg-indigo-50 border border-indigo-200 flex flex-col items-center gap-1 text-sm text-indigo-700 font-medium"><Plus size={18}/> Создать презент.</Link>
             </div>
           </div>
 
@@ -543,8 +543,8 @@ export default function LessonBuilder(){
                 </div>
                 {b.type==='text' && (
                   <div className="space-y-2">
-                    <input value={b.data.title} onChange={e=>{updateBlock(b.id,{title:e.target.value}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} placeholder="Заголовок блока, например ‘Теория’ (это НЕ название урока — урок выше)" className="w-full px-3 py-2.5 rounded-xl border bg-blue-50/50 font-semibold focus:outline-none focus:border-blue-300"/>
-                    <textarea value={b.data.content} onChange={e=>{updateBlock(b.id,{content:e.target.value}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} placeholder="Содержание блока — теория, пример, задание..." rows={4} className="w-full px-3 py-2.5 rounded-xl border bg-slate-50 focus:outline-none focus:border-blue-300"/>
+                    <input value={b.data.title} onChange={e=>{updateBlock(b.id,{title:e.target.value}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} placeholder="Заголовок блока, например ‘Теория’ (это НЕ название урока — урок выше)" className="w-full px-3 py-2.5 rounded-xl border bg-indigo-50/50 font-semibold focus:outline-none focus:border-indigo-300"/>
+                    <textarea value={b.data.content} onChange={e=>{updateBlock(b.id,{content:e.target.value}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} placeholder="Содержание блока — теория, пример, задание..." rows={4} className="w-full px-3 py-2.5 rounded-xl border bg-slate-50 focus:outline-none focus:border-indigo-300"/>
                     {errors.blocks?.[b.id] && <div className="text-xs text-red-600">⚠ {errors.blocks?.[b.id]}</div>}
                   </div>
                 )}
@@ -599,7 +599,7 @@ export default function LessonBuilder(){
                         {subject && filteredPresentations.length>0 && <div className="text-xs text-slate-500">Показано {filteredPresentations.length} из {options.presentations.length} — фильтр по предмету урока «{selectedSubject?.name}». <button onClick={()=>refreshOptions()} className="underline">Обновить</button></div>}
                         <div className="flex gap-2">
                           <button onClick={()=>refreshOptions()} className="text-xs px-3 py-1.5 rounded-full bg-white border hover:bg-slate-50">↻ Обновить список</button>
-                          <Link to="/presentations" target="_blank" className="text-xs px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700">Все презентации →</Link>
+                          <Link to="/presentations" target="_blank" className="text-xs px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700">Все презентации →</Link>
                         </div>
                       </div>
                     )}
@@ -614,13 +614,13 @@ export default function LessonBuilder(){
                       </div>
                     )}
                     {getPresTab(b.id)==='create' && (
-                      <div className="space-y-2 p-3 rounded-xl bg-blue-50 border border-blue-200">
-                        <div className="text-xs font-semibold text-blue-800">Быстро создать пустую презентацию</div>
+                      <div className="space-y-2 p-3 rounded-xl bg-indigo-50 border border-indigo-200">
+                        <div className="text-xs font-semibold text-indigo-800">Быстро создать пустую презентацию</div>
                         <div className="flex gap-2">
                           <input value={quickPresTitle} onChange={e=>setQuickPresTitle(e.target.value)} placeholder="Название, напр. Ребусы — 5 класс" className="flex-1 px-3 py-2 rounded-xl border bg-white text-sm"/>
-                          <button onClick={()=>handleQuickCreatePres(b.id)} className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold">Создать и выбрать</button>
+                          <button onClick={()=>handleQuickCreatePres(b.id)} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Создать и выбрать</button>
                         </div>
-                        <Link to="/presentations/new" target="_blank" className="text-xs text-blue-600 underline">Открыть полный редактор →</Link>
+                        <Link to="/presentations/new" target="_blank" className="text-xs text-indigo-600 underline">Открыть полный редактор →</Link>
                       </div>
                     )}
                     {!!b.data.presentation_id && !options.presentations.find((p:any)=>String(p.id)===String(b.data.presentation_id)) && (
@@ -672,7 +672,7 @@ export default function LessonBuilder(){
                           {options.tests.map((t:any)=><option key={t.id} value={t.id}>{t.title} ({t.questions_count ?? t.questions?.length ?? 0} вопр.)</option>)}
                         </select>
                         <div className="flex flex-wrap gap-2">
-                          <button onClick={()=>{ setTestInlineOpen(p=>({...p,[b.id]:true})); setInlineTests(prev=>({...prev,[b.id]: getInlineTest(b.id)}))}} className="px-3 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold">✨ Создать тест прямо здесь</button>
+                          <button onClick={()=>{ setTestInlineOpen(p=>({...p,[b.id]:true})); setInlineTests(prev=>({...prev,[b.id]: getInlineTest(b.id)}))}} className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">✨ Создать тест прямо здесь</button>
                           <Link to="/tests/new" target="_blank" className="px-3 py-2 rounded-xl bg-white border text-sm">Открыть конструктор тестов →</Link>
                           <button onClick={()=>refreshOptions()} className="px-3 py-2 rounded-xl bg-slate-100 text-sm">↻ Обновить</button>
                         </div>
@@ -720,7 +720,7 @@ export default function LessonBuilder(){
                           {getInlineTest(b.id).questions.map((q,qi)=>(
                             <div key={qi} className="p-3 rounded-xl bg-white border space-y-2">
                               <div className="flex gap-2">
-                                <span className="w-6 h-6 rounded-full bg-blue-700 text-white flex items-center justify-center text-xs font-bold shrink-0">{qi+1}</span>
+                                <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold shrink-0">{qi+1}</span>
                                 <textarea value={q.text} onChange={e=>setInlineTests(prev=>{
                                   const cur=getInlineTest(b.id); const qs=[...cur.questions]; qs[qi]={...qs[qi],text:e.target.value}; return {...prev,[b.id]:{...cur,questions:qs}}
                                 })} placeholder={`Вопрос ${qi+1}`} className="flex-1 px-2 py-1.5 rounded border text-sm font-medium" rows={2}/>
@@ -745,7 +745,7 @@ export default function LessonBuilder(){
                                     <button onClick={()=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); const qs=[...cur.questions]; qs[qi]={...qs[qi], options: qs[qi].options.filter((_,i)=>i!==oi)}; return {...prev,[b.id]:{...cur,questions:qs}}})} className="text-xs">✕</button>
                                   </div>
                                 ))}
-                                <button onClick={()=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); const qs=[...cur.questions]; qs[qi]={...qs[qi], options:[...qs[qi].options,{text:'Новый вариант',is_correct:false}]}; return {...prev,[b.id]:{...cur,questions:qs}}})} className="text-xs text-blue-600">+ Вариант</button>
+                                <button onClick={()=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); const qs=[...cur.questions]; qs[qi]={...qs[qi], options:[...qs[qi].options,{text:'Новый вариант',is_correct:false}]}; return {...prev,[b.id]:{...cur,questions:qs}}})} className="text-xs text-indigo-600">+ Вариант</button>
                               </div>
                             </div>
                           ))}
@@ -765,7 +765,7 @@ export default function LessonBuilder(){
                               setTestInlineOpen(p=>({...p,[b.id]:false}))
                               toast(`Тест "${newTest.title}" создан и выбран для урока ✓`,'success')
                             }catch(e:any){ toast(e?.response?.data?.detail||JSON.stringify(e?.response?.data)||'Ошибка создания теста','error')}
-                          }} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm">Создать тест и привязать к уроку</button>
+                          }} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm">Создать тест и привязать к уроку</button>
                           <button onClick={()=>setTestInlineOpen(p=>({...p,[b.id]:false}))} className="px-4 py-2.5 rounded-xl bg-white border text-sm">Отмена</button>
                         </div>
                         <div className="text-xs text-slate-500">Важно: урок не пропадёт — после создания теста ты останешься в конструкторе урока, просто выбери предмет и нажми «Опубликовать урок».</div>
@@ -809,10 +809,10 @@ export default function LessonBuilder(){
 
           <div className="flex gap-3">
             <button onClick={handleCancel} type="button" className="flex-1 py-4 rounded-2xl bg-white border border-slate-300 text-slate-700 font-bold text-lg hover:bg-slate-50">Отмена</button>
-            <button onClick={save} disabled={saving} className="flex-[2] py-4 rounded-2xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-lg flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"><Save size={20}/>{saving?'Сохранение...':(isNew?'Опубликовать урок':'Сохранить изменения')}</button>
+            <button onClick={save} disabled={saving} className="flex-[2] py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-lg flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"><Save size={20}/>{saving?'Сохранение...':(isNew?'Опубликовать урок':'Сохранить изменения')}</button>
           </div>
           <div className="text-center">
-            <Link to="/lessons" className="text-sm text-slate-500 hover:text-blue-600">← К списку уроков</Link>
+            <Link to="/lessons" className="text-sm text-slate-500 hover:text-indigo-600">← К списку уроков</Link>
           </div>
         </>
       ) : (
@@ -829,7 +829,7 @@ export default function LessonBuilder(){
               </div>
             ))}
           </div>
-          <button onClick={()=>setPreview(false)} className="w-full mt-4 py-2.5 rounded-xl bg-blue-700 text-white font-semibold">Вернуться к редактору</button>
+          <button onClick={()=>setPreview(false)} className="w-full mt-4 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold">Вернуться к редактору</button>
         </div>
       )}
     </div>

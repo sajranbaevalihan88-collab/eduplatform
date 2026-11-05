@@ -68,7 +68,7 @@ export default function TestBuilder(){
   return (
     <div className="max-w-3xl mx-auto space-y-4">
       <h1 className="sr-only">{t('tb_title')}</h1>
-      {fromPath && <Link to={fromPath} className="inline-block px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">{t('tb_back_lesson')}</Link>}
+      {fromPath && <Link to={fromPath} className="inline-block px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-600">{t('tb_back_lesson')}</Link>}
       {justPick ? (
         <div className="bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border p-6 space-y-4">
           <div className="text-center pt-2">
@@ -76,7 +76,7 @@ export default function TestBuilder(){
             <div className="font-display font-extrabold text-xl dark:text-white">{t('tb_mode_title')}</div>
           </div>
           <button onClick={()=>{setMode('form')}} data-testid="tb-manual"
-            className="w-full text-left px-5 py-4 min-h-[92px] rounded-2xl border-2 border-blue-400/60 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700 hover:border-blue-500 flex items-center gap-4 transition-colors">
+            className="w-full text-left px-5 py-4 min-h-[92px] rounded-2xl border-2 border-blue-400/60 bg-indigo-50 dark:bg-blue-900/20 dark:border-indigo-700 hover:border-blue-500 flex items-center gap-4 transition-colors">
             <span className="text-4xl">✍️</span>
             <span>
               <span className="block font-extrabold text-lg dark:text-white">{t('tb_mode_manual')}</span>
@@ -112,7 +112,7 @@ export default function TestBuilder(){
       {questions.map((q,qi)=>(
         <div key={qi} className="bg-white rounded-2xl border p-5 space-y-3">
           <div className="flex items-start gap-3">
-            <span className="w-8 h-8 rounded-full bg-blue-700 text-white flex items-center justify-center text-sm font-bold shrink-0">{qi+1}</span>
+            <span className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-bold shrink-0">{qi+1}</span>
             <textarea value={q.text} onChange={e=>setQuestions(qs=>qs.map((x,i)=>i===qi?{...x,text:e.target.value}:x))} className="flex-1 px-3 py-2.5 rounded-xl border bg-slate-50 font-medium"/>
             <button onClick={()=>setQuestions(qs=>qs.filter((_,i)=>i!==qi))} className="p-2 rounded-xl bg-red-50 text-red-600"><Trash2 size={16}/></button>
           </div>
@@ -131,7 +131,7 @@ export default function TestBuilder(){
             <input type="number" value={q.points} onChange={e=>setQuestions(qs=>qs.map((x,i)=>i===qi?{...x,points:parseInt(e.target.value)||1}:x))} className="w-20 px-3 py-2 rounded-xl border" placeholder={t('points')}/>
           </div>
           {(q as any).explanation !== undefined && (q as any).explanation !== '' && (
-            <div className="text-xs px-3 py-2 rounded-xl bg-blue-50 text-blue-700 border border-blue-100">{t('tb_ai')} {(q as any).explanation}</div>
+            <div className="text-xs px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100">{t('tb_ai')} {(q as any).explanation}</div>
           )}
           {q.type==='text' ? (
             <div className="text-xs px-3 py-2 rounded-xl bg-amber-50 text-amber-700 border border-amber-200">
@@ -168,7 +168,7 @@ export default function TestBuilder(){
         </div>
       )}
       <div className="flex flex-col sm:flex-row gap-3">
-        {AI_FEATURES && <button onClick={()=>setShowGen(true)} className="flex-1 px-4 py-3 min-h-[48px] rounded-xl bg-blue-600 text-white font-semibold flex items-center justify-center gap-2"><Sparkles size={18}/> {t('tb_create_ai')}</button>}
+        {AI_FEATURES && <button onClick={()=>setShowGen(true)} className="flex-1 px-4 py-3 min-h-[48px] rounded-xl bg-indigo-600 text-white font-semibold flex items-center justify-center gap-2"><Sparkles size={18}/> {t('tb_create_ai')}</button>}
         <button onClick={save} disabled={saving} className="flex-1 px-4 py-3 min-h-[48px] rounded-xl bg-emerald-600 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-50"><Save size={18}/> {saving?t('tb_saving'):t('tb_save_test')}</button>
       </div>
       {AI_FEATURES && genSource && (
@@ -181,11 +181,11 @@ export default function TestBuilder(){
           <div onClick={e=>e.stopPropagation()} className="relative w-[560px] max-w-full bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-5 space-y-3 animate-scaleIn modal-safe">
             <button onClick={()=>setShowGen(false)} aria-label={t('close')} title={t('close')} className="absolute top-2 right-2 inline-flex items-center justify-center w-11 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-white text-lg font-bold">✕</button>
             <div className="font-bold dark:text-white">{t('tb_gen_title')}</div>
-            <textarea value={genPrompt} onChange={e=>setGenPrompt(e.target.value)} placeholder={t('tb_gen_ph')} className="w-full h-28 px-3 py-2 rounded-xl border bg-blue-50/50 dark:bg-slate-700 dark:text-white text-sm" aria-label={t('tb_gen_aria')}/>
+            <textarea value={genPrompt} onChange={e=>setGenPrompt(e.target.value)} placeholder={t('tb_gen_ph')} className="w-full h-28 px-3 py-2 rounded-xl border bg-indigo-50/50 dark:bg-slate-700 dark:text-white text-sm" aria-label={t('tb_gen_aria')}/>
             <div className="flex items-center gap-3">
               <label className="text-sm dark:text-slate-300">{t('tb_gen_count')}</label>
               <input type="number" min={1} max={40} value={genCount} onChange={e=>setGenCount(Math.max(1, Math.min(40, parseInt(e.target.value)||5)))} className="w-20 px-3 py-2 rounded-xl border dark:bg-slate-700 dark:text-white"/>
-              <button onClick={doGenerate} disabled={generating} className="ml-auto px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold disabled:opacity-50">{generating?t('tb_thinking'):t('tb_generate')}</button>
+              <button onClick={doGenerate} disabled={generating} className="ml-auto px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold disabled:opacity-50">{generating?t('tb_thinking'):t('tb_generate')}</button>
             </div>
             <div className="text-xs text-slate-400">{t('tb_gen_hint')}</div>
           </div>

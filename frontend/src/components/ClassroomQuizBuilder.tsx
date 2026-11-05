@@ -134,7 +134,7 @@ export default function QuizBuilder({ onClose, onCreated }: { onClose: () => voi
     } finally { setBusy(false) }
   }
 
-  const inputCls = 'w-full px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white dark:placeholder-slate-500 outline-none focus:border-blue-400'
+  const inputCls = 'w-full px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white dark:placeholder-slate-500 outline-none focus:border-indigo-400'
   const iconBtn = 'p-2 min-h-[36px] min-w-[36px] rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-white flex items-center justify-center'
 
   return (
@@ -204,22 +204,22 @@ export default function QuizBuilder({ onClose, onCreated }: { onClose: () => voi
                     </button>
                     {q.type === 'true_false'
                       ? <span className="text-sm dark:text-slate-200 px-2">{o.text}</span>
-                      : <input value={o.text} onChange={e => setOpt(i, j, e.target.value)} placeholder={`${L.opt_ph}`} className="flex-1 min-w-0 px-3 py-2 min-h-[40px] rounded-lg border-b border-slate-200 dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-blue-400" data-testid={`qb-opt-${i}-${j}`} />}
+                      : <input value={o.text} onChange={e => setOpt(i, j, e.target.value)} placeholder={`${L.opt_ph}`} className="flex-1 min-w-0 px-3 py-2 min-h-[40px] rounded-lg border-b border-slate-200 dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-indigo-400" data-testid={`qb-opt-${i}-${j}`} />}
                     {q.type !== 'true_false' && q.options.length > 2 && (
                       <button onClick={() => delOpt(i, j)} className={iconBtn} aria-label="×"><X size={14} /></button>
                     )}
                   </div>
                 ))}
                 {q.type !== 'true_false' && (
-                  <button onClick={() => addOpt(i)} className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline px-1 py-1" data-testid={`qb-addopt-${i}`}>{L.add_opt}</button>
+                  <button onClick={() => addOpt(i)} className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:underline px-1 py-1" data-testid={`qb-addopt-${i}`}>{L.add_opt}</button>
                 )}
               </div>
             </div>
           ))}
 
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => setQs(a => [...a, mkQ()])} className="px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-semibold text-sm flex items-center gap-1.5 hover:border-blue-400 hover:text-blue-600" data-testid="qb-addq"><Plus size={16} />{L.add_q}</button>
-            <button onClick={() => setQs(a => [...a, mkQ('true_false')])} className="px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-semibold text-sm hover:border-blue-400 hover:text-blue-600">{L.add_tf}</button>
+            <button onClick={() => setQs(a => [...a, mkQ()])} className="px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-semibold text-sm flex items-center gap-1.5 hover:border-blue-400 hover:text-indigo-600" data-testid="qb-addq"><Plus size={16} />{L.add_q}</button>
+            <button onClick={() => setQs(a => [...a, mkQ('true_false')])} className="px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-semibold text-sm hover:border-blue-400 hover:text-indigo-600">{L.add_tf}</button>
           </div>
         </div>
 

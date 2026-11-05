@@ -79,7 +79,7 @@ export default function CodeLab(){
     <div className="grid lg:grid-cols-[320px_1fr] gap-4">
       <h1 className="sr-only">{t('codelab_sr')}</h1>
       <div className="bg-white rounded-2xl border p-4 space-y-3 h-fit">
-        <div className="flex items-center justify-between"><h2 className="font-bold">{t('codelab_tasks')}</h2>{!isStudent() && <button onClick={()=>setShowNew(!showNew)} className="p-1.5 rounded-lg bg-blue-700 text-white"><Plus size={16}/></button>}</div>
+        <div className="flex items-center justify-between"><h2 className="font-bold">{t('codelab_tasks')}</h2>{!isStudent() && <button onClick={()=>setShowNew(!showNew)} className="p-1.5 rounded-lg bg-indigo-600 text-white"><Plus size={16}/></button>}</div>
         {showNew && (
           <div className="p-3 rounded-xl bg-slate-50 border space-y-2">
             <input placeholder={t('codelab_name_ph')} value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})} className="w-full px-3 py-2 rounded-xl border bg-white text-sm"/>
@@ -88,12 +88,12 @@ export default function CodeLab(){
             </select>
             <textarea placeholder={t('codelab_desc_ph')} value={newTask.description} onChange={e=>setNewTask({...newTask,description:e.target.value})} className="w-full px-3 py-2 rounded-xl border bg-white text-sm"/>
             <textarea placeholder={t('codelab_starter_ph')} value={newTask.starter_code} onChange={e=>setNewTask({...newTask,starter_code:e.target.value})} className="w-full px-3 py-2 rounded-xl border bg-white text-sm font-mono"/>
-            <button onClick={create} className="w-full py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-1"><Save size={14}/> {t('create')}</button>
+            <button onClick={create} className="w-full py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold flex items-center justify-center gap-1"><Save size={14}/> {t('create')}</button>
           </div>
         )}
         <div className="space-y-2 max-h-[60vh] overflow-auto pr-1">
           {tasks.map(tsk=>(
-            <button key={tsk.id} onClick={()=>setActive(tsk)} className={`w-full text-left p-3 rounded-xl border ${active?.id===tsk.id?'border-blue-600 bg-blue-50':'bg-slate-50 hover:bg-white'}`}>
+            <button key={tsk.id} onClick={()=>setActive(tsk)} className={`w-full text-left p-3 rounded-xl border ${active?.id===tsk.id?'border-indigo-600 bg-indigo-50':'bg-slate-50 hover:bg-white'}`}>
               <div className="font-semibold text-sm line-clamp-1">{tsk.title}</div>
               <div className="text-xs text-slate-500">{tsk.language} • {tsk.description?.slice(0,40)}</div>
             </button>
@@ -132,7 +132,7 @@ export default function CodeLab(){
                 <div className="text-xs font-bold tracking-widest text-slate-400">{t('codelab_output')}</div>
                 <div className="flex gap-2">
                 {output && (active.language==='python'||active.language==='javascript') && (
-                  <button onClick={explain} disabled={explaining} className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1 disabled:opacity-50"><Sparkles size={12}/>{explaining?t('codelab_thinking'):t('codelab_explain')}</button>
+                  <button onClick={explain} disabled={explaining} className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1 disabled:opacity-50"><Sparkles size={12}/>{explaining?t('codelab_thinking'):t('codelab_explain')}</button>
                 )}
                 </div>
               </div>

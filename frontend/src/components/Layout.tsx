@@ -168,10 +168,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex overflow-x-clip">
-      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-xl focus:bg-blue-700 focus:text-white">{t('skip_content')}</a>
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-xl focus:bg-indigo-600 focus:text-white">{t('skip_content')}</a>
       <a
         href="#main-navigation"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:mt-10 focus:px-4 focus:py-2 focus:rounded-xl focus:bg-blue-700 focus:text-white"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:mt-10 focus:px-4 focus:py-2 focus:rounded-xl focus:bg-indigo-600 focus:text-white"
         onClick={e => {
           if (window.innerWidth >= 1024) return
           e.preventDefault()
@@ -190,15 +190,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
         <nav id="main-navigation" aria-label={t('main_navigation')} className="flex-1 p-3 space-y-1.5 overflow-auto scrollbar-thin stagger">
           {items.map(it => (
-            <Link key={it.to} to={it.to} aria-current={isActive(it.to) ? 'page' : undefined} aria-label={it.label} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive(it.to) ? 'bg-blue-700 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-100 dark:hover:border-slate-700'}`}>
+            <Link key={it.to} to={it.to} aria-current={isActive(it.to) ? 'page' : undefined} aria-label={it.label} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive(it.to) ? 'bg-indigo-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-100 dark:hover:border-slate-700'}`}>
               <span className={`p-1.5 rounded-lg ${isActive(it.to) ? 'bg-white/15' : 'bg-slate-50 dark:bg-slate-800'}`}><it.icon size={16} /></span> {it.label}
             </Link>
           ))}
         </nav>
         <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/60 space-y-2">
           {me ? (
-            <Link to="/profile" className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium card-hover ${isActive('/profile') ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700' : 'bg-white dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-600 dark:text-white'}`}>
-              <div className="w-8 h-8 rounded-full bg-blue-700 flex items-center justify-center text-white font-bold text-xs">{(me.username||'U')[0].toUpperCase()}</div>
+            <Link to="/profile" className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium card-hover ${isActive('/profile') ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700' : 'bg-white dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-600 dark:text-white'}`}>
+              <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">{(me.username||'U')[0].toUpperCase()}</div>
               <div className="flex-1 min-w-0"><div className="font-semibold line-clamp-1">{me.username}</div><div className="text-xs text-slate-500 dark:text-slate-400 truncate">{me.email||`ID ${me.id}`}</div></div>
             </Link>
           ) : (
@@ -207,7 +207,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {me ? (
             <button onClick={logout} className="w-full flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 btn-hover"><LogOut size={16}/> {t('logout')}</button>
           ) : (
-            <Link to="/login" className="w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-xl bg-blue-700 text-white font-semibold hover:bg-blue-800 transition-colors"><User size={16}/> {t('login')}</Link>
+            <Link to="/login" className="w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors"><User size={16}/> {t('login')}</Link>
           )}
         </div>
       </aside>
@@ -226,18 +226,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
             <nav id="mobile-navigation" tabIndex={-1} aria-label={t('main_navigation')} className="flex-1 p-3 space-y-1 overflow-auto outline-none">
               {items.map(it=>(
-                <Link key={it.to} to={it.to} onClick={()=>setOpen(false)} aria-current={isActive(it.to) ? 'page' : undefined} className={`flex items-center gap-3 px-3 py-3 rounded-xl min-h-[48px] ${isActive(it.to)?'bg-blue-700 text-white':'text-slate-600 dark:text-slate-300'}`}><it.icon size={18}/>{it.label}</Link>
+                <Link key={it.to} to={it.to} onClick={()=>setOpen(false)} aria-current={isActive(it.to) ? 'page' : undefined} className={`flex items-center gap-3 px-3 py-3 rounded-xl min-h-[48px] ${isActive(it.to)?'bg-indigo-600 text-white':'text-slate-600 dark:text-slate-300'}`}><it.icon size={18}/>{it.label}</Link>
               ))}
             </nav>
             <div className="p-3 pb-[calc(12px+env(safe-area-inset-bottom))] border-t dark:border-slate-700 shrink-0">
               {me ? (<>
                 <Link to="/profile" onClick={()=>setOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 dark:text-white">
-                  <div className="w-8 h-8 rounded-full bg-blue-700 flex items-center justify-center text-white font-bold text-xs">{(me.username||'U')[0].toUpperCase()}</div>
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">{(me.username||'U')[0].toUpperCase()}</div>
                   <div className="flex-1 min-w-0"><div className="font-semibold text-sm line-clamp-1">{me.username}</div></div>
                 </Link>
                 <button onClick={()=>{ setOpen(false); logout() }} className="mt-2 w-full flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 px-3 py-2"><LogOut size={16}/> {t('logout')}</button>
               </>) : (
-                <Link to="/login" onClick={()=>setOpen(false)} className="w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-xl bg-blue-700 text-white font-semibold"><User size={16}/> {t('login')}</Link>
+                <Link to="/login" onClick={()=>setOpen(false)} className="w-full flex items-center justify-center gap-2 text-sm px-3 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold"><User size={16}/> {t('login')}</Link>
               )}
             </div>
           </div>
@@ -265,7 +265,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               {showLang && (
                 <div className="absolute right-0 top-full mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl p-1 z-50 min-w-[160px]">
                   {(['ru','en','kg'] as const).map(l=>(
-                    <button key={l} onClick={()=>{setLang(l); setShowLang(false)}} className={`w-full text-left px-3 py-2.5 min-h-[44px] rounded-lg text-sm flex items-center justify-between ${lang===l?'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold':'hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-white'}`}>{l==='ru'?'🇷🇺 Русский':l==='en'?'🇬🇧 English':'🇰🇬 Кыргызча'} {lang===l && '✓'}</button>
+                    <button key={l} onClick={()=>{setLang(l); setShowLang(false)}} className={`w-full text-left px-3 py-2.5 min-h-[44px] rounded-lg text-sm flex items-center justify-between ${lang===l?'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-bold':'hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-white'}`}>{l==='ru'?'🇷🇺 Русский':l==='en'?'🇬🇧 English':'🇰🇬 Кыргызча'} {lang===l && '✓'}</button>
                   ))}
                 </div>
               )}
@@ -273,11 +273,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <button onClick={()=>setShowA11y(true)} aria-label={t('a11y_settings')} aria-expanded={showA11y} className={`p-2.5 min-w-[44px] min-h-[44px] rounded-xl border flex items-center justify-center gap-1 text-xs font-bold ${poor?'bg-amber-400 border-amber-500 text-slate-900':'bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border-transparent hover:border-slate-200 dark:border-slate-600'}`} title={t('a11y_settings')}><Accessibility size={16}/><span className="hidden lg:inline">{t('a11y')}{poor?' •':' '}</span></button>
             <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"/>
             {!student && (
-            <Link to="/lessons/new" className="px-4 py-2 rounded-xl bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 transition-colors hidden sm:flex items-center gap-1.5">{t('create_lesson')}</Link>
+            <Link to="/lessons/new" className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors hidden sm:flex items-center gap-1.5">{t('create_lesson')}</Link>
             )}
             {me ? (
-              <Link to="/profile" className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-700 dark:bg-white dark:text-slate-900 text-white text-sm font-semibold shadow-md btn-hover">
-                <div className="w-6 h-6 rounded-full bg-blue-700 flex items-center justify-center text-xs font-bold">{(me.username||'U')[0].toUpperCase()}</div>
+              <Link to="/profile" className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-600 dark:bg-white dark:text-slate-900 text-white text-sm font-semibold shadow-md btn-hover">
+                <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold">{(me.username||'U')[0].toUpperCase()}</div>
                 {me.username}
               </Link>
             ) : (
@@ -291,7 +291,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <nav id="bottom-navigation" aria-label={t('mobile_navigation')} className="lg:hidden fixed bottom-0 inset-x-0 z-30 flex items-stretch justify-around bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200/60 dark:border-slate-700/60 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(0,0,0,0.06)]">
             {bottomItems.map(it => (
               <Link key={it.to} to={it.to} aria-current={isActive(it.to) ? 'page' : undefined}
-                className={`flex-1 min-h-[56px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${isActive(it.to) ? 'text-blue-600 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-800'}`}>
+                className={`flex-1 min-h-[56px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${isActive(it.to) ? 'text-indigo-600 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-800'}`}>
                 <it.icon size={22} />
                 {it.label}
               </Link>

@@ -122,7 +122,7 @@ function FileIcon({name}:{name:string}){
   if(lang==='python') return <span className="text-[11px]">🐍</span>
   if(lang==='javascript') return <span className="text-[10px] font-bold text-yellow-300">JS</span>
   if(lang==='html') return <span className="text-[11px] text-orange-400">{"</>"}</span>
-  if(lang==='css') return <span className="text-[11px] text-blue-400">#</span>
+  if(lang==='css') return <span className="text-[11px] text-indigo-400">#</span>
   return <File size={12} className="text-slate-500"/>
 }
 
@@ -749,7 +749,7 @@ export default function VSCodeEditor(){
                 <button onClick={()=>setOutput('')} className="p-1 text-slate-500 hover:text-white" title={t('vsc_clear_title')}><Trash2 size={12}/></button>
                 <button onClick={()=>{setShowOutput(false); setOutput(''); setExplanation(null); setUseLive(false); live.close()}} className="p-1 text-slate-500 hover:text-white" title={t('close')}><X size={12}/></button>
                 {(active.lang==='python'||active.lang==='javascript') && output && (
-                  <button onClick={explainCode} disabled={explaining} className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs flex items-center gap-1 disabled:opacity-50">✨ {explaining?'...':t('vsc_explain')}</button>
+                  <button onClick={explainCode} disabled={explaining} className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs flex items-center gap-1 disabled:opacity-50">✨ {explaining?'...':t('vsc_explain')}</button>
                 )}
                 {(live.state==='running'||live.state==='waiting') && (
                   <button onClick={()=>live.stop()} className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-bold" title={t('vsc_stop_title')}>{t('vsc_stop')}</button>

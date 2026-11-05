@@ -53,7 +53,7 @@ export default function A11yPanel({ open, onClose, items = [] }: { open: boolean
           <button onClick={onClose} className="min-w-[44px] min-h-[44px] p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white flex items-center justify-center" aria-label={t('a11y_close')}><X size={18} /></button>
         </div>
 
-        <nav aria-label={t('a11y_quick_nav')} className="rounded-2xl border border-blue-100 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-3">
+        <nav aria-label={t('a11y_quick_nav')} className="rounded-2xl border border-indigo-100 dark:border-indigo-800 bg-indigo-50 dark:bg-blue-900/20 p-3">
           <h3 className="font-bold text-sm dark:text-white">{t('a11y_quick_nav')}</h3>
           <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{t('a11y_quick_nav_hint')}</p>
           <ul className="mt-2 space-y-1.5">
@@ -66,7 +66,7 @@ export default function A11yPanel({ open, onClose, items = [] }: { open: boolean
                   className="w-full min-h-[44px] px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 font-semibold flex items-center justify-between"
                 >
                   <span>{item.label}</span>
-                  <span aria-hidden="true" className="text-xs font-bold text-blue-700 dark:text-blue-300">Alt+{i + 1}</span>
+                  <span aria-hidden="true" className="text-xs font-bold text-indigo-700 dark:text-indigo-300">Alt+{i + 1}</span>
                 </Link>
               </li>
             ))}
@@ -97,7 +97,7 @@ export default function A11yPanel({ open, onClose, items = [] }: { open: boolean
           </div>
         )}
 
-        <div className="rounded-xl border border-blue-100 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-3">
+        <div className="rounded-xl border border-indigo-100 dark:border-indigo-800 bg-indigo-50 dark:bg-blue-900/20 p-3">
           <div className="font-bold text-sm dark:text-white mb-1">{t('a11y_howto')}</div>
           <div className="text-xs leading-relaxed text-slate-700 dark:text-slate-200">
             {t('a11y_poor_hint')}

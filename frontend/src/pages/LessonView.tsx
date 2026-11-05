@@ -58,19 +58,19 @@ export default function LessonView(){
     }
   }
   if(loading) return <div className="max-w-4xl mx-auto space-y-4"><div className="skeleton h-32 rounded-2xl"/><div className="skeleton h-64 rounded-2xl"/><div className="skeleton h-48 rounded-2xl"/></div>
-  if(error) return <div className="max-w-4xl mx-auto text-center py-16"><div className="text-red-600 font-bold">{error}</div><Link to="/lessons" className="mt-4 inline-block px-4 py-2 rounded-xl bg-blue-600 text-white">{t('lv_to_lessons')}</Link></div>
+  if(error) return <div className="max-w-4xl mx-auto text-center py-16"><div className="text-red-600 font-bold">{error}</div><Link to="/lessons" className="mt-4 inline-block px-4 py-2 rounded-xl bg-indigo-600 text-white">{t('lv_to_lessons')}</Link></div>
   if(!lesson) return <div>{t('loading')}</div>
   const getBlockContent=(block:any,idx:number)=>{
     switch(block.type){
-      case 'text': return <div className="prose max-w-none"><h3 className="font-bold text-lg flex flex-wrap items-center gap-1">{block.data.title} <button onClick={()=>speak(`${block.data.title}. ${block.data.content||''}`)} className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-blue-100 text-base font-normal" title={t('lv_read_aloud')} aria-label={t('lv_read_aloud')}>🔊</button></h3><div className="whitespace-pre-wrap mt-2">{block.data.content}</div></div>
+      case 'text': return <div className="prose max-w-none"><h3 className="font-bold text-lg flex flex-wrap items-center gap-1">{block.data.title} <button onClick={()=>speak(`${block.data.title}. ${block.data.content||''}`)} className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-indigo-100 text-base font-normal" title={t('lv_read_aloud')} aria-label={t('lv_read_aloud')}>🔊</button></h3><div className="whitespace-pre-wrap mt-2">{block.data.content}</div></div>
       case 'file': {
         const f=related.files.find((x:any)=>String(x.id)===String(block.data.file_id))
         const url = f ? mediaUrl(f.file || f.url) : ''
-        return f ? (url ? <div className="flex items-center gap-3 p-4 rounded-xl bg-slate-50 border"><FileText/><div><div className="font-semibold">{f.title}</div><a href={url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600">{t('lv_open_file')}</a><div className="text-xs text-slate-400">{f.file_type||''} • {(f.size/1024).toFixed(1)} KB</div></div></div> : <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm">{t('lv_file_nolink_a')}{f.title}{t('lv_file_nolink_b')} <Link to="/files" className="underline">{t('lv_files')}</Link></div>) : <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-sm">{t('lv_file_missing_a')}{String(block.data.file_id??'—')}{t('lv_file_missing_b')}</div>
+        return f ? (url ? <div className="flex items-center gap-3 p-4 rounded-xl bg-slate-50 border"><FileText/><div><div className="font-semibold">{f.title}</div><a href={url} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-600">{t('lv_open_file')}</a><div className="text-xs text-slate-400">{f.file_type||''} • {(f.size/1024).toFixed(1)} KB</div></div></div> : <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm">{t('lv_file_nolink_a')}{f.title}{t('lv_file_nolink_b')} <Link to="/files" className="underline">{t('lv_files')}</Link></div>) : <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-sm">{t('lv_file_missing_a')}{String(block.data.file_id??'—')}{t('lv_file_missing_b')}</div>
       }
       case 'presentation': {
         const p=related.pres.find((x:any)=>String(x.id)===String(block.data.presentation_id))
-        return p ? <Link to={`/presentations/${p.id}`} className="block p-4 rounded-xl bg-blue-700 text-white hover:shadow-lg transition"><div className="flex items-center gap-2"><Presentation size={20}/>{p.title}</div><div className="text-sm opacity-80">{p.slides_count ?? p.slides?.length ?? 0} {t('lv_slides_open')}</div></Link> : <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-sm">{t('lv_pres_missing_a')}{String(block.data.presentation_id??'—')}{t('lv_pres_missing_b')} <Link to="/presentations" className="text-blue-600 underline">{t('lv_to_pres')}</Link> {t('lv_or_pick')} <Link to={`/lessons/${id}/edit`} className="underline">{t('lv_editing')}</Link>.</div>
+        return p ? <Link to={`/presentations/${p.id}`} className="block p-4 rounded-xl bg-indigo-600 text-white hover:shadow-lg transition"><div className="flex items-center gap-2"><Presentation size={20}/>{p.title}</div><div className="text-sm opacity-80">{p.slides_count ?? p.slides?.length ?? 0} {t('lv_slides_open')}</div></Link> : <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-sm">{t('lv_pres_missing_a')}{String(block.data.presentation_id??'—')}{t('lv_pres_missing_b')} <Link to="/presentations" className="text-indigo-600 underline">{t('lv_to_pres')}</Link> {t('lv_or_pick')} <Link to={`/lessons/${id}/edit`} className="underline">{t('lv_editing')}</Link>.</div>
       }
       case 'test': {
         const tst=related.tests.find((x:any)=>String(x.id)===String(block.data.test_id))
@@ -103,11 +103,11 @@ export default function LessonView(){
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="bg-white rounded-2xl border p-6">
-        <div className="text-sm text-blue-600 font-medium">{lesson.subject_name||t('lv_lesson')} {lesson.course_title?`• ${lesson.course_title}`:''}</div>
+        <div className="text-sm text-indigo-600 font-medium">{lesson.subject_name||t('lv_lesson')} {lesson.course_title?`• ${lesson.course_title}`:''}</div>
         <h1 className="text-3xl font-display font-extrabold mt-1 dark:text-white">{lesson.title}</h1>
         <p className="text-slate-600 mt-2">{lesson.description}</p>
         <div className="flex gap-2 mt-4">
-          {canEdit ? <Link to={`/lessons/${id}/edit`} className="px-4 py-2.5 min-h-[44px] inline-flex items-center rounded-xl bg-blue-700 text-white text-sm">{t('edit')}</Link> : <span className="px-4 py-2.5 min-h-[44px] inline-flex items-center rounded-xl bg-slate-100 text-slate-400 text-sm" title={t('lv_locked')}>{t('lv_locked')}</span>}
+          {canEdit ? <Link to={`/lessons/${id}/edit`} className="px-4 py-2.5 min-h-[44px] inline-flex items-center rounded-xl bg-indigo-600 text-white text-sm">{t('edit')}</Link> : <span className="px-4 py-2.5 min-h-[44px] inline-flex items-center rounded-xl bg-slate-100 text-slate-400 text-sm" title={t('lv_locked')}>{t('lv_locked')}</span>}
           {!!me && <button onClick={handleDelete} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-red-50 text-red-600 border border-red-200 text-sm flex items-center gap-1 hover:bg-red-100"><Trash2 size={16}/>{t('delete')}</button>}
           <Link to="/lessons" className="px-4 py-2.5 min-h-[44px] inline-flex items-center rounded-xl bg-slate-100 text-sm">{t('back')}</Link>
         </div>

@@ -168,7 +168,7 @@ export default function Profile(){
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="bg-blue-700 rounded-[24px] p-8 text-white relative overflow-hidden">
+      <div className="bg-indigo-600 rounded-[24px] p-8 text-white relative overflow-hidden">
         <div className="flex gap-6 items-center relative">
           <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center text-3xl font-bold">{(me.username||'U')[0].toUpperCase()}</div>
           <div className="flex-1">
@@ -179,29 +179,29 @@ export default function Profile(){
             </div>
             {me.bio && <p className="mt-3 text-white/90 bg-white/10 rounded-xl p-3 text-sm">{me.bio}</p>}
           </div>
-          <button onClick={logout} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-blue-700 font-semibold"><LogOut size={16}/> {t('logout')}</button>
+          <button onClick={logout} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-indigo-700 font-semibold"><LogOut size={16}/> {t('logout')}</button>
         </div>
       </div>
 
       {!student && (
       <div className="grid sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-2xl border p-5 text-center">
-          <Layers className="mx-auto text-blue-600" size={24}/>
+          <Layers className="mx-auto text-indigo-600" size={24}/>
           <div className="text-2xl font-bold mt-2">{stats.lessons}</div>
           <div className="text-sm text-slate-500">{t('prof_my_lessons')}</div>
-          <button onClick={()=>showAndScroll('lessons')} className="text-xs text-blue-600 font-semibold mt-2 inline-block">{t('prof_show')}</button>
+          <button onClick={()=>showAndScroll('lessons')} className="text-xs text-indigo-600 font-semibold mt-2 inline-block">{t('prof_show')}</button>
         </div>
         <div className="bg-white rounded-2xl border p-5 text-center">
           <Presentation className="mx-auto text-orange-600" size={24}/>
           <div className="text-2xl font-bold mt-2">{stats.pres}</div>
           <div className="text-sm text-slate-500">{t('prof_my_pres')}</div>
-          <button onClick={()=>showAndScroll('presentations')} className="text-xs text-blue-600 font-semibold mt-2 inline-block">{t('prof_show')}</button>
+          <button onClick={()=>showAndScroll('presentations')} className="text-xs text-indigo-600 font-semibold mt-2 inline-block">{t('prof_show')}</button>
         </div>
         <div className="bg-white rounded-2xl border p-5 text-center">
           <FlaskConical className="mx-auto text-rose-600" size={24}/>
           <div className="text-2xl font-bold mt-2">{stats.tests}</div>
           <div className="text-sm text-slate-500">{t('prof_my_tests')}</div>
-          <button onClick={()=>showAndScroll('tests')} className="text-xs text-blue-600 font-semibold mt-2 inline-block">{t('prof_show')}</button>
+          <button onClick={()=>showAndScroll('tests')} className="text-xs text-indigo-600 font-semibold mt-2 inline-block">{t('prof_show')}</button>
         </div>
       </div>
       )}
@@ -209,7 +209,7 @@ export default function Profile(){
       <div className="bg-white rounded-2xl border p-6">
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-lg flex items-center gap-2"><User size={18}/> {t('profile')}</h3>
-          <button onClick={()=>setEdit(!edit)} className="px-4 py-2 rounded-xl bg-blue-700 text-white text-sm font-semibold">{edit?t('cancel'):t('edit')}</button>
+          <button onClick={()=>setEdit(!edit)} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">{edit?t('cancel'):t('edit')}</button>
         </div>
         {!edit ? (
           <div className="mt-4 space-y-3 text-sm">
@@ -221,13 +221,13 @@ export default function Profile(){
         ) : (
           <div className="mt-4 space-y-3">
             {saveError && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">⚠ {saveError}</div>}
-            <input autoFocus placeholder="Email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 outline-none"/>
+            <input autoFocus placeholder="Email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
             <div className="grid grid-cols-2 gap-3">
-              <input placeholder={t('prof_ph_name')} value={form.first_name} onChange={e=>setForm({...form,first_name:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 outline-none"/>
-              <input placeholder={t('prof_ph_surname')} value={form.last_name} onChange={e=>setForm({...form,last_name:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 outline-none"/>
+              <input placeholder={t('prof_ph_name')} value={form.first_name} onChange={e=>setForm({...form,first_name:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
+              <input placeholder={t('prof_ph_surname')} value={form.last_name} onChange={e=>setForm({...form,last_name:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
             </div>
-            <textarea placeholder={t('prof_ph_about')} value={form.bio} onChange={e=>setForm({...form,bio:e.target.value})} rows={3} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 outline-none"/>
-            <button onClick={save} className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700">{t('save')}</button>
+            <textarea placeholder={t('prof_ph_about')} value={form.bio} onChange={e=>setForm({...form,bio:e.target.value})} rows={3} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
+            <button onClick={save} className="w-full py-2.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-600">{t('save')}</button>
             <div className="text-xs text-slate-500 text-center">{t('prof_role_hint')}</div>
           </div>
         )}
@@ -236,14 +236,14 @@ export default function Profile(){
       <div ref={tabsRef} className="bg-white rounded-2xl border overflow-hidden scroll-mt-4">
         <div className="flex border-b">
           {!student && (<>
-          <button onClick={()=>setTab('lessons')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='lessons'?'bg-blue-50 text-blue-700 border-b-2 border-blue-600':'text-slate-500 hover:bg-slate-50'}`}><BookOpen size={16}/> {t('prof_tab_lessons')} ({myLessons.length})</button>
-          <button onClick={()=>setTab('presentations')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='presentations'?'bg-blue-50 text-blue-700 border-b-2 border-blue-600':'text-slate-500 hover:bg-slate-50'}`}><Presentation size={16}/> {t('prof_tab_pres')} ({myPres.length})</button>
+          <button onClick={()=>setTab('lessons')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='lessons'?'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600':'text-slate-500 hover:bg-slate-50'}`}><BookOpen size={16}/> {t('prof_tab_lessons')} ({myLessons.length})</button>
+          <button onClick={()=>setTab('presentations')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='presentations'?'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600':'text-slate-500 hover:bg-slate-50'}`}><Presentation size={16}/> {t('prof_tab_pres')} ({myPres.length})</button>
           <button onClick={()=>setTab('tests')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='tests'?'bg-rose-50 text-rose-700 border-b-2 border-rose-500':'text-slate-500 hover:bg-slate-50'}`}><FlaskConical size={16}/> {t('prof_tab_tests')} ({myTests.length})</button>
           <button onClick={()=>setTab('draft')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='draft'?'bg-amber-50 text-amber-700 border-b-2 border-amber-500':'text-slate-500 hover:bg-slate-50'}`}>📝 {t('prof_tab_draft')} {(draft || myPresDrafts.length) ? `• ${myPresDrafts.length + (draft?1:0)}` : ''}</button>
           </>)}
           <button onClick={()=>setTab('notes')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='notes'?'bg-emerald-50 text-emerald-700 border-b-2 border-emerald-500':'text-slate-500 hover:bg-slate-50'}`}><StickyNote size={16}/> {t('prof_tab_notes')}</button>
           {!student && (
-          <button onClick={()=>setTab('games')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='games'?'bg-blue-50 text-blue-700 border-b-2 border-blue-500':'text-slate-500 hover:bg-slate-50'}`}><Gamepad2 size={16}/> {t('prof_tab_games')} ({myTests.length})</button>
+          <button onClick={()=>setTab('games')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='games'?'bg-indigo-50 text-indigo-700 border-b-2 border-blue-500':'text-slate-500 hover:bg-slate-50'}`}><Gamepad2 size={16}/> {t('prof_tab_games')} ({myTests.length})</button>
           )}
         </div>
 
@@ -309,7 +309,7 @@ export default function Profile(){
                         </div>
                         <div className="flex gap-1 shrink-0">
                           <Link to={`/presentations/${p.id}`} className="p-2 rounded-lg bg-white border hover:bg-slate-50"><Eye size={16}/></Link>
-                          <Link to={`/presentations/${p.id}/edit`} className="p-2 rounded-lg bg-blue-600 text-white">{t('prof_finish')}</Link>
+                          <Link to={`/presentations/${p.id}/edit`} className="p-2 rounded-lg bg-indigo-600 text-white">{t('prof_finish')}</Link>
                           <button onClick={async()=>{if(!confirm(t('prof_del_draft2')))return; try{await client.delete(`/presentations/${p.id}/`); setMyPresDrafts(prev=>prev.filter(x=>x.id!==p.id)); toast(t('prof_draft_deleted'),'success')}catch(e:any){toast(t('prof_failed'),'error')}}} className="p-2 rounded-lg bg-red-50 text-red-600 border border-red-200"><Trash2 size={14}/></button>
                         </div>
                       </div>
@@ -322,12 +322,12 @@ export default function Profile(){
             filteredLessons.length===0 ? (
               <div className="text-center py-8 text-slate-400">
                 <div>{t('prof_no_lessons')}{filterSubject || search ? t('prof_by_filter') : ''}</div>
-                <Link to="/lessons/new" className="text-blue-600 underline text-sm mt-2 inline-block">{t('prof_create_lesson')}</Link>
+                <Link to="/lessons/new" className="text-indigo-600 underline text-sm mt-2 inline-block">{t('prof_create_lesson')}</Link>
               </div>
             ) : (
               <div className="grid gap-3">
                 {filteredLessons.map((l:any)=>(
-                  <div key={l.id} className="p-4 rounded-xl border hover:border-blue-200 hover:bg-blue-50/30 flex items-center justify-between gap-3">
+                  <div key={l.id} className="p-4 rounded-xl border hover:border-indigo-200 hover:bg-indigo-50/30 flex items-center justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold truncate">{l.title}</div>
                       <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
@@ -338,7 +338,7 @@ export default function Profile(){
                     </div>
                     <div className="flex gap-1 shrink-0">
                       <Link to={`/lessons/${l.id}`} className="p-2 rounded-lg bg-white border hover:bg-slate-50"><Eye size={16}/></Link>
-                      <Link to={`/lessons/${l.id}/edit`} className="p-2 rounded-lg bg-blue-600 text-white"><Edit size={16}/></Link>
+                      <Link to={`/lessons/${l.id}/edit`} className="p-2 rounded-lg bg-indigo-600 text-white"><Edit size={16}/></Link>
                     </div>
                   </div>
                 ))}
@@ -348,7 +348,7 @@ export default function Profile(){
             filteredPres.length===0 ? (
               <div className="text-center py-8 text-slate-400">
                 <div>{t('prof_no_pres')}{filterSubject || search ? t('prof_by_filter') : ''}</div>
-                <Link to="/presentations/new" className="text-blue-600 underline text-sm mt-2 inline-block">{t('prof_create_pres')}</Link>
+                <Link to="/presentations/new" className="text-indigo-600 underline text-sm mt-2 inline-block">{t('prof_create_pres')}</Link>
               </div>
             ) : (
               <div className="grid gap-3">
@@ -374,7 +374,7 @@ export default function Profile(){
             filteredTests.length===0 ? (
               <div className="text-center py-8 text-slate-400">
                 <div>{t('prof_no_tests')}{search ? t('prof_by_filter') : ''}</div>
-                <Link to="/tests/new" className="text-blue-600 underline text-sm mt-2 inline-block">{t('prof_create_test')}</Link>
+                <Link to="/tests/new" className="text-indigo-600 underline text-sm mt-2 inline-block">{t('prof_create_test')}</Link>
               </div>
             ) : (
               <div className="grid gap-3">
@@ -400,21 +400,21 @@ export default function Profile(){
             <Notes />
           ) : (
             <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-sm text-blue-900">
+              <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 text-sm text-blue-900">
                 {t('prof_games_hint')}
               </div>
               {myTests.length===0 ? (
-                <div className="text-center py-6 text-slate-400 text-sm">{student ? (<>{t('prof_no_quiz_student_a')} <Link to="/games" className="text-blue-600 underline">{t('games')}</Link>.</>) : t('prof_no_quiz')}</div>
+                <div className="text-center py-6 text-slate-400 text-sm">{student ? (<>{t('prof_no_quiz_student_a')} <Link to="/games" className="text-indigo-600 underline">{t('games')}</Link>.</>) : t('prof_no_quiz')}</div>
               ) : (
                 <div className="grid gap-2">
                   {myTests.map((it:any)=>(
-                    <div key={it.id} className="p-3 rounded-xl border hover:border-blue-200 hover:bg-blue-50/40 flex items-center justify-between gap-3">
+                    <div key={it.id} className="p-3 rounded-xl border hover:border-indigo-200 hover:bg-indigo-50/40 flex items-center justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold truncate">{it.title}</div>
                         <div className="text-xs text-slate-500 mt-0.5">{it.questions_count ?? it.questions?.length ?? 0} {t('tests_questions')}</div>
                       </div>
                       <button onClick={()=>nav(`/games/arkan?test=${it.id}`)}
-                        className="px-4 py-2.5 min-h-[48px] rounded-xl bg-blue-600 text-white text-sm font-bold flex items-center gap-1 shrink-0">
+                        className="px-4 py-2.5 min-h-[48px] rounded-xl bg-indigo-600 text-white text-sm font-bold flex items-center gap-1 shrink-0">
                         <Play size={15}/> {t('prof_play')}
                       </button>
                     </div>

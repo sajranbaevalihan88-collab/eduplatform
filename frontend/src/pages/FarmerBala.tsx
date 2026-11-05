@@ -338,7 +338,7 @@ export default function FarmerBala() {
   return (
     <div className="min-h-[calc(100vh-64px)] w-full bg-gradient-to-b from-emerald-900 to-emerald-950 px-2 py-4 sm:px-3 lg:px-8 sm:py-6" data-page="farmer">
       <div className="max-w-5xl mx-auto">
-        <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-blue-400">
+        <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-indigo-400">
           {t('hm_to_games')}
         </a>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-center mb-1 text-white">🧑‍🌾 {t('games_farmer')}</h1>

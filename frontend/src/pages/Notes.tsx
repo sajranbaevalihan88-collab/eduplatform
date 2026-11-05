@@ -311,10 +311,10 @@ export default function Notes() {
           <div className="flex gap-2" role="group" aria-label={t('notes_preset_aria')}>
             {[{ l: '1:00', s: 60 }, { l: '5:00', s: 300 }, { l: '15:00', s: 900 }, { l: '25:00', s: 1500 }].map(p => (
               <button key={p.l} onClick={() => setPreset(p.s)}
-                className={`px-3 py-2 min-h-[36px] min-w-[48px] rounded-lg text-xs font-bold ${timerTotal === p.s ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 dark:text-white'}`}>{p.l}</button>
+                className={`px-3 py-2 min-h-[36px] min-w-[48px] rounded-lg text-xs font-bold ${timerTotal === p.s ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-700 dark:text-white'}`}>{p.l}</button>
             ))}
           </div>
-          <button onClick={create} className="ml-auto px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-600 text-white font-semibold flex items-center gap-2">
+          <button onClick={create} className="ml-auto px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 text-white font-semibold flex items-center gap-2">
             <Plus size={16} /> {t('add')}
           </button>
         </div>
@@ -396,7 +396,7 @@ export default function Notes() {
                   )}
                   {(n.timer_sec || 0) > 0 && (
                     <span role="timer" aria-label={`${t('notes_left')} ${fmt(n._left ?? n.timer_sec)}`}
-                      className="px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-mono font-bold">
+                      className="px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 font-mono font-bold">
                       {fmt(n._left ?? n.timer_sec)}
                     </span>
                   )}
