@@ -74,6 +74,16 @@ export default function LessonBuilder(){
   useEffect(()=>{
     loadSubjects(); loadOptions()
     if(!isNew && id) client.get(`/lessons/${id}/`).then(r=>{setTitle(r.data.title); setDesc(r.data.description||''); setIsPublic(!!r.data.is_public); setSubject(r.data.subject!=null?Number(r.data.subject):null); if(r.data.blocks?.length) setBlocks(r.data.blocks)}).catch(e=>toast(e?.response?.data?.detail||'Не удалось загрузить урок','error'))
+    // предвыбор предмета из ?subject=slug (приход со страницы предмета)
+    if(isNew){
+      const sp=new URLSearchParams(window.location.search)
+      const s=sp.get('subject')
+      if(s) client.get('/subjects/').then(r=>{
+        const arr=Array.isArray(r.data)?r.data:r.data.results||[]
+        const f=arr.find((x:any)=>String(x.slug)===String(s)||String(x.id)===String(s))
+        if(f) setSubject(f.id)
+      }).catch(()=>{})
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[id])
 

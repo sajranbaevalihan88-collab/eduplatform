@@ -22,7 +22,7 @@ export default function Subjects(){
       {error && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {list.map(s=>(
-          <Link key={s.id} to={`/lessons?subject=${s.slug}`} className="bg-white rounded-2xl border overflow-hidden hover:shadow-md transition hover:border-indigo-200 group block">
+          <Link key={s.id} to={`/subjects/${s.slug}`} className="bg-white rounded-2xl border overflow-hidden hover:shadow-md transition hover:border-indigo-200 group block">
             <div className="h-2" style={{background:s.color}} />
             <div className="p-5">
               <div className="flex items-start justify-between">

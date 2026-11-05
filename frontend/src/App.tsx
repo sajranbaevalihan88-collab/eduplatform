@@ -43,6 +43,8 @@ function TeacherRoute({ children }: { children: React.ReactNode }) {
 
 import Dashboard from './pages/Dashboard'
 import Subjects from './pages/Subjects'
+import SubjectDetail from './pages/SubjectDetail'
+import MyLessons from './pages/MyLessons'
 import Lessons from './pages/Lessons'
 import LessonView from './pages/LessonView'
 import Files from './pages/Files'
@@ -91,6 +93,8 @@ export default function App() {
                 <Route path="/login" element={<Login />} />
                 <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
                 <Route path="/subjects" element={<Subjects />} />
+                <Route path="/subjects/:slug" element={<SubjectDetail />} />
+                <Route path="/my-lessons" element={<TeacherRoute><MyLessons /></TeacherRoute>} />
                 <Route path="/lessons" element={<Lessons />} />
                 <Route path="/lessons/new" element={<TeacherRoute><LessonBuilder /></TeacherRoute>} />
                 <Route path="/lessons/:id" element={<LessonView />} />

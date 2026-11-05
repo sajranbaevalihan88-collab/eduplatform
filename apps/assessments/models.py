@@ -5,6 +5,7 @@ class Test(models.Model):
     title = models.CharField(max_length=300)
     description = models.TextField(blank=True)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name='tests')
+    subject = models.ForeignKey('catalog.Subject', on_delete=models.SET_NULL, null=True, blank=True, related_name='tests', help_text='Предмет для раздела «Предметы»')
     is_public = models.BooleanField(default=True)
     is_lesson_private = models.BooleanField(default=False, help_text="Создан внутри урока — не показывать в общей ленте")
     lesson = models.ForeignKey('lessons.Lesson', on_delete=models.SET_NULL, null=True, blank=True, related_name='tests', help_text="Урок, внутри которого создан контент. Пока урок не опубликован — видит только владелец")

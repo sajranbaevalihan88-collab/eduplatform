@@ -25,6 +25,8 @@ export default function TestBuilder(){
   const [genSource,setGenSource]=useState<string|null>(null)
   const [genPrompt,setGenPrompt]=useState('')
   const [saving,setSaving]=useState(false)
+  const [subject,setSubject]=useState<any>(null)
+  const [subjects,setSubjects]=useState<any[]>([])
   const [mode,setMode]=useState<'pick'|'form'|null>(isNew? 'pick' : 'form')
   const justPick=mode==='pick'
   const doGenerate=async()=>{
@@ -41,10 +43,23 @@ export default function TestBuilder(){
     setGenerating(false)
   }
   const [searchParams]=useSearchParams()
+  // Предмет теста: загрузка списка + предвыбор из ?subject=slug (приход из страницы предмета)
+  useEffect(()=>{
+    client.get('/subjects/').then(r=>{
+      const arr=Array.isArray(r.data)?r.data:r.data.results||[]
+      setSubjects(arr)
+      const s=searchParams.get('subject')
+      if(s && isNew){
+        const f=arr.find((x:any)=>String(x.slug)===String(s)||String(x.id)===String(s))
+        if(f) setSubject(f.id)
+      }
+    }).catch(()=>{})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[])
   const fromPath=searchParams.get('from') && searchParams.get('from')!.startsWith('/') ? searchParams.get('from')! : null
   useEffect(()=>{
     if(!isNew) client.get(`/tests/${id}/`).then(r=>{
-      setTitle(r.data.title); setDesc(r.data.description); setPass(r.data.pass_score); setTimePerQ(r.data.time_per_question||0)
+      setTitle(r.data.title); setDesc(r.data.description); setPass(r.data.pass_score); setTimePerQ(r.data.time_per_question||0); if(r.data.subject!=null) setSubject(Number(r.data.subject))
       if(r.data.questions?.length) setQuestions(r.data.questions.map((q:any)=>({text:q.text,type:q.type,points:q.points,explanation:q.explanation||'',options:q.options.map((o:any)=>({text:o.text,is_correct:o.is_correct}))})))
     })
   },[id])
@@ -52,7 +67,7 @@ export default function TestBuilder(){
     if(saving) return
     setSaving(true)
     try{
-      const payload={title,description:desc,pass_score:pass,time_limit:0,time_per_question:Math.max(0, timePerQ||0),questions:questions.map((q,i)=>({...q,order:i,explanation:(q as any).explanation||'',options:q.options.map((o,j)=>({...o,order:j}))}))}
+      const payload={title,description:desc,subject:subject||null,pass_score:pass,time_limit:0,time_per_question:Math.max(0, timePerQ||0),questions:questions.map((q,i)=>({...q,order:i,explanation:(q as any).explanation||'',options:q.options.map((o,j)=>({...o,order:j}))}))}
       if(isNew){
         await client.post('/tests/',payload)
         toast(t('tb_saved'),'success')
@@ -103,6 +118,13 @@ export default function TestBuilder(){
         </div>
         <input value={title} onChange={e=>setTitle(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 font-bold text-lg"/>
         <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder={t('tb_desc_ph')} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50"/>
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">{t('subj_label')}</label>
+          <select value={subject||''} onChange={e=>setSubject(e.target.value?Number(e.target.value):null)} className="w-full px-3 py-2 rounded-xl border bg-slate-50 text-sm">
+            <option value="">{t('subj_no_subject')}</option>
+            {subjects.map(s=><option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
+          </select>
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm">{t('tb_pass')}</label><input type="number" value={pass} onChange={e=>setPass(parseInt(e.target.value)||0)} className="w-24 px-3 py-2 rounded-xl border"/>
           <label className="text-sm" title={t('tb_sec_per_q')}>{t('tb_sec_per_q')}</label><input type="number" min={0} max={300} value={timePerQ} onChange={e=>setTimePerQ(Math.max(0, parseInt(e.target.value)||0))} className="w-24 px-3 py-2 rounded-xl border"/>

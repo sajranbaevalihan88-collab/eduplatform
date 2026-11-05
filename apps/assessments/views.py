@@ -56,6 +56,9 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
         owner = self.request.query_params.get('owner')
         if owner == 'me' and user.is_authenticated:
             qs = qs.filter(owner=user)
+        subject = self.request.query_params.get('subject')
+        if subject:
+            qs = qs.filter(subject__slug=subject)
         return qs
 
     def perform_create(self, serializer):

@@ -56,7 +56,7 @@ export default function Lessons(){
         <div className="flex flex-wrap gap-2">
           <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:min-w-[240px]"><div className="relative group flex-1 max-w-full sm:max-w-[260px] md:max-w-[320px]"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('lessons_search_ph')} className="pl-9 pr-4 py-2.5 rounded-xl border bg-white w-full focus-ring"/></div></div>
           {!isStudent() && (
-          <Link to="/lessons/new" className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('create')}</Link>
+          <Link to={subjectFilter?`/lessons/new?subject=${encodeURIComponent(subjectFilter)}`:'/lessons/new'} className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('create')}</Link>
           )}
         </div>
       </div>

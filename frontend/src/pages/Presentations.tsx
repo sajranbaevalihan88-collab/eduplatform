@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import client from '../api/client'
 import { Link } from 'react-router-dom'
-import { Plus, Presentation as Icon, Eye, Trash2, Search } from 'lucide-react'
+import { Plus, Presentation as Icon, Eye, Trash2, Search, Upload } from 'lucide-react'
 import { isStudent } from '../utils/role'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
@@ -11,6 +11,24 @@ export default function Presentations(){
   const [list,setList]=useState<any[]>([])
   const [q,setQ]=useState('')
   const [me,setMe]=useState<any>(null)
+  const fileRef=useRef<HTMLInputElement>(null)
+  const [uploading,setUploading]=useState(false)
+  const uploadPres=async(file:File)=>{
+    setUploading(true)
+    try{
+      const fd=new FormData()
+      fd.append('file',file)
+      fd.append('title',file.name.replace(/\.[^/.]+$/,''))
+      fd.append('is_public','true')
+      const r=await client.post('/presentations/import/', fd, {headers:{'Content-Type':'multipart/form-data'}})
+      const count=r.data?.slides_count ?? r.data?.slides?.length ?? 0
+      toast(`${t('pres_uploaded')} — ${count} ${t('pres_slides_short')}`,'success')
+      client.get('/presentations/?is_public=true&is_lesson_private=false').then(rr=>setList(Array.isArray(rr.data)?rr.data:rr.data.results||[])).catch(()=>{})
+    }catch(e:any){
+      toast(e?.response?.data?.detail||e?.response?.data?.error||t('pres_import_err'),'error')
+    }
+    setUploading(false)
+  }
   useEffect(()=>{
     // только публичные и не приватные урока — черновики и уроковые не попадают в общую ленту
     client.get('/presentations/?is_public=true&is_lesson_private=false').then(r=>setList(Array.isArray(r.data)?r.data:r.data.results||[]))
@@ -43,6 +61,10 @@ export default function Presentations(){
           {!isStudent() && (
         <Link to="/presentations/new" className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('create')}</Link>
         )}
+          {!isStudent() && (
+        <button onClick={()=>fileRef.current?.click()} disabled={uploading} className="px-5 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold flex items-center gap-2 shadow-md btn-hover disabled:opacity-50"><Upload size={18}/>{uploading?'...':t('subj_upload')}</button>
+        )}
+          <input ref={fileRef} type="file" accept=".pptx,.ppt" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f) uploadPres(f); e.target.value=''}}/>
         </div>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">

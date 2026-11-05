@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info, Database, Volume2, VolumeX } from 'lucide-react'
+import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info, Database, Volume2, VolumeX, FolderLock } from 'lucide-react'
 import A11yPanel from './A11yPanel'
 import { useState, useEffect, useRef } from 'react'
 import client from '../api/client'
@@ -29,8 +29,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { to: '/dashboard', label: t('dashboard'), icon: LayoutDashboard },
     { to: '/subjects', label: t('subjects'), icon: BookOpen },
     { to: '/lessons', label: t('lessons'), icon: Layers },
+    // Мои уроки — приватные уроки учителя (у ученика раздела нет)
+    ...(!student ? [{ to: '/my-lessons', label: t('my_lessons'), icon: FolderLock }] : []),
     { to: '/presentations', label: t('presentations'), icon: Presentation },
-    { to: '/tests', label: t('tests'), icon: FlaskConical },
     { to: '/classes', label: t('classes'), icon: GraduationCap },
     // доска — только учителям (у ученика её нет)
     ...(!student ? [{ to: '/board', label: t('board'), icon: PenTool }] : []),
@@ -44,7 +45,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const bottomItems = [
     { to: '/dashboard', label: t('dashboard'), icon: LayoutDashboard },
     { to: '/lessons', label: t('lessons'), icon: Layers },
-    { to: '/tests', label: t('tests'), icon: FlaskConical },
+    { to: '/subjects', label: t('subjects'), icon: BookOpen },
     { to: '/classes', label: t('classes'), icon: GraduationCap },
     { to: '/games', label: t('games'), icon: Gamepad2 },
   ]
