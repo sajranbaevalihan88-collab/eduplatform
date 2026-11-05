@@ -104,9 +104,14 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return qs.filter(is_public=True)
         if user.is_staff or getattr(user, 'role', None) == 'admin':
-            return qs
-        from django.db.models import Q
-        return qs.filter(Q(owner=user) | Q(is_public=True))
+            base = qs
+        else:
+            from django.db.models import Q
+            base = qs.filter(Q(owner=user) | Q(is_public=True))
+        subject = self.request.query_params.get('subject')
+        if subject:
+            base = base.filter(subject__slug=subject)
+        return base
 
     def perform_create(self, serializer):
         file_obj = self.request.FILES.get('file')

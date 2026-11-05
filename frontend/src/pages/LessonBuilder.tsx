@@ -422,10 +422,10 @@ export default function LessonBuilder(){
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3 text-sm text-slate-500">
-        <Link to="/lessons" className="hover:text-indigo-600">{t('lessons')}</Link>
+      <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+        <Link to="/lessons" className="hover:text-indigo-600 dark:hover:text-indigo-400">{t('lessons')}</Link>
         <span>›</span>
-        <span className="text-slate-900 font-medium">{isNew?t('lb_new'):t('lb_editing')}</span>
+        <span className="text-slate-900 dark:text-slate-100 font-medium">{isNew?t('lb_new'):t('lb_editing')}</span>
       </div>
       {draftBanner && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-[94vw] sm:max-w-md rounded-2xl bg-slate-900/92 dark:bg-black/85 text-white shadow-2xl border border-white/10 px-4 py-3 flex items-center gap-3" data-testid="lb-draft-chip">

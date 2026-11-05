@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Layers, Presentation as PresIcon, FlaskConical, Plus, Upload, Search } from 'lucide-react'
-import client from '../api/client'
+import { Layers, Presentation as PresIcon, FlaskConical, Plus, Upload, Search, BookOpen, X, Download } from 'lucide-react'
+import client, { mediaUrl } from '../api/client'
 import { isStudent } from '../utils/role'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
@@ -12,10 +12,12 @@ export default function SubjectDetail(){
   const {t}=useLang()
   const {slug}=useParams()
   const [subject,setSubject]=useState<any>(null)
-  const [tab,setTab]=useState<'lessons'|'pres'|'tests'>('lessons')
+  const [tab,setTab]=useState<'lessons'|'pres'|'tests'|'books'>('lessons')
   const [lessons,setLessons]=useState<any[]>([])
   const [pres,setPres]=useState<any[]>([])
   const [tests,setTests]=useState<any[]>([])
+  const [books,setBooks]=useState<any[]>([])
+  const [book,setBook]=useState<any>(null)
   const [q,setQ]=useState('')
   const [me,setMe]=useState<any>(null)
   const [uploading,setUploading]=useState(false)
@@ -36,6 +38,10 @@ export default function SubjectDetail(){
     client.get(`/lessons/?subject=${s}`).then(r=>setLessons(Array.isArray(r.data)?r.data:r.data.results||[])).catch(()=>setLessons([]))
     client.get(`/presentations/?subject=${s}`).then(r=>setPres(Array.isArray(r.data)?r.data:r.data.results||[])).catch(()=>setPres([]))
     client.get(`/tests/?subject=${s}`).then(r=>setTests(Array.isArray(r.data)?r.data:r.data.results||[])).catch(()=>setTests([]))
+    client.get(`/files/?subject=${s}`).then(r=>{
+      const arr=Array.isArray(r.data)?r.data:r.data.results||[]
+      setBooks(arr.filter((f:any)=>f.file_type==='pdf'||f.file_type==='document'))
+    }).catch(()=>setBooks([]))
   },[slug])
 
   const canEdit=(item:any)=>{
@@ -64,14 +70,43 @@ export default function SubjectDetail(){
     setUploading(false)
   }
 
+  const uploadBook=async(file:File)=>{
+    setUploading(true)
+    try{
+      const fd=new FormData()
+      fd.append('file',file)
+      fd.append('title',file.name.replace(/\.[^/.]+$/,''))
+      if(subject?.id) fd.append('subject',String(subject.id))
+      fd.append('is_public','true')
+      await client.post('/files/', fd, {headers:{'Content-Type':'multipart/form-data'}})
+      toast(t('pres_uploaded'),'success')
+      const s=encodeURIComponent(slug||'')
+      client.get(`/files/?subject=${s}`).then(rr=>{
+        const arr=Array.isArray(rr.data)?rr.data:rr.data.results||[]
+        setBooks(arr.filter((f:any)=>f.file_type==='pdf'||f.file_type==='document'))
+      }).catch(()=>{})
+    }catch(e:any){
+      toast(e?.response?.data?.detail||e?.response?.data?.error||t('pres_import_err'),'error')
+    }
+    setUploading(false)
+  }
+
+  const humanSize=(n:number)=>{
+    if(!n) return ''
+    if(n<1024*1024) return `${Math.round(n/1024)} KB`
+    return `${(n/1024/1024).toFixed(1)} MB`
+  }
+
   const fl=lessons.filter(l=>!q||l.title.toLowerCase().includes(q.toLowerCase()))
   const fp=pres.filter(p=>!q||(p.title||'').toLowerCase().includes(q.toLowerCase()))
   const ft=tests.filter(x=>!q||x.title.toLowerCase().includes(q.toLowerCase()))
+  const fb=books.filter(b=>!q||(b.title||'').toLowerCase().includes(q.toLowerCase()))
 
   const tabs=[
     {key:'lessons' as const, label:t('lessons'), icon:Layers, count:lessons.length},
     {key:'pres' as const, label:t('presentations'), icon:PresIcon, count:pres.length},
     {key:'tests' as const, label:t('tests'), icon:FlaskConical, count:tests.length},
+    {key:'books' as const, label:t('subj_tab_books'), icon:BookOpen, count:books.length},
   ]
 
   return (
@@ -108,6 +143,10 @@ export default function SubjectDetail(){
           <input ref={fileRef} type="file" accept=".pptx,.ppt" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f) uploadPres(f); e.target.value=''}}/>
         </>}
         {isTeacher && tab==='tests' && <Link to={`/tests/new?subject=${slug}`} className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center gap-2"><Plus size={16}/>{t('create')}</Link>}
+        {isTeacher && tab==='books' && <>
+          <button onClick={()=>fileRef.current?.click()} disabled={uploading} className="px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-50"><Upload size={16}/>{uploading?'...':t('subj_upload_book')}</button>
+          <input ref={fileRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f) uploadBook(f); e.target.value=''}}/>
+        </>}
       </div>
 
       {tab==='lessons' && (
@@ -155,6 +194,43 @@ export default function SubjectDetail(){
             </div>
           ))}
           {ft.length===0 && <div className="col-span-full text-center py-10 text-slate-400">{t('subj_empty_tests')}</div>}
+        </div>
+      )}
+      {tab==='books' && (
+        <div className="space-y-4">
+          {book && (
+            <div className="bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border overflow-hidden">
+              <div className="px-4 py-2.5 flex items-center gap-2 border-b dark:border-slate-800">
+                <BookOpen size={16} className="text-cyan-600 shrink-0"/>
+                <span className="font-bold text-sm truncate dark:text-white">{book.title}</span>
+                <a href={mediaUrl(book.file)} target="_blank" rel="noopener noreferrer" className="ml-auto px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1 shrink-0"><Download size={13}/>{t('books_open_new')}</a>
+                <button onClick={()=>setBook(null)} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500"><X size={14}/></button>
+              </div>
+              {book.file_type==='pdf'
+                ? <iframe src={mediaUrl(book.file)} className="w-full h-[70vh] bg-white" title={book.title}/>
+                : <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                    <BookOpen size={36} className="mx-auto mb-3 opacity-40"/>
+                    <p>{t('books_doc_hint')}</p>
+                    <a href={mediaUrl(book.file)} target="_blank" rel="noopener noreferrer" className="inline-block mt-3 px-4 py-2 rounded-xl bg-cyan-600 text-white text-sm font-semibold"><Download size={14} className="inline mr-1"/>{t('books_download')}</a>
+                  </div>}
+            </div>
+          )}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {fb.map(b=>(
+              <button key={b.id} onClick={()=>setBook(b)} className="text-left bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border p-4 hover:shadow-md transition">
+                <div className="flex items-start gap-2">
+                  <span className="p-2 rounded-xl bg-cyan-50 text-cyan-600 shrink-0"><BookOpen size={16}/></span>
+                  <h3 className="font-bold line-clamp-2 flex-1 dark:text-white">{b.title}</h3>
+                </div>
+                <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 font-semibold uppercase">{b.file_type==='pdf'?'PDF':'Word'}</span>
+                  {b.size ? <span>{humanSize(b.size)}</span> : null}
+                  <span className="ml-auto text-cyan-600 font-semibold opacity-0 group-hover:opacity-100">{t('subj_open')}</span>
+                </div>
+              </button>
+            ))}
+            {fb.length===0 && <div className="col-span-full text-center py-10 text-slate-400">{t('subj_empty_books')}</div>}
+          </div>
         </div>
       )}
     </div>

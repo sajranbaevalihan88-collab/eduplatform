@@ -30,7 +30,8 @@ class UploadedFile(models.Model):
     mime_type = models.CharField(max_length=100, blank=True)
     size = models.PositiveIntegerField(default=0)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name='files')
-    is_public = models.BooleanField(default=False, help_text="Если True — файл виден всем, иначе только владельцу")
+    subject = models.ForeignKey('catalog.Subject', on_delete=models.SET_NULL, null=True, blank=True, related_name='files', help_text='Предмет для вкладки «Книги» на странице предмета')
+    is_public = models.BooleanField(default=False, help_text="Если True - файл виден всем, иначе только владельцу")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
