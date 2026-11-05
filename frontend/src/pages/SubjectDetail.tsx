@@ -21,6 +21,9 @@ export default function SubjectDetail(){
   const [q,setQ]=useState('')
   const [me,setMe]=useState<any>(null)
   const [uploading,setUploading]=useState(false)
+  const [bookObjUrl,setBookObjUrl]=useState('')
+  const [bookLoading,setBookLoading]=useState(false)
+  const [bookErr,setBookErr]=useState('')
   const fileRef=useRef<HTMLInputElement>(null)
 
   useEffect(()=>{
@@ -73,12 +76,30 @@ export default function SubjectDetail(){
     try{
       await client.delete(`/files/${f.id}/`)
       setBooks(prev=>prev.filter(x=>x.id!==f.id))
-      if(book?.id===f.id) setBook(null)
+      if(book?.id===f.id){ if(bookObjUrl) URL.revokeObjectURL(bookObjUrl); setBook(null); setBookObjUrl('') }
       toast(t('file_deleted'),'success')
     }catch(err:any){
       toast(err?.response?.data?.detail||t('lessons_del_err'),'error')
     }
   }
+  // Открытие книги: качаем файл обычным fetch'ем (как все API-запросы — они
+  // стабильно работают) и отдаём в iframe через blob:URL. Прямой коннект
+  // iframe'а к localhost:8001 Chrome иногда блокирует, а vite-прокси на
+  // больших файлах отвечает 500/text-plain — серый экран вместо PDF.
+  const openBook=async(b:any)=>{
+    if(bookObjUrl) URL.revokeObjectURL(bookObjUrl)
+    setBookObjUrl(''); setBookErr(''); setBook(b); setBookLoading(true)
+    try{
+      const r=await client.get(b.url||mediaUrl(b.file), {responseType:'blob'})
+      const type=r.headers?.['content-type']
+      const blob=new Blob([r.data], {type: type&&type.startsWith('application/pdf')?'application/pdf':'application/pdf'})
+      setBookObjUrl(URL.createObjectURL(blob))
+    }catch(e:any){
+      setBookErr(t('books_load_err'))
+    }
+    setBookLoading(false)
+  }
+  useEffect(()=>()=>{ if(bookObjUrl) URL.revokeObjectURL(bookObjUrl) },[bookObjUrl])
 
   const uploadPres=async(file:File)=>{
     setUploading(true)
@@ -108,7 +129,7 @@ export default function SubjectDetail(){
       if(subject?.id) fd.append('subject',String(subject.id))
       fd.append('is_public','true')
       await client.post('/files/', fd, {headers:{'Content-Type':'multipart/form-data'}})
-      toast(t('pres_uploaded'),'success')
+      toast(t('books_uploaded'),'success')
       loadBooks()
     }catch(e:any){
       toast(e?.response?.data?.detail||e?.response?.data?.error||t('pres_import_err'),'error')
@@ -228,21 +249,25 @@ export default function SubjectDetail(){
               <div className="px-4 py-2.5 flex items-center gap-2 border-b dark:border-slate-800">
                 <BookOpen size={16} className="text-cyan-600 shrink-0"/>
                 <span className="font-bold text-sm truncate dark:text-white">{book.title}</span>
-                <a href={mediaSrc(book.url||book.file)} target="_blank" rel="noopener noreferrer" className="ml-auto px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1 shrink-0"><Download size={13}/>{t('books_open_new')}</a>
-                <button onClick={()=>setBook(null)} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500"><X size={14}/></button>
+                {bookObjUrl && <a href={bookObjUrl} target="_blank" rel="noopener noreferrer" className="ml-auto px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1 shrink-0"><Download size={13}/>{t('books_open_new')}</a>}
+                <button onClick={()=>{ if(bookObjUrl) URL.revokeObjectURL(bookObjUrl); setBook(null); setBookObjUrl('') }} className={bookObjUrl?'p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500':'ml-auto p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500'}><X size={14}/></button>
               </div>
-              {book.file_type==='pdf'
-                ? <iframe src={mediaSrc(book.url||book.file)} className="w-full h-[70vh] bg-white" title={book.title}/>
-                : <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
-                    <BookOpen size={36} className="mx-auto mb-3 opacity-40"/>
-                    <p>{t('books_doc_hint')}</p>
-                    <a href={mediaSrc(book.url||book.file)} target="_blank" rel="noopener noreferrer" className="inline-block mt-3 px-4 py-2 rounded-xl bg-cyan-600 text-white text-sm font-semibold"><Download size={14} className="inline mr-1"/>{t('books_download')}</a>
-                  </div>}
+              {bookLoading ? (
+                <div className="p-14 text-center text-sm text-slate-500 dark:text-slate-400">⏳ {t('books_loading')}</div>
+              ) : bookObjUrl ? (
+                <iframe src={bookObjUrl} className="w-full h-[70vh] bg-white" title={book.title}/>
+              ) : (
+                <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                  <BookOpen size={36} className="mx-auto mb-3 opacity-40"/>
+                  <p>{bookErr||t('books_doc_hint')}</p>
+                  <a href={mediaSrc(book.url||book.file)} target="_blank" rel="noopener noreferrer" className="inline-block mt-3 px-4 py-2 rounded-xl bg-cyan-600 text-white text-sm font-semibold"><Download size={14} className="inline mr-1"/>{t('books_download')}</a>
+                </div>
+              )}
             </div>
           )}
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {fb.map(b=>(
-              <div key={b.id} onClick={()=>setBook(b)} className="cursor-pointer text-left bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border p-4 hover:shadow-md transition">
+              <div key={b.id} onClick={()=>openBook(b)} className="cursor-pointer text-left bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border p-4 hover:shadow-md transition">
                 <div className="flex items-start gap-2">
                   <span className="p-2 rounded-xl bg-cyan-50 text-cyan-600 shrink-0"><BookOpen size={16}/></span>
                   <h3 className="font-bold line-clamp-2 flex-1 dark:text-white">{b.title}</h3>
