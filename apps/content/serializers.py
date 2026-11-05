@@ -5,8 +5,8 @@ class UploadedFileSerializer(serializers.ModelSerializer):
     url = serializers.SerializerMethodField()
     class Meta:
         model = UploadedFile
-        fields = ['id','title','file','url','file_type','mime_type','size','subject','is_public','created_at']
-        read_only_fields = ['id','size','file_type','created_at']
+        fields = ['id','title','file','url','file_type','mime_type','size','subject','is_public','owner','created_at']
+        read_only_fields = ['id','size','file_type','created_at','owner']
     def get_url(self, obj):
         if obj.file:
             request = self.context.get('request')

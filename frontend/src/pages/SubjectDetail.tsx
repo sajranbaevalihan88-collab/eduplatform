@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Layers, Presentation as PresIcon, FlaskConical, Plus, Upload, Search, BookOpen, X, Download } from 'lucide-react'
+import { Layers, Presentation as PresIcon, FlaskConical, Plus, Upload, Search, BookOpen, X, Download, Trash2 } from 'lucide-react'
 import client, { mediaUrl } from '../api/client'
 import { isStudent } from '../utils/role'
 import { toast } from '../context/UIContext'
@@ -38,11 +38,19 @@ export default function SubjectDetail(){
     client.get(`/lessons/?subject=${s}`).then(r=>setLessons(Array.isArray(r.data)?r.data:r.data.results||[])).catch(()=>setLessons([]))
     client.get(`/presentations/?subject=${s}`).then(r=>setPres(Array.isArray(r.data)?r.data:r.data.results||[])).catch(()=>setPres([]))
     client.get(`/tests/?subject=${s}`).then(r=>setTests(Array.isArray(r.data)?r.data:r.data.results||[])).catch(()=>setTests([]))
-    client.get(`/files/?subject=${s}`).then(r=>{
-      const arr=Array.isArray(r.data)?r.data:r.data.results||[]
-      setBooks(arr.filter((f:any)=>f.file_type==='pdf'||f.file_type==='document'))
-    }).catch(()=>setBooks([]))
+    loadBooks()
   },[slug])
+
+  // перезагружаем данные активной вкладки при каждом переключении —
+  // чтобы после загрузки файла/перезапуска бэкенда список был свежим
+  useEffect(()=>{
+    if(!slug) return
+    const s=encodeURIComponent(slug)
+    if(tab==='lessons') client.get(`/lessons/?subject=${s}`).then(r=>setLessons(Array.isArray(r.data)?r.data:r.data.results||[])).catch(()=>{})
+    if(tab==='pres') client.get(`/presentations/?subject=${s}`).then(r=>setPres(Array.isArray(r.data)?r.data:r.data.results||[])).catch(()=>{})
+    if(tab==='tests') client.get(`/tests/?subject=${s}`).then(r=>setTests(Array.isArray(r.data)?r.data:r.data.results||[])).catch(()=>{})
+    if(tab==='books') loadBooks()
+  },[slug,tab])
 
   const canEdit=(item:any)=>{
     if(!me) return false
@@ -50,6 +58,27 @@ export default function SubjectDetail(){
     return String(item.owner)===String(me.id)||String(item.owner_id)===String(me.id)
   }
   const isTeacher=!isStudent()
+
+  const loadBooks=()=>{
+    const s=encodeURIComponent(slug||'')
+    client.get(`/files/?subject=${s}`).then(r=>{
+      const arr=Array.isArray(r.data)?r.data:r.data.results||[]
+      setBooks(arr.filter((f:any)=>f.file_type==='pdf'||f.file_type==='document'))
+    }).catch(()=>setBooks([]))
+  }
+  const canDeleteFile=(f:any)=> me && (me.role==='admin'||me.is_staff || String(f.owner)===String(me.id) || String(f.owner_id)===String(me.id))
+  const delBook=async(e:any,f:any)=>{
+    e.stopPropagation()
+    if(!confirm(t('del_confirm'))) return
+    try{
+      await client.delete(`/files/${f.id}/`)
+      setBooks(prev=>prev.filter(x=>x.id!==f.id))
+      if(book?.id===f.id) setBook(null)
+      toast(t('file_deleted'),'success')
+    }catch(err:any){
+      toast(err?.response?.data?.detail||t('lessons_del_err'),'error')
+    }
+  }
 
   const uploadPres=async(file:File)=>{
     setUploading(true)
@@ -80,11 +109,7 @@ export default function SubjectDetail(){
       fd.append('is_public','true')
       await client.post('/files/', fd, {headers:{'Content-Type':'multipart/form-data'}})
       toast(t('pres_uploaded'),'success')
-      const s=encodeURIComponent(slug||'')
-      client.get(`/files/?subject=${s}`).then(rr=>{
-        const arr=Array.isArray(rr.data)?rr.data:rr.data.results||[]
-        setBooks(arr.filter((f:any)=>f.file_type==='pdf'||f.file_type==='document'))
-      }).catch(()=>{})
+      loadBooks()
     }catch(e:any){
       toast(e?.response?.data?.detail||e?.response?.data?.error||t('pres_import_err'),'error')
     }
@@ -217,17 +242,18 @@ export default function SubjectDetail(){
           )}
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {fb.map(b=>(
-              <button key={b.id} onClick={()=>setBook(b)} className="text-left bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border p-4 hover:shadow-md transition">
+              <div key={b.id} onClick={()=>setBook(b)} className="cursor-pointer text-left bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border p-4 hover:shadow-md transition">
                 <div className="flex items-start gap-2">
                   <span className="p-2 rounded-xl bg-cyan-50 text-cyan-600 shrink-0"><BookOpen size={16}/></span>
                   <h3 className="font-bold line-clamp-2 flex-1 dark:text-white">{b.title}</h3>
+                  {canDeleteFile(b) && <button onClick={e=>delBook(e,b)} className="p-1.5 rounded-lg bg-red-50 text-red-600 shrink-0"><Trash2 size={14}/></button>}
                 </div>
                 <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
                   <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 font-semibold uppercase">{b.file_type==='pdf'?'PDF':'Word'}</span>
                   {b.size ? <span>{humanSize(b.size)}</span> : null}
-                  <span className="ml-auto text-cyan-600 font-semibold opacity-0 group-hover:opacity-100">{t('subj_open')}</span>
+                  <span className="ml-auto text-cyan-600 font-semibold">{t('subj_open')}</span>
                 </div>
-              </button>
+              </div>
             ))}
             {fb.length===0 && <div className="col-span-full text-center py-10 text-slate-400">{t('subj_empty_books')}</div>}
           </div>
