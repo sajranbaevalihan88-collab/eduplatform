@@ -159,6 +159,21 @@ export default function VSCodeEditor(){
   const active = useMemo(()=> files.find(f=>f.id===activeId) || files[0], [files, activeId])
   const [output,setOutput]=useState('')
   const [running,setRunning]=useState(false)
+  // Перетаскиваемая перегородка редактор/превью (ширина кода в %)
+  const [splitPct,setSplitPct]=useState(55)
+  const splitBoxRef=useRef<HTMLDivElement|null>(null)
+  const splitDrag=useRef(false)
+  useEffect(()=>{
+    const move=(e:MouseEvent)=>{
+      if(!splitDrag.current||!splitBoxRef.current) return
+      const r=splitBoxRef.current.getBoundingClientRect()
+      const pct=Math.min(80,Math.max(20,((e.clientX-r.left)/r.width)*100))
+      setSplitPct(pct)
+    }
+    const up=()=>{ if(splitDrag.current){ splitDrag.current=false; document.body.style.cursor=''; document.body.style.userSelect='' } }
+    window.addEventListener('mousemove',move); window.addEventListener('mouseup',up)
+    return ()=>{ window.removeEventListener('mousemove',move); window.removeEventListener('mouseup',up) }
+  },[])
   const [explanation,setExplanation]=useState<any>(null)
   const [explaining,setExplaining]=useState(false)
   const [useLive,setUseLive]=useState(false)
@@ -612,7 +627,7 @@ export default function VSCodeEditor(){
             </select>
             <input value={requirements} onChange={e=>setRequirements(e.target.value)} placeholder="requirements: django pygame" className="flex-1 min-w-0 bg-[#3c3c3c] border border-transparent focus:border-[#007acc] text-white text-xs rounded px-2 py-0.5 hidden sm:block" title={t('vsc_req_hint')}/>
           </div>
-          <div className="flex-1 min-h-0 relative flex">
+          <div ref={splitBoxRef} className="flex-1 min-h-0 relative flex">
             <div className={mobPrev ? 'hidden' : 'flex-1 min-w-0 relative'}>
             <Editor
               height="100%"
@@ -655,7 +670,10 @@ export default function VSCodeEditor(){
             />
             </div>
             {(active.lang==='html' || active.lang==='css') && (
-              <div className={`${mobPrev?'flex':'hidden lg:flex'} w-full lg:w-1/2 border-l border-[#2d2d2d] bg-white flex-col shrink-0`}>
+              <div onMouseDown={e=>{ if(e.button===0){ splitDrag.current=true; e.preventDefault(); document.body.style.cursor='col-resize'; document.body.style.userSelect='none' } }} className="hidden lg:block w-1.5 cursor-col-resize bg-[#2d2d2d] hover:bg-[#007acc] shrink-0" title="Потяни, чтобы изменить размер"/>
+            )}
+            {(active.lang==='html' || active.lang==='css') && (
+              <div style={{width: mobPrev?'100%':`${100-splitPct}%`}} className={`${mobPrev?'flex':'hidden lg:flex'} bg-white flex-col shrink-0`}>
                 <div className="px-2 py-1 bg-[#f3f3f3] border-b text-xs font-semibold text-slate-600 flex items-center justify-between shrink-0">
                   <span>Preview — live</span>
                   <div className="flex gap-1">
@@ -663,20 +681,6 @@ export default function VSCodeEditor(){
                   </div>
                 </div>
                 <iframe ref={iframeRef} srcDoc={previewSrcDoc} className="flex-1 w-full border-0 min-h-0" sandbox="allow-scripts allow-same-origin allow-modals allow-forms" allow="fullscreen"/>
-                {/* Консоль страницы: console.log, предупреждения и ошибки скриптов */}
-                <div className="h-28 border-t border-[#2d2d2d] bg-[#181818] text-[11px] font-mono flex flex-col shrink-0">
-                  <div className="h-6 px-2 bg-[#252526] border-b border-[#2d2d2d] flex items-center justify-between shrink-0">
-                    <span className="text-slate-300 font-semibold">{t('vsc_console_title')}</span>
-                    <button onClick={()=>setPreviewLogs([])} className="text-slate-500 hover:text-white text-[10px] font-bold">{t('vsc_console_clear')}</button>
-                  </div>
-                  <div className="flex-1 overflow-auto p-1.5 space-y-0.5">
-                    {previewLogs.length===0 ? <div className="text-slate-600">{t('vsc_console_empty')}</div> : previewLogs.map((l,i)=>(
-                      <div key={i} className={l.kind==='error'?'text-red-400 break-all':l.kind==='warn'?'text-amber-300 break-all':'text-emerald-200 break-all'}>
-                        {l.kind==='error'?'✖ ':l.kind==='warn'?'⚠ ':'› '}{l.text}
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </div>
             )}
             {showCmd && (
