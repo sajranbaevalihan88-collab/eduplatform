@@ -611,7 +611,6 @@ export default function VSCodeEditor(){
               {files.map(f=> <option key={f.id} value={f.name}>{f.name}</option>)}
             </select>
             <input value={requirements} onChange={e=>setRequirements(e.target.value)} placeholder="requirements: django pygame" className="flex-1 min-w-0 bg-[#3c3c3c] border border-transparent focus:border-[#007acc] text-white text-xs rounded px-2 py-0.5 hidden sm:block" title={t('vsc_req_hint')}/>
-            <button onClick={()=>runProject()} disabled={running} className="px-2 py-0.5 rounded bg-[#16825d] hover:bg-[#1a9c6e] text-white text-xs flex items-center gap-1 shrink-0"><Play size={10}/> Run Project</button>
           </div>
           <div className="flex-1 min-h-0 relative flex">
             <div className={mobPrev ? 'hidden' : 'flex-1 min-w-0 relative'}>
@@ -663,7 +662,7 @@ export default function VSCodeEditor(){
                     <button onClick={()=>refreshPreview(active.lang==='css'?undefined:active.name)} className="px-2 py-0.5 rounded bg-[#007acc] text-white text-xs">{t('vsc_refresh')}</button>
                   </div>
                 </div>
-                <iframe ref={iframeRef} srcDoc={previewSrcDoc} className="flex-1 w-full border-0 min-h-0" sandbox="allow-scripts allow-modals allow-forms" allow="fullscreen"/>
+                <iframe ref={iframeRef} srcDoc={previewSrcDoc} className="flex-1 w-full border-0 min-h-0" sandbox="allow-scripts allow-same-origin allow-modals allow-forms" allow="fullscreen"/>
                 {/* Консоль страницы: console.log, предупреждения и ошибки скриптов */}
                 <div className="h-28 border-t border-[#2d2d2d] bg-[#181818] text-[11px] font-mono flex flex-col shrink-0">
                   <div className="h-6 px-2 bg-[#252526] border-b border-[#2d2d2d] flex items-center justify-between shrink-0">
