@@ -239,8 +239,8 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated], throttle_classes=[])
     def generate(self, request):
-        """AI-генерация вопросов из текста урока.
-        Сначала пробуем настоящий Gemini (если задан GEMINI_API_KEY),
+        """Генерация вопросов из текста урока.
+        Сначала пробуем внешний генератор (если задан GEMINI_API_KEY),
         иначе — честный офлайн-генератор. Ответ всегда содержит source:
         'gemini:<model>' или 'offline' — фронт показывает это учителю.
         POST /api/tests/generate/ {lesson_id?, text?, count?, prompt?} -> {questions:[...], source}.
@@ -282,7 +282,7 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
         has_text = isinstance(text, str) and len(text.strip()) >= 100
         has_prompt = len(prompt) >= 10
         if not has_text and not has_prompt:
-            return Response({'error': 'Напиши указание для ИИ (от 10 символов) или дай текст от 100 символов (или выбери урок)'}, status=400)
+            return Response({'error': 'Напиши указание для генератора (от 10 символов) или дай текст от 100 символов (или выбери урок)'}, status=400)
         try:
             count = int(request.data.get('count') or 5)
         except Exception:
@@ -297,7 +297,7 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             if questions:
                 return Response({'questions': questions, 'count': len(questions), 'source': f'gemini:{used}'})
             if not has_text:
-                return Response({'error': 'Без текста офлайн-режим не умеет — напиши текст от 100 символов или проверь связь с Gemini'}, status=400)
+                return Response({'error': 'Без текста офлайн-режим не умеет — напиши текст от 100 символов или проверь ключ генератора'}, status=400)
             offline = generate_questions(text[:20000], count)
             if not offline:
                 return Response({'error': 'Из этого текста вопросы не получились — добавь определений вида «Термин — что это»'}, status=400)
@@ -320,7 +320,7 @@ class AttemptViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class WordGenView(APIView):
-    """AI-подбор СЛОВ для игр (Найди слово / Виселица): тема -> список слов.
+    """Подбор СЛОВ для игр (Найди слово / Виселица): тема -> список слов.
     POST /api/ai/words/ {prompt, count} -> {words:[...], source}. Без GEMINI_API_KEY -> 503."""
     permission_classes = [permissions.IsAuthenticated]
 
@@ -337,7 +337,7 @@ class WordGenView(APIView):
         count = max(3, min(20, count))
         api_key = getattr(_dj, 'GEMINI_API_KEY', '')
         if not api_key:
-            return Response({'error': 'ИИ не подключён на сервере (нет GEMINI_API_KEY) — введи слова сам или возьми из урока'}, status=503)
+            return Response({'error': 'Генератор не подключён на сервере (нет GEMINI_API_KEY) — введи слова сам или возьми из урока'}, status=503)
         gprompt = (
             f"Дай РОВНО {count} отдельных коротких СЛОВ по теме: «{prompt}». "
             "Это для школьной игры «угадай слово». Правила: только реальные существительные/имена; "
@@ -358,5 +358,5 @@ class WordGenView(APIView):
                 if len(words) >= count:
                     break
         if not words:
-            return Response({'error': 'ИИ не вернул слов — попробуй другую тему'}, status=502)
+            return Response({'error': 'Не удалось подобрать слова — попробуй другую тему'}, status=502)
         return Response({'words': words, 'count': len(words), 'source': f'gemini:{used}'})

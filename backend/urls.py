@@ -7,7 +7,7 @@ from rest_framework.response import Response
 
 @api_view(['GET'])
 def health(request):
-    return Response({"status": "ok", "service": "EduPlatform AI API", "version": "1.0.0"})
+    return Response({"status": "ok", "service": "EduPlatform API", "version": "1.0.0"})
 
 urlpatterns = [
     path('admin/', admin.site.urls),

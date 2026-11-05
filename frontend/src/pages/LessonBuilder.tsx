@@ -142,7 +142,7 @@ export default function LessonBuilder(){
   type InlineOpt={text:string,is_correct:boolean}
   type InlineQ={text:string,type:string,points:number,options:InlineOpt[]}
   const [inlineTests,setInlineTests]=useState<Record<string,{title:string,desc:string,pass:number,questions:InlineQ[]}>>({})
-  // ИИ-генерация вопросов прямо в inline-тесте (тот же /tests/generate/, что в ТестВыборatеле)
+  // Автогенерация вопросов прямо в inline-тесте (тот же /tests/generate/, что в ТестВыборателе)
   const [ltAiOpen,setLtAiOpen]=useState<Record<string,boolean>>({})
   const [ltAiPrompt,setLtAiPrompt]=useState('')
   const [ltAiCount,setLtAiCount]=useState(5)
@@ -152,7 +152,7 @@ export default function LessonBuilder(){
   const getInlineTest=(id:string)=> inlineTests[id] || {title:'',desc:'',pass:60,questions:[{text:'Сколько будет 2+2?',type:'single',points:1,options:[{text:'3',is_correct:false},{text:'4',is_correct:true},{text:'5',is_correct:false}]}]}
   const ltAiGenerate=async(bid:string)=>{
     if(ltAiBusy) return
-    if(ltAiPrompt.trim().length<10){ toast('Напиши указание для ИИ (от 10 символов)','error'); return }
+    if(ltAiPrompt.trim().length<10){ toast('Напиши указание для генератора (от 10 символов)','error'); return }
     setLtAiBusy(true)
     try{
       const r=await client.post('/tests/generate/',{count:ltAiCount,prompt:ltAiPrompt.trim().slice(0,2000)})
@@ -162,8 +162,8 @@ export default function LessonBuilder(){
       const isFreshEmpty = cur.questions.length===0 || (cur.questions.length===1 && cur.questions[0].text==='Сколько будет 2+2?' && !cur.title.trim())
       setInlineTests(prev=>({...prev,[bid]:{...cur,questions:isFreshEmpty?got:[...cur.questions,...got]}}))
       setLtAiSrc(typeof r.data.source==='string'? r.data.source : null)
-      toast(`ИИ добавил ${got.length} вопросов ✓`,'success')
-    }catch(e:any){ toast(e?.response?.data?.error||'ИИ не сгенерировал — попробуй другую тему','error') }
+      toast(`Добавлено ${got.length} вопросов ✓`,'success')
+    }catch(e:any){ toast(e?.response?.data?.error||'Не получилось сгенерировать — попробуй другую тему','error') }
     setLtAiBusy(false)
   }
   const toEmbedUrl=(url:string)=>{
@@ -688,7 +688,7 @@ export default function LessonBuilder(){
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 space-y-2" data-testid="lb-ai">
                           <button onClick={()=>setLtAiOpen(p=>({...p,[b.id]:!p[b.id]}))}
                             className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5" data-testid="lb-ai-btn">
-                            ✨ Создать вопросы с ИИ {ltAiOpen[b.id] ? '▾' : '▸'}
+                            ✨ Создать вопросы автоматически {ltAiOpen[b.id] ? '▾' : '▸'}
                           </button>
                           {ltAiOpen[b.id] && (
                             <div className="space-y-2" data-testid="lb-ai-panel">
@@ -704,7 +704,7 @@ export default function LessonBuilder(){
                                   {ltAiBusy?'⏳ Думаю…':'Сгенерировать'}
                                 </button>
                               </div>
-                              {ltAiSrc && <div className={`text-[11px] font-bold px-2 py-1 rounded-lg w-fit ${ltAiSrc.startsWith('gemini') ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{ltAiSrc.startsWith('gemini') ? `🤖 ${ltAiSrc.split(':')[1] || 'Gemini'} отвечает` : '🧮 офлайн-генератор'}</div>}
+                              {ltAiSrc && <div className={`text-[11px] font-bold px-2 py-1 rounded-lg w-fit ${ltAiSrc.startsWith('gemini') ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{ltAiSrc.startsWith('gemini') ? '✨ сгенерировано автоматически' : '🧮 офлайн-генератор'}</div>}
                               <div className="text-[11px] text-slate-500">Вопросы добавятся в список ниже — проверь и поправь, потом сохрани тест.</div>
                             </div>
                           )}

@@ -386,7 +386,7 @@ class ClassroomViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def ai_report(self, request, pk=None):
-        """⚡ Килллер-фича: ИИ-отчёт учителю по классу (Gemini), честный офлайн-фолбэк.
+        """Отчёт учителю по классу (автогенерация), честный офлайн-фолбэк.
         POST /api/classrooms/{id}/ai_report/ -> {report, source, stats}"""
         room = self._get_owned()
         students = list(room.enrollments.select_related('student').all())
@@ -434,7 +434,7 @@ class ClassroomViewSet(viewsets.ModelViewSet):
         import json as _json
         facts = _json.dumps(stats, ensure_ascii=False)
         prompt = (
-            "Ты — ИИ-ассистент учителя. Собери КОРОТКИЙ живой отчёт по классу из данных JSON. "
+            "Ты — ассистент учителя. Собери КОРОТКИЙ живой отчёт по классу из данных JSON. "
             "Формат: markdown-lite текст с эмодзи, строго такие секции:\n"
             "🏆 Лидеры (2-3 имени + причина)\n⚠️ Нужна помощь (кто отстаёт: средний балл низкий/много пропусков)\n"
             "📚 Что повторить (темы по названиям заданий, где средний балл < 60% или много провалов)\n"

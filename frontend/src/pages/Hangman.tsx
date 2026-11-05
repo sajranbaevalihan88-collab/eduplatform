@@ -95,7 +95,7 @@ export default function Hangman() {
   const [panel, setPanel] = useState<null | 'build'>(null)
   // стартовый выбор «как играем»: pick — готовые vs свой, ready — встроенные коллекции
   const [entry, setEntry] = useState<null | 'pick' | 'ready'>(null)
-  // ИИ-подбор слов в билдере
+  // Автоподбор слов в билдере
   const [aiOpen, setAiOpen] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiCount, setAiCount] = useState(10)
@@ -222,7 +222,7 @@ export default function Hangman() {
       setAiSrc(typeof r.data.source === 'string' ? r.data.source : null)
       sfx('fb.pick')
     } catch (e: any) {
-      setCErr(e?.response?.data?.error || t('aiw_fail') || 'ИИ не смог — напиши слова сам')
+      setCErr(e?.response?.data?.error || t('aiw_fail') || 'Не получилось — напиши слова сам')
     }
     setAiBusy(false)
   }

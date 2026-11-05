@@ -87,7 +87,7 @@ ASGI_APPLICATION = 'backend.asgi.application'
 
 # Database — ТОПОВАЯ СВЯЗКА: PostgreSQL 16 + Redis + pgvector
 # Приоритет: 1) DATABASE_URL (Render/Supabase/Neon Postgres — топ), 2) Локальная PostgreSQL 16 (топ), 3) MariaDB fallback, 4) SQLite только USE_SQLITE=1
-# Топ-фичи: JSONB для blocks/slides, SearchVector для поиска, Trigram, HStore, pgvector для AI
+# Топ-фичи: JSONB для blocks/slides, SearchVector для поиска, Trigram, HStore, pgvector
 DATABASE_URL = os.environ.get('DATABASE_URL')
 USE_SQLITE = os.environ.get('USE_SQLITE', '0') == '1'
 USE_MARIADB = os.environ.get('USE_MARIADB', '0') == '1'
@@ -242,7 +242,7 @@ else:
 # Топ-фичи Postgres
 # - JSONB уже используется для blocks/slides
 # - Для поиска: SearchVector, TrigramSimilarity
-# - Для AI: pgvector (расширение, ставится миграцией)
+# - Для векторного поиска: pgvector (расширение, ставится миграцией)
 # - Для реплик: DATABASES['replica'] можно добавить
 POSTGRES_EXTENSIONS = ['pg_trgm', 'btree_gin', 'vector']  # ставятся через CREATE EXTENSION
 
@@ -351,7 +351,7 @@ CODE_USE_PISTON_ONLY = os.environ.get('CODE_USE_PISTON_ONLY', 'False') == 'True'
 # Для Docker-изоляции каждого прогона (будущее): CODE_USE_DOCKER=True + DOCKER_IMAGE=python:3.11-slim
 CODE_USE_DOCKER = os.environ.get('CODE_USE_DOCKER', 'False') == 'True'
 
-# Google Gemini — настоящая нейросеть для генерации вопросов (/api/tests/generate/).
+# Внешний генератор вопросов (/api/tests/generate/): ключ задаётся через GEMINI_API_KEY.
 # Ключ взять: https://aistudio.google.com/apikey (бесплатный тариф).
 # Без ключа generate честно падает на офлайн-генератор и отвечает source='offline'.
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')

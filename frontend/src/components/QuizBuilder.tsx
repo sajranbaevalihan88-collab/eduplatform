@@ -82,9 +82,9 @@ export default function QuizBuilder({ lessons = [], onSaved }: { lessons?: any[]
       {lessons.length > 0 && AI_FEATURES && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <Sparkles size={15} className="text-indigo-600" />
-          <select value={genLesson} onChange={e => setGenLesson(e.target.value)} aria-label="Урок для ИИ"
+          <select value={genLesson} onChange={e => setGenLesson(e.target.value)} aria-label="Урок для генерации"
             className="flex-1 min-w-[160px] px-3 py-2 min-h-[44px] rounded-xl border bg-slate-50 dark:bg-slate-700 dark:text-white">
-            <option value="">ИИ из своего текста ниже</option>
+            <option value="">Свой текст ниже</option>
             {lessons.map((l: any) => <option key={l.id} value={l.id}>{l.title}</option>)}
           </select>
               <input type="number" min={1} max={40} value={genCount} onChange={e => setGenCount(Math.max(1, Math.min(40, parseInt(e.target.value) || 5)))}
@@ -93,13 +93,13 @@ export default function QuizBuilder({ lessons = [], onSaved }: { lessons?: any[]
         </div>
       )}
       {AI_FEATURES && !genLesson && (
-        <textarea value={genText} onChange={e => setGenText(e.target.value)} placeholder="Или вставь текст (мин 100 символов) для ИИ..."
+        <textarea value={genText} onChange={e => setGenText(e.target.value)} placeholder="Или вставь текст (мин 100 символов) для генерации..."
           className="w-full h-20 px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-700 dark:text-white text-sm" />
       )}
       {AI_FEATURES && (
       <textarea value={genPrompt} onChange={e => setGenPrompt(e.target.value)}
-        placeholder="Что сказать Gemini? Например: только Верно/Неверно про циклы, на кыргызском..."
-        aria-label="Указание для ИИ"
+        placeholder="Что сгенерировать? Например: только Верно/Неверно про циклы, на кыргызском..."
+        aria-label="Указание для генератора"
         className="w-full h-16 px-3 py-2 rounded-xl border bg-indigo-50/50 dark:bg-slate-700 dark:text-white text-sm" />
       )}
       {bQs.map((q, qi) => (
@@ -125,7 +125,7 @@ export default function QuizBuilder({ lessons = [], onSaved }: { lessons?: any[]
       ))}
       {AI_FEATURES && genSource && (
         <div className={`text-xs font-bold px-3 py-2 rounded-xl ${genSource.startsWith('gemini') ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
-          {genSource.startsWith('gemini') ? `⚡ Сгенерировано нейросетью ${genSource.split(':')[1] || 'Gemini'}` : '🔧 Офлайн-режим: без нейросети'}
+          {genSource.startsWith('gemini') ? '⚡ Сгенерировано автоматически' : '🔧 Офлайн-режим'}
         </div>
       )}
       <button onClick={save} disabled={busy}

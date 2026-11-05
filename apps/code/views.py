@@ -380,7 +380,7 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny], throttle_classes=[throttling.AnonRateThrottle, throttling.UserRateThrottle], url_path='explain')
     def explain(self, request):
-        """AI-объяснение ошибки простыми словами (офлайн, без внешних API).
+        """Объяснение ошибки простыми словами (офлайн, без внешних API).
         POST /api/code-tasks/explain/ {code, language, output} -> {title, what, fix, line}."""
         code = request.data.get('code', '')
         output = request.data.get('output', '')

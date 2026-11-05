@@ -173,7 +173,7 @@ export default function TestBuilder(){
       </div>
       {AI_FEATURES && genSource && (
         <div className={`text-xs font-bold px-3 py-2 rounded-xl ${genSource.startsWith('gemini') ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
-          {genSource.startsWith('gemini') ? `${t('tb_gen_ai_pre')} ${genSource.split(':')[1] || 'Gemini'}` : t('tb_gen_offline')}
+          {genSource.startsWith('gemini') ? t('tb_gen_ai_pre') : t('tb_gen_offline')}
         </div>
       )}
       {AI_FEATURES && showGen && (

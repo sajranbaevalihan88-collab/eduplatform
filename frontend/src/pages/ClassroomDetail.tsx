@@ -65,7 +65,7 @@ export default function ClassroomDetail(){
   const [cmList,setCmList]=useState<Record<number,any[]>>({})
   const [cmText,setCmText]=useState<Record<number,string>>({})
   const [cmBusy,setCmBusy]=useState(false)
-  // ✨ ИИ-отчёт по классу
+  // ✨ Отчёт по классу (автогенерация)
   const [rep,setRep]=useState<string|null>(null)
   const [repSrc,setRepSrc]=useState<string|null>(null)
   const [repBusy,setRepBusy]=useState(false)
@@ -773,7 +773,7 @@ export default function ClassroomDetail(){
                 <div className="p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20" data-testid="cls-report-card">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="font-bold text-sm dark:text-white">✨ {t('cls_report')}</span>
-                    {repSrc && <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${repSrc.startsWith('gemini')?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}`}>{repSrc.startsWith('gemini')? (repSrc.split(':')[1]||'Gemini') : t('cls_report_off')}</span>}
+                    {repSrc && <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${repSrc.startsWith('gemini')?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}`}>{repSrc.startsWith('gemini')? 'авто' : t('cls_report_off')}</span>}
                     <button onClick={()=>{try{navigator.clipboard.writeText(rep);toast(t('cls_report_copied'),'success')}catch{}}} className="ml-auto text-xs underline text-slate-500">{t('shared_copy')}</button>
                   </div>
                   <div className="text-sm whitespace-pre-wrap leading-relaxed dark:text-slate-100" data-testid="cls-report-text">{rep}</div>
