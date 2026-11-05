@@ -91,8 +91,7 @@ export default function SubjectDetail(){
     setBookObjUrl(''); setBookErr(''); setBook(b); setBookLoading(true)
     try{
       const r=await client.get(b.url||mediaUrl(b.file), {responseType:'blob'})
-      const type=r.headers?.['content-type']
-      const blob=new Blob([r.data], {type: type&&type.startsWith('application/pdf')?'application/pdf':'application/pdf'})
+      const blob=new Blob([r.data], {type:'application/pdf'})
       setBookObjUrl(URL.createObjectURL(blob))
     }catch(e:any){
       setBookErr(t('books_load_err'))
