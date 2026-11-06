@@ -123,6 +123,15 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         title = self.request.data.get('title') or (file_obj.name if file_obj else 'Без названия')
         # санитизация title: убираем html, ограничиваем длину
         title = re.sub(r'<[^>]*>', '', title)[:200]
+        # Книги (pdf/word) добавляет только администратор — учителям и ученикам нельзя
+        if file_obj is not None:
+            import os as _os
+            ext = _os.path.splitext(file_obj.name)[1].lower()
+            u = self.request.user
+            is_admin = u.is_authenticated and (u.is_staff or getattr(u, 'role', None) == 'admin')
+            if ext in ('.pdf', '.doc', '.docx') and not is_admin:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('Книги добавляет только администратор')
         mime = file_obj.content_type if file_obj else ''
         serializer.save(owner=self.request.user if self.request.user.is_authenticated else None, title=title, mime_type=mime)
 

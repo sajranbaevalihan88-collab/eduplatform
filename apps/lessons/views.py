@@ -38,6 +38,23 @@ class LessonViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             qs = qs.filter(owner=user)
         return qs
 
+    def _can_touch(self, obj):
+        u = self.request.user
+        return bool(u and u.is_authenticated and (u.is_staff or getattr(u, 'role', None) == 'admin' or obj.owner_id == u.id))
+
+    def perform_update(self, serializer):
+        obj = self.get_object()
+        if not self._can_touch(obj):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Чужой урок может изменить только администратор')
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if not self._can_touch(instance):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Чужой урок может удалить только администратор')
+        instance.delete()
+
     def _link_lesson_content(self, lesson):
         # привязываем СВОИ презентации/тесты из блоков к уроку (чужое не трогаем,
         # уже привязанное к другому уроку не перепривязываем)

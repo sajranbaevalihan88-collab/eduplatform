@@ -4,6 +4,7 @@ from rest_framework.decorators import api_view, permission_classes, throttle_cla
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
 from .serializers import RegisterSerializer, UserSerializer, MeUpdateSerializer
+from .permissions import IsAdmin
 
 User = get_user_model()
 
@@ -61,6 +62,27 @@ def logout_view(request):
     except Exception:
         _lg.getLogger(__name__).exception("logout failed")
         return Response({'error': 'Не удалось выйти'}, status=400)
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def create_assistant_view(request):
+    """Создание аккаунта помощника администратором (role=teacher).
+    Помощник заходит по логину и паролю на обычной странице входа — отдельного входа нет."""
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as _VE
+    username = (request.data.get('username') or '').strip()
+    password = request.data.get('password') or ''
+    first_name = (request.data.get('first_name') or '').strip()
+    if len(username) < 3:
+        return Response({'error': 'Ник минимум 3 символа'}, status=status.HTTP_400_BAD_REQUEST)
+    if User.objects.filter(username__iexact=username).exists():
+        return Response({'error': 'Этот ник уже занят — придумай другой'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        validate_password(password)
+    except _VE as e:
+        return Response({'error': ' '.join(getattr(e, 'messages', [str(e)]))}, status=status.HTTP_400_BAD_REQUEST)
+    u = User.objects.create_user(username=username, password=password, role='teacher', first_name=first_name)
+    return Response({'status': 'ok', 'user': UserSerializer(u).data}, status=status.HTTP_201_CREATED)
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])

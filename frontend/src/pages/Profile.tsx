@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import client from '../api/client'
-import { User, Mail, Shield, BookOpen, Layers, Presentation, FlaskConical, LogOut, Trash2, Eye, Edit, Search, Filter, Gamepad2, Play, StickyNote } from 'lucide-react'
+import { User, Mail, Shield, BookOpen, Layers, Presentation, FlaskConical, LogOut, Trash2, Eye, Edit, Search, Filter, Gamepad2, Play, StickyNote, UserPlus } from 'lucide-react'
 import { useNavigate, Link } from 'react-router-dom'
 import { toast } from '../context/UIContext'
 import Notes from './Notes'
@@ -28,6 +28,24 @@ export default function Profile(){
   const showAndScroll=(t:'lessons'|'presentations'|'tests')=>{
     setTab(t)
     requestAnimationFrame(()=>{ tabsRef.current?.scrollIntoView({behavior:'smooth', block:'start'}) })
+  }
+  // Помощники: админ создаёт аккаунты (логин+пароль), помощник заходит на обычной странице входа
+  const isAdmin=!!me && (me.role==='admin'||me.is_staff)
+  const [asst,setAsst]=useState({username:'',password:'',first_name:''})
+  const [asstBusy,setAsstBusy]=useState(false)
+  const createAssistant=async()=>{
+    if(asstBusy) return
+    if(asst.username.trim().length<3){ toast(t('assistant_err_short'),'error'); return }
+    if(asst.password.length<8){ toast(t('assistant_err_pass'),'error'); return }
+    setAsstBusy(true)
+    try{
+      await client.post('/auth/create-assistant/',{username:asst.username.trim(),password:asst.password,first_name:asst.first_name.trim()})
+      toast(t('assistant_created'),'success')
+      setAsst({username:'',password:'',first_name:''})
+    }catch(e:any){
+      toast(e?.response?.data?.error||e?.response?.data?.detail||t('error'),'error')
+    }
+    setAsstBusy(false)
   }
 
   const load=()=>{
@@ -182,6 +200,19 @@ export default function Profile(){
           <button onClick={logout} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-indigo-700 font-semibold"><LogOut size={16}/> {t('logout')}</button>
         </div>
       </div>
+
+      {isAdmin && (
+        <div className="bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border p-5">
+          <h2 className="font-bold flex items-center gap-2 dark:text-white"><UserPlus size={18} className="text-indigo-600"/>{t('assistants_title')}</h2>
+          <p className="text-xs text-slate-500 mt-1">{t('assistants_hint')}</p>
+          <div className="flex flex-wrap gap-2 mt-3">
+            <input value={asst.username} onChange={e=>setAsst({...asst,username:e.target.value})} placeholder={t('assistant_username_ph')} className="flex-1 min-w-[140px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+            <input value={asst.first_name} onChange={e=>setAsst({...asst,first_name:e.target.value})} placeholder={t('assistant_name_ph')} className="flex-1 min-w-[140px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+            <input type="password" value={asst.password} onChange={e=>setAsst({...asst,password:e.target.value})} placeholder={t('assistant_pass_ph')} className="flex-1 min-w-[160px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+            <button onClick={createAssistant} disabled={asstBusy} className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-50">{asstBusy?'...':t('assistant_create')}</button>
+          </div>
+        </div>
+      )}
 
       {!student && (
       <div className="grid sm:grid-cols-3 gap-4">

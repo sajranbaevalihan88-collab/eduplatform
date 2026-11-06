@@ -61,6 +61,7 @@ export default function SubjectDetail(){
     return String(item.owner)===String(me.id)||String(item.owner_id)===String(me.id)
   }
   const isTeacher=!isStudent()
+  const isAdmin=!!me && (me.role==='admin'||me.is_staff)
 
   const loadBooks=()=>{
     const s=encodeURIComponent(slug||'')
@@ -188,7 +189,7 @@ export default function SubjectDetail(){
           <input ref={fileRef} type="file" accept=".pptx,.ppt" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f) uploadPres(f); e.target.value=''}}/>
         </>}
         {isTeacher && tab==='tests' && <Link to={`/tests/new?subject=${slug}`} className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center gap-2"><Plus size={16}/>{t('create')}</Link>}
-        {isTeacher && tab==='books' && <>
+        {isAdmin && tab==='books' && <>
           <button onClick={()=>fileRef.current?.click()} disabled={uploading} className="px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-50"><Upload size={16}/>{uploading?'...':t('subj_upload_book')}</button>
           <input ref={fileRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f) uploadBook(f); e.target.value=''}}/>
         </>}
@@ -243,6 +244,7 @@ export default function SubjectDetail(){
       )}
       {tab==='books' && (
         <div className="space-y-4">
+          {isTeacher && !isAdmin && <p className="text-xs text-slate-400">{t('books_admin_only')}</p>}
           {book && (
             <div className="bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border overflow-hidden">
               <div className="px-4 py-2.5 flex items-center gap-2 border-b dark:border-slate-800">
