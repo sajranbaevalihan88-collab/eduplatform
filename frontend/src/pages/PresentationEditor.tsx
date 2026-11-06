@@ -101,6 +101,7 @@ export default function PresentationEditor(){
   const [subject,setSubject]=useState<any>(null)
   const [subjects,setSubjects]=useState<any[]>([])
   const [subjSlug,setSubjSlug]=useState('')
+  const [newLayout,setNewLayout]=useState('blank')
   const [slides,setSlides]=useState<Slide[]>([{order:0, background:'#ffffff', backgroundType:'solid', layout:'title', transition:'fade', content:{blocks:[
     {id:'b1', type:'text', content:'Заголовок презентации', style:{fontSize:36, bold:true, align:'center', color:'#1e293b', fontFamily:'Manrope', x:5, y:15, w:90, h:20, z:1, unit:'%'}},
     {id:'b2', type:'text', content:'Подзаголовок — идея урока, класс, цель', style:{fontSize:18, align:'center', color:'#64748b', fontFamily:'Inter', x:5, y:38, w:90, h:12, z:2, unit:'%'}},
@@ -950,7 +951,18 @@ export default function PresentationEditor(){
             })}
           </div>
           <div className="hidden lg:flex gap-1 mt-2">
-            <button onClick={()=>addSlide('blank')} className="flex-1 py-2 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center gap-2 text-sm"><Plus size={14}/> Новый слайд</button>
+            <select value={newLayout} onChange={e=>{setNewLayout(e.target.value); addSlide(e.target.value)}} className="w-full py-2 rounded-xl border bg-white text-sm text-slate-700" title="Макет нового слайда">
+              <option value="blank">Макет: пустой</option>
+              <option value="title">Макет: титул</option>
+              <option value="content">Макет: заголовок + список</option>
+              <option value="image">Макет: картинка</option>
+              <option value="table">Макет: таблица</option>
+              <option value="chart">Макет: диаграмма</option>
+            </select>
+          </div>
+          <div className="hidden lg:flex gap-1 mt-1">
+            <button onClick={()=>addSlide(newLayout)} className="flex-1 py-2 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center gap-2 text-sm"><Plus size={14}/> Новый слайд</button>
+            <button onClick={duplicateSlide} title="Дублировать текущий слайд" className="px-3 py-2 rounded-xl border bg-white hover:bg-slate-50 font-bold flex items-center justify-center gap-1 text-sm text-slate-700"><Copy size={14}/></button>
             <button onClick={deleteSlide} disabled={slides.length<=1} title={slides.length<=1? 'Минимум один слайд':'Удалить текущий слайд'} className={`px-3 py-2 rounded-xl border font-bold flex items-center justify-center gap-1 text-sm ${slides.length<=1? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-white text-red-600 border-red-200 hover:bg-red-50'}`}><Trash2 size={14}/></button>
           </div>
         </div>

@@ -458,8 +458,10 @@ export default function PresentationView(){
       <div className="flex items-center gap-2 text-sm text-slate-500">
         {fromPath ? (
           <Link to={fromPath} className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-600">{t('tt_back_lesson')}</Link>
+        ) : pres.lesson ? (
+          <Link to={`/lessons/${pres.lesson}`} className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-600">{t('pv_to_lesson')}</Link>
         ) : (
-          <Link to="/presentations" className="hover:text-indigo-600 dark:hover:text-indigo-400">{t('presentations')}</Link>
+          <Link to="/subjects" className="hover:text-indigo-600 dark:hover:text-indigo-400">{t('subjects')}</Link>
         )}
         <span>›</span>
         <span className="text-slate-900 dark:text-slate-100 font-medium truncate">{pres.title}</span>
