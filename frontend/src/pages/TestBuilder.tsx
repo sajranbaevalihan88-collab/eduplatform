@@ -43,6 +43,7 @@ export default function TestBuilder(){
     setGenerating(false)
   }
   const [searchParams]=useSearchParams()
+  const subjectBack=searchParams.get('subject')?`/subjects/${searchParams.get('subject')}`:null
   // Предмет теста: загрузка списка + предвыбор из ?subject=slug (приход из страницы предмета)
   useEffect(()=>{
     client.get('/subjects/').then(r=>{
@@ -83,16 +84,15 @@ export default function TestBuilder(){
   return (
     <div className="max-w-3xl mx-auto space-y-4">
       <h1 className="sr-only">{t('tb_title')}</h1>
-      {fromPath && <Link to={fromPath} className="inline-block px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-600">{t('tb_back_lesson')}</Link>}
+      {(fromPath||subjectBack) && <Link to={(fromPath||subjectBack)!} className="inline-block px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm font-semibold hover:bg-slate-300 dark:hover:bg-slate-700">← {t('nav_back')}</Link>}
       {justPick ? (
         <div className="bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border p-6 space-y-4">
           <div className="text-center pt-2">
-            <div className="text-5xl mb-2">🧪</div>
             <div className="font-display font-extrabold text-xl dark:text-white">{t('tb_mode_title')}</div>
           </div>
           <button onClick={()=>{setMode('form')}} data-testid="tb-manual"
             className="w-full text-left px-5 py-4 min-h-[92px] rounded-2xl border-2 border-blue-400/60 bg-indigo-50 dark:bg-blue-900/20 dark:border-indigo-700 hover:border-blue-500 flex items-center gap-4 transition-colors">
-            <span className="text-4xl">✍️</span>
+            <span>
             <span>
               <span className="block font-extrabold text-lg dark:text-white">{t('tb_mode_manual')}</span>
               <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('tb_mode_manual_sub')}</span>
@@ -101,7 +101,7 @@ export default function TestBuilder(){
           {AI_FEATURES && (
           <button onClick={()=>{setMode('form'); setShowGen(true)}} data-testid="tb-ai"
             className="w-full text-left px-5 py-4 min-h-[92px] rounded-2xl border-2 border-emerald-400/60 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700 hover:border-emerald-500 flex items-center gap-4 transition-colors">
-            <span className="text-4xl">✨</span>
+            <span>
             <span>
               <span className="block font-extrabold text-lg dark:text-white">{t('tb_mode_ai')}</span>
               <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('tb_mode_ai_sub')}</span>
@@ -116,11 +116,11 @@ export default function TestBuilder(){
             <button onClick={()=>setMode('pick')} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold" title={t('tb_back_pick')}>← {t('tb_back_pick')}</button>
           )}
         </div>
-        <input value={title} onChange={e=>setTitle(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 font-bold text-lg"/>
-        <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder={t('tb_desc_ph')} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50"/>
+        <input value={title} onChange={e=>setTitle(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white font-bold text-lg"/>
+        <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder={t('tb_desc_ph')} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white"/>
         <div>
           <label className="block text-xs font-semibold text-slate-500 mb-1">{t('subj_label')}</label>
-          <select value={subject||''} onChange={e=>setSubject(e.target.value?Number(e.target.value):null)} className="w-full px-3 py-2 rounded-xl border bg-slate-50 text-sm">
+          <select value={subject||''} onChange={e=>setSubject(e.target.value?Number(e.target.value):null)} className="w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm">
             <option value="">{t('subj_no_subject')}</option>
             {subjects.map(s=><option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
           </select>

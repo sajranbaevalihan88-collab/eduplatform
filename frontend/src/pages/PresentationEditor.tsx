@@ -100,6 +100,7 @@ export default function PresentationEditor(){
   const [isPublic,setIsPublic]=useState(false)
   const [subject,setSubject]=useState<any>(null)
   const [subjects,setSubjects]=useState<any[]>([])
+  const [subjSlug,setSubjSlug]=useState('')
   const [slides,setSlides]=useState<Slide[]>([{order:0, background:'#ffffff', backgroundType:'solid', layout:'title', transition:'fade', content:{blocks:[
     {id:'b1', type:'text', content:'Заголовок презентации', style:{fontSize:36, bold:true, align:'center', color:'#1e293b', fontFamily:'Manrope', x:5, y:15, w:90, h:20, z:1, unit:'%'}},
     {id:'b2', type:'text', content:'Подзаголовок — идея урока, класс, цель', style:{fontSize:18, align:'center', color:'#64748b', fontFamily:'Inter', x:5, y:38, w:90, h:12, z:2, unit:'%'}},
@@ -188,6 +189,7 @@ export default function PresentationEditor(){
     }
     const sp = new URLSearchParams(window.location.search)
     const subjFromUrl = sp.get('subject')
+    setSubjSlug(subjFromUrl||'')
     if(subjFromUrl && isNew){
       // если пришли из урока с ?subject=slug
       client.get('/subjects/').then(r=>{
@@ -768,8 +770,9 @@ export default function PresentationEditor(){
     <div ref={fullscreenRef} className={`${isEditFullscreen ? 'fixed inset-0 z-50 bg-[#e9e9e9] flex flex-col' : 'flex flex-col h-[calc(100dvh-7.5rem)] -m-4 -mb-28 lg:h-[calc(100vh-64px)] lg:-m-8 lg:mb-0'}`}>
       <h1 className="sr-only">Редактор презентаций</h1>
       <div className="h-14 bg-[#f3f3f3] border-b flex items-center gap-2 px-3 overflow-hidden">
+        <button onClick={()=>nav(subjSlug?`/subjects/${subjSlug}`:'/my-lessons')} className="px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-semibold shrink-0" title={t('nav_back')}>← {t('nav_back')}</button>
         <div className="w-8 h-8 rounded bg-[#d24726] flex items-center justify-center text-white font-bold text-sm shrink-0">P</div>
-        <input value={title} onChange={e=>setTitle(e.target.value)} className="flex-1 min-w-0 max-w-none sm:max-w-[280px] px-3 py-2 max-sm:py-1.5 rounded border bg-white font-semibold text-sm truncate" title={title}/>
+        <input value={title} onChange={e=>setTitle(e.target.value)} className="flex-1 min-w-0 max-w-none sm:max-w-[280px] px-3 py-2 max-sm:py-1.5 rounded border bg-white text-slate-900 font-semibold text-sm truncate" title={title}/>
         <input value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Описание" className="hidden xl:block flex-1 min-w-[160px] max-w-[260px] px-3 py-1.5 rounded border bg-white text-sm truncate" title={desc}/>
         <button onClick={()=>setIsPublic(v=>!v)} data-testid="pres-visibility" title={isPublic?'Публичная: видна всем в каталоге и по ссылке':'Приватная: только вы и уроки, где она назначена'}
           className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium whitespace-nowrap shrink-0 ${isPublic?'bg-emerald-50 border-emerald-300 text-emerald-700':'bg-white border-slate-300 text-slate-600'}`}>

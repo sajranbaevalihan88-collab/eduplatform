@@ -22,6 +22,7 @@ export default function LessonBuilder(){
   // публичность урока: приватный = только внутри платформы, публичный = всем по ссылке (и гостям)
   const [isPublic,setIsPublic]=useState(false)
   const [subject,setSubject]=useState<any>(null)
+  const [fromSubject,setFromSubject]=useState('')
   const [subjects,setSubjects]=useState<any[]>([])
   const [subjectsLoading,setSubjectsLoading]=useState(true)
   const [subjectsError,setSubjectsError]=useState<string|null>(null)
@@ -78,6 +79,7 @@ export default function LessonBuilder(){
     if(isNew){
       const sp=new URLSearchParams(window.location.search)
       const s=sp.get('subject')
+      if(s) setFromSubject(s)
       if(s) client.get('/subjects/').then(r=>{
         const arr=Array.isArray(r.data)?r.data:r.data.results||[]
         const f=arr.find((x:any)=>String(x.slug)===String(s)||String(x.id)===String(s))
@@ -422,10 +424,9 @@ export default function LessonBuilder(){
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-        <Link to="/lessons" className="hover:text-indigo-600 dark:hover:text-indigo-400">{t('lessons')}</Link>
-        <span>›</span>
-        <span className="text-slate-900 dark:text-slate-100 font-medium">{isNew?t('lb_new'):t('lb_editing')}</span>
+      <div className="flex items-center gap-3 text-sm">
+        <Link to={fromSubject?`/subjects/${fromSubject}`:'/my-lessons'} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-200 dark:hover:bg-slate-700">← {t('nav_back')}</Link>
+        <span className="text-slate-500 dark:text-slate-400">{isNew?t('lb_new'):t('lb_editing')}</span>
       </div>
       {draftBanner && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-[94vw] sm:max-w-md rounded-2xl bg-slate-900/92 dark:bg-black/85 text-white shadow-2xl border border-white/10 px-4 py-3 flex items-center gap-3" data-testid="lb-draft-chip">
@@ -459,12 +460,12 @@ export default function LessonBuilder(){
           <div className="bg-white rounded-2xl border p-6 space-y-4">
             <div id="lesson-title-field">
               <label className="text-sm font-semibold text-slate-700">Название урока *</label>
-              <input ref={titleInputRef} value={title} onChange={e=>{setTitle(e.target.value); if(errors.title) setErrors(prev=>({...prev, title:undefined}))}} placeholder="Например: Квадратные уравнения — 8 класс" className={`w-full mt-1 px-4 py-3 rounded-xl border font-bold text-lg focus:outline-none focus:ring-2 ${errors.title ? 'bg-red-50 border-red-300 focus:border-red-400 focus:ring-red-200' : 'bg-slate-50 focus:border-indigo-400 focus:ring-indigo-200'}`}/>
+              <input ref={titleInputRef} value={title} onChange={e=>{setTitle(e.target.value); if(errors.title) setErrors(prev=>({...prev, title:undefined}))}} placeholder="Например: Квадратные уравнения — 8 класс" className={`w-full mt-1 px-4 py-3 rounded-xl border font-bold text-lg focus:outline-none focus:ring-2 ${errors.title ? 'bg-red-50 border-red-300 focus:border-red-400 focus:ring-red-200' : 'bg-slate-50 dark:bg-slate-800 dark:text-white focus:border-indigo-400 focus:ring-indigo-200'}`}/>
               {errors.title ? <div className="mt-1 text-xs font-medium text-red-600 flex items-center gap-1">⚠ {errors.title}</div> : <div className="text-xs text-slate-400 mt-1">{title.length}/100 {title.length===0 && <span className="text-slate-500">— это поле обязательно, не путай с заголовком блока «Введение» ниже</span>}</div>}
             </div>
             <div>
               <label className="text-sm font-semibold text-slate-700">О чём урок?</label>
-              <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Коротко: цели, для кого, что узнают. Это покажется в списке уроков." rows={3} className="w-full mt-1 px-4 py-3 rounded-xl border bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-200"/>
+              <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Коротко: цели, для кого, что узнают. Это покажется в списке уроков." rows={3} className="w-full mt-1 px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200"/>
             </div>
             <div>
               <label className="text-sm font-semibold text-slate-700">Кому доступен урок</label>
@@ -585,7 +586,7 @@ export default function LessonBuilder(){
                     <div className="flex gap-1 p-1 rounded-xl bg-slate-100 w-fit">
                       {(['select','upload','create'] as const).map(tab=>(
                         <button key={tab} onClick={()=>setPresTabs(p=>({...p,[b.id]:tab}))} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${getPresTab(b.id)===tab?'bg-white shadow text-slate-900':'text-slate-500 hover:text-slate-700'}`}>
-                          {tab==='select'?'📂 Выбрать':tab==='upload'?'⬆ Загрузить':'✨ Создать'}
+                          {tab==='select'?'Выбрать':tab==='upload'?'Загрузить':'Создать'}
                         </button>
                       ))}
                       <span className="ml-2 text-[11px] text-slate-400 self-center hidden sm:inline">урок сохранится с выбранной презентацией</span>
@@ -682,7 +683,7 @@ export default function LessonBuilder(){
                           {options.tests.map((t:any)=><option key={t.id} value={t.id}>{t.title} ({t.questions_count ?? t.questions?.length ?? 0} вопр.)</option>)}
                         </select>
                         <div className="flex flex-wrap gap-2">
-                          <button onClick={()=>{ setTestInlineOpen(p=>({...p,[b.id]:true})); setInlineTests(prev=>({...prev,[b.id]: getInlineTest(b.id)}))}} className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">✨ Создать тест прямо здесь</button>
+                          <button onClick={()=>{ setTestInlineOpen(p=>({...p,[b.id]:true})); setInlineTests(prev=>({...prev,[b.id]: getInlineTest(b.id)}))}} className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Создать тест прямо здесь</button>
                           <Link to="/tests/new" target="_blank" className="px-3 py-2 rounded-xl bg-white border text-sm">Открыть конструктор тестов →</Link>
                           <button onClick={()=>refreshOptions()} className="px-3 py-2 rounded-xl bg-slate-100 text-sm">↻ Обновить</button>
                         </div>
@@ -698,7 +699,7 @@ export default function LessonBuilder(){
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 space-y-2" data-testid="lb-ai">
                           <button onClick={()=>setLtAiOpen(p=>({...p,[b.id]:!p[b.id]}))}
                             className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5" data-testid="lb-ai-btn">
-                            ✨ Создать вопросы автоматически {ltAiOpen[b.id] ? '▾' : '▸'}
+                            Создать вопросы автоматически {ltAiOpen[b.id] ? '▾' : '▸'}
                           </button>
                           {ltAiOpen[b.id] && (
                             <div className="space-y-2" data-testid="lb-ai-panel">
@@ -714,7 +715,7 @@ export default function LessonBuilder(){
                                   {ltAiBusy?'⏳ Думаю…':'Сгенерировать'}
                                 </button>
                               </div>
-                              {ltAiSrc && <div className={`text-[11px] font-bold px-2 py-1 rounded-lg w-fit ${ltAiSrc.startsWith('gemini') ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{ltAiSrc.startsWith('gemini') ? '✨ сгенерировано автоматически' : '🧮 офлайн-генератор'}</div>}
+                              {ltAiSrc && <div className={`text-[11px] font-bold px-2 py-1 rounded-lg w-fit ${ltAiSrc.startsWith('gemini') ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{ltAiSrc.startsWith('gemini') ? 'сгенерировано автоматически' : 'офлайн-генератор'}</div>}
                               <div className="text-[11px] text-slate-500">Вопросы добавятся в список ниже — проверь и поправь, потом сохрани тест.</div>
                             </div>
                           )}

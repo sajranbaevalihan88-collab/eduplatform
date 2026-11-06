@@ -150,7 +150,7 @@ const dict:Record<Lang,Record<string,string>>={
     tb_opt_false:'Неверно', tb_opt_1:'Вариант 1', tb_opt_2:'Вариант 2', tb_new_opt:'Новый вариант',
     tb_add_opt:'+ Вариант', tb_empty_pre:'Вопросов пока нет — нажми', tb_empty_post:': напиши тему и что спросить — вопросы соберутся сами.', tb_create_ai:'Создать автоматически',
     tb_saving:'Сохраняю...', tb_save_test:'Сохранить тест', tb_gen_ai_pre:'⚡ Последние вопросы сгенерированы автоматически', tb_gen_offline:'🔧 Офлайн-режим: вопросы собраны из текста',
-    tb_gen_title:'✨ Автосоздание — просто напиши что нужно', tb_gen_ph:'Например: тест на тему «Атомы», 5 вопросов с одним ответом...', tb_gen_aria:'Что сделать', tb_gen_count:'Вопросов (макс 40):',
+    tb_gen_title:'Автосоздание — просто напиши что нужно', tb_gen_ph:'Например: тест на тему «Атомы», 5 вопросов с одним ответом...', tb_gen_aria:'Что сделать', tb_gen_count:'Вопросов (макс 40):', nav_back:'Назад',
     tb_generate:'Сгенерировать', tb_thinking:'Думаю...',
     tt_speak_test:'Тест', tt_speak_qs:'Вопросов', tt_speak_hint:'Читай текущий вопрос кнопкой динамика.', tt_q:'Вопрос',
     tt_variants:'Варианты', tt_limited:'Прохождение ограничено', tt_passed:'Тест пройден!', tt_done_title:'Тест завершён',
@@ -225,7 +225,7 @@ const dict:Record<Lang,Record<string,string>>={
     sprint_preparing:'Готовлю слова…', sprint_click_continue:'Кликни чтобы продолжить', sprint_wpm:'WPM:', sprint_acc:'Точность:', sprint_tab:'tab — заново',
     sprint_type_aria:'Печатай слова',
     tb_gen_hint:'Вопросы добавятся ниже — проверь и поправь перед сохранением. 30–40 вопросов думает дольше (до минуты).', sprint_sec:'с',
-    tb_ai:'✨ Авто:', notes_voice_settings:'Настройки голоса',
+    tb_ai:'Авто:', notes_voice_settings:'Настройки голоса',
     // __I18N_B__
     // __I18N_C__
     arkan_answering:'Отвечают:',
@@ -741,7 +741,7 @@ const dict:Record<Lang,Record<string,string>>={
     tb_opt_false:'False', tb_opt_1:'Option 1', tb_opt_2:'Option 2', tb_new_opt:'New option',
     tb_add_opt:'+ Option', tb_empty_pre:'No questions yet — press', tb_empty_post:': write a topic and what to ask — questions will be drafted for you.', tb_create_ai:'Create automatically',
     tb_saving:'Saving...', tb_save_test:'Save test', tb_gen_ai_pre:'⚡ Latest questions generated automatically', tb_gen_offline:'🔧 Offline mode: questions built from text',
-    tb_gen_title:'✨ Auto-create — just write what you need', tb_gen_ph:'Example: a test on Atoms, 5 single-answer questions...', tb_gen_aria:'What to do', tb_gen_count:'Questions (max 40):',
+    tb_gen_title:'Auto-create — just write what you need', tb_gen_ph:'Example: a test on Atoms, 5 single-answer questions...', tb_gen_aria:'What to do', tb_gen_count:'Questions (max 40):', nav_back:'Back',
     tb_generate:'Generate', tb_thinking:'Thinking...',
     tt_speak_test:'Test', tt_speak_qs:'Questions', tt_speak_hint:'Read the current question with the speaker button.', tt_q:'Question',
     tt_variants:'Options', tt_limited:'Attempt limited', tt_passed:'Test passed!', tt_done_title:'Test finished',
@@ -816,7 +816,7 @@ const dict:Record<Lang,Record<string,string>>={
     sprint_preparing:'Preparing words…', sprint_click_continue:'Click to continue', sprint_wpm:'WPM:', sprint_acc:'Accuracy:', sprint_tab:'tab — restart',
     sprint_type_aria:'Type words',
     tb_gen_hint:'Questions appear below — check and fix before saving. 30–40 questions take longer (up to a minute).', sprint_sec:'s',
-    tb_ai:'✨ Auto:', notes_voice_settings:'Voice settings',
+    tb_ai:'Auto:', notes_voice_settings:'Voice settings',
     // __I18N_B__
     // __I18N_C__
     arkan_answering:'Answering:',
