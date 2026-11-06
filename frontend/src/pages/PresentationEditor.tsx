@@ -770,7 +770,7 @@ export default function PresentationEditor(){
     <div ref={fullscreenRef} className={`${isEditFullscreen ? 'fixed inset-0 z-50 bg-[#e9e9e9] flex flex-col' : 'flex flex-col h-[calc(100dvh-7.5rem)] -m-4 -mb-28 lg:h-[calc(100vh-64px)] lg:-m-8 lg:mb-0'}`}>
       <h1 className="sr-only">Редактор презентаций</h1>
       <div className="h-14 bg-[#f3f3f3] border-b flex items-center gap-2 px-3 overflow-hidden">
-        <button onClick={()=>nav(subjSlug?`/subjects/${subjSlug}`:'/my-lessons')} className="px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-semibold shrink-0" title={t('nav_back')}>← {t('nav_back')}</button>
+        <button onClick={()=>nav(subjSlug?`/subjects/${subjSlug}`:'/my-lessons')} className="px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-semibold shrink-0" title="Назад">← Назад</button>
         <div className="w-8 h-8 rounded bg-[#d24726] flex items-center justify-center text-white font-bold text-sm shrink-0">P</div>
         <input value={title} onChange={e=>setTitle(e.target.value)} className="flex-1 min-w-0 max-w-none sm:max-w-[280px] px-3 py-2 max-sm:py-1.5 rounded border bg-white text-slate-900 font-semibold text-sm truncate" title={title}/>
         <input value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Описание" className="hidden xl:block flex-1 min-w-[160px] max-w-[260px] px-3 py-1.5 rounded border bg-white text-sm truncate" title={desc}/>
