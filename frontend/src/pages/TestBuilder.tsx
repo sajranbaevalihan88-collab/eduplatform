@@ -93,7 +93,6 @@ export default function TestBuilder(){
           <button onClick={()=>{setMode('form')}} data-testid="tb-manual"
             className="w-full text-left px-5 py-4 min-h-[92px] rounded-2xl border-2 border-blue-400/60 bg-indigo-50 dark:bg-blue-900/20 dark:border-indigo-700 hover:border-blue-500 flex items-center gap-4 transition-colors">
             <span>
-            <span>
               <span className="block font-extrabold text-lg dark:text-white">{t('tb_mode_manual')}</span>
               <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('tb_mode_manual_sub')}</span>
             </span>
@@ -101,7 +100,6 @@ export default function TestBuilder(){
           {AI_FEATURES && (
           <button onClick={()=>{setMode('form'); setShowGen(true)}} data-testid="tb-ai"
             className="w-full text-left px-5 py-4 min-h-[92px] rounded-2xl border-2 border-emerald-400/60 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700 hover:border-emerald-500 flex items-center gap-4 transition-colors">
-            <span>
             <span>
               <span className="block font-extrabold text-lg dark:text-white">{t('tb_mode_ai')}</span>
               <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('tb_mode_ai_sub')}</span>
