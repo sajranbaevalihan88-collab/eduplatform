@@ -28,7 +28,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { to: '/', label: t('home'), icon: Sparkles },
     { to: '/dashboard', label: t('dashboard'), icon: LayoutDashboard },
     { to: '/subjects', label: t('subjects'), icon: BookOpen },
-    { to: '/lessons', label: t('lessons'), icon: Layers },
     // Мои уроки — приватные уроки учителя (у ученика раздела нет)
     ...(!student ? [{ to: '/my-lessons', label: t('my_lessons'), icon: FolderLock }] : []),
     { to: '/presentations', label: t('presentations'), icon: Presentation },
@@ -44,7 +43,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // Нижняя навигация телефона: 5 самых нужных разделов крупным тапом
   const bottomItems = [
     { to: '/dashboard', label: t('dashboard'), icon: LayoutDashboard },
-    { to: '/lessons', label: t('lessons'), icon: Layers },
     { to: '/subjects', label: t('subjects'), icon: BookOpen },
     { to: '/classes', label: t('classes'), icon: GraduationCap },
     { to: '/games', label: t('games'), icon: Gamepad2 },
