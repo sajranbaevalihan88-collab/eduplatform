@@ -4,7 +4,7 @@ import client from '../api/client'
 import { useLang } from '../context/LangContext'
 import { Tldraw, AssetRecordType, exportToBlob } from 'tldraw'
 import 'tldraw/tldraw.css'
-import { Save, Plus, Maximize2, Download, Trash2, PenTool, PanelLeft, MoreHorizontal, X, Home } from 'lucide-react'
+import { Save, Plus, Maximize2, Download, Trash2, PenTool, PanelLeft, MoreHorizontal, X, Home, FolderOpen } from 'lucide-react'
 import { extractPages, isLegacyBoardMeta, importLegacyPages } from '../board/legacy'
 
 const Board3D = lazy(() => import('../components/Board3D'))
@@ -674,7 +674,7 @@ export default function Board() {
             Toolbar: null, StylePanel: null, TopPanel: null, SharePanel: null, NavigationPanel: null,
             PageMenu: null, MainMenu: null, ActionsMenu: null, HelpMenu: null, ContextMenu: null,
             QuickActions: null, KeyboardShortcutsDialog: null, MenuPanel: null, HelperButtons: null, ZoomMenu: null,
-          } as any) : ({ SharePanel: null } as any)}
+          } as any) : ({ SharePanel: null, DebugMenu: null } as any)}
         />
       </div>
       {partTool && mode === '2d' && (
@@ -707,7 +707,7 @@ export default function Board() {
   if (isFullscreen) {
     return (
       <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col">
-        <div className="h-14 sm:h-12 shrink-0 bg-slate-900 text-white flex items-center gap-2 sm:gap-3 px-2 sm:px-4">
+        <div className="h-14 sm:h-12 shrink-0 bg-blue-900 text-white flex items-center gap-2 sm:gap-3 px-2 sm:px-4">
           <span className="font-bold hidden sm:inline">{t('board_fullscreen')}</span>
           <span className="text-xs text-white/70 hidden sm:inline">{title} • {mode === '2d' ? '2D' : '3D'}</span>
           <button onClick={() => nav('/')} aria-label={t('home')} title={t('home')}
@@ -749,7 +749,7 @@ export default function Board() {
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => { flushDraft(); setShowActions(false); setIsFullscreen(false); setShowBoards(true) }} className="min-h-[52px] px-3 rounded-xl border dark:border-slate-700 dark:text-white text-sm font-bold">🗂 {t('board_mine_short')}</button>
                 <button onClick={() => { setMode('2d'); setClipTool('axes'); setShowActions(false) }} className={`min-h-[52px] px-3 rounded-xl border text-sm font-bold ${clipTool === 'axes' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>{t('bd2_axes')}</button>
-                <button onClick={() => { newBoard(); setShowActions(false) }} className="min-h-[52px] px-3 rounded-xl bg-emerald-600 text-white text-sm font-bold flex items-center justify-center gap-1.5"><Plus size={17} />{t('board_new')}</button>
+                <button onClick={() => { newBoard(); setShowActions(false) }} className="min-h-[52px] px-3 rounded-xl bg-orange-500 text-white text-sm font-bold flex items-center justify-center gap-1.5"><Plus size={17} />{t('board_new')}</button>
                 <button onClick={() => { download(); setShowActions(false) }} className="min-h-[52px] px-3 rounded-xl border dark:border-slate-700 dark:text-white text-sm font-bold flex items-center justify-center gap-1.5"><Download size={17} />{t('board_download')}</button>
                 <button onClick={() => { clearPage(); setShowActions(false) }} className="col-span-2 min-h-[48px] px-3 rounded-xl border text-amber-700 border-amber-200 bg-amber-50 text-sm font-bold flex items-center justify-center gap-1.5"><Trash2 size={17} />{t('board_clear_sheet')}</button>
               </div>
@@ -765,10 +765,10 @@ export default function Board() {
     <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950 relative overflow-hidden">
       <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200/60 dark:border-slate-700/60">
         <button onClick={() => nav('/')} aria-label={t('home')} title={t('home')}
-          className="p-2.5 min-h-[44px] min-w-[44px] rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center">
+          className="p-2.5 min-h-[44px] min-w-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-600 text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-center">
           <Home size={18} />
         </button>
-        <span className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 text-white inline-flex"><PenTool size={16} /></span>
+        <span className="p-1.5 rounded-lg bg-blue-600 text-white hidden sm:inline-flex"><PenTool size={16} /></span>
         <input value={title} onChange={e => setTitle(e.target.value)} className="px-3 py-1.5 rounded-lg border bg-white dark:bg-slate-800 dark:text-white text-sm font-medium min-w-[120px] max-w-[200px]" />
         {draft && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-bold" title={t('board_draft_hint')}>{t('board_draft_chip')}</span>}
         <div className="flex p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800">
@@ -778,12 +778,12 @@ export default function Board() {
         <div className="ml-auto flex items-center gap-2 flex-wrap">
           <span className="md:hidden text-xs text-slate-400">{boards.length}</span>
           <button onClick={() => { setHideSidebarLocal(v => !v); window.dispatchEvent(new CustomEvent('toggle-sidebar')) }} className="p-2.5 min-h-[44px] min-w-[44px] rounded-lg border text-sm bg-white dark:bg-slate-800 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-center" title={hideSidebarLocal ? t('board_show_menu') : t('board_hide_tabs')}><PanelLeft size={18} /></button>
-          <button onClick={() => { flushDraft(); setIsFullscreen(true) }} className="px-3 py-2 min-h-[44px] rounded-lg bg-slate-900 dark:bg-white dark:text-slate-900 text-white flex items-center gap-1.5 text-sm font-medium"><Maximize2 size={16} /> {t('board_fullscreen_btn')}</button>
-          <button onClick={newBoard} className="px-3.5 py-2 min-h-[44px] rounded-lg bg-emerald-600 text-white font-bold flex items-center gap-1.5 text-sm"><Plus size={16} /> {t('board_new')}</button>
-          <button onClick={download} className="px-3 py-2 min-h-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border flex items-center gap-1.5 text-sm"><Download size={16} /> {t('board_download')}</button>
-          <button onClick={clearPage} className="p-2.5 min-h-[44px] min-w-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border text-amber-700 dark:text-amber-400 flex items-center justify-center"><Trash2 size={16} /></button>
-          <button onClick={() => setShowBoards(v => !v)} className="px-3 py-2 min-h-[44px] rounded-lg bg-slate-100 dark:bg-slate-800 dark:text-white border text-sm font-medium flex items-center gap-1.5">🗂 {t('board_mine')} <span className="px-1.5 py-0.5 rounded-full bg-slate-900 text-white text-[10px]">{boards.length}</span></button>
-          <button onClick={save} className="px-4 py-2 min-h-[44px] rounded-lg bg-indigo-600 text-white font-bold flex items-center gap-1.5 text-sm"><Save size={16} /> {t('save')}</button>
+          <button onClick={() => { flushDraft(); setIsFullscreen(true) }} className="px-3 py-2 min-h-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 flex items-center gap-1.5 text-sm font-medium"><Maximize2 size={16} /> {t('board_fullscreen_btn')}</button>
+          <button onClick={newBoard} className="px-3.5 py-2 min-h-[44px] rounded-lg bg-orange-500 text-white font-bold flex items-center gap-1.5 text-sm hover:bg-orange-400"><Plus size={16} /> {t('board_new')}</button>
+          <button onClick={download} className="px-3 py-2 min-h-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-1.5 text-sm text-slate-700"><Download size={16} /> {t('board_download')}</button>
+          <button onClick={clearPage} className="p-2.5 min-h-[44px] min-w-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-red-600 flex items-center justify-center"><Trash2 size={16} /></button>
+          <button onClick={() => setShowBoards(v => !v)} className="px-3 py-2 min-h-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 text-sm font-medium flex items-center gap-1.5"><FolderOpen size={16} /> {t('board_mine')} <span className="px-1.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px]">{boards.length}</span></button>
+          <button onClick={save} className="px-4 py-2 min-h-[44px] rounded-lg bg-blue-600 text-white font-bold flex items-center gap-1.5 text-sm hover:bg-blue-700"><Save size={16} /> {t('save')}</button>
         </div>
       </div>
       {mode === '2d' && !isFullscreen && (
