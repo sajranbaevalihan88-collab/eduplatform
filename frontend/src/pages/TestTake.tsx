@@ -183,8 +183,16 @@ export default function TestTake(){
   const q = test.questions[qi]
   const left = q ? (leftMap[String(q.id)] ?? perQ) : 0
   const answeredCount = test.questions.filter((x:any)=>answers[x.id]!==undefined && answers[x.id]!=='' && (!Array.isArray(answers[x.id]) || answers[x.id].length>0)).length
+  // Водяной знак: любой снимок/фото экрана остаётся персонально помеченным — делить скриной бессмысленно
+  const wmUser=(()=>{try{return (JSON.parse(localStorage.getItem('user')||'null')||{}).username||''}catch{return ''}})()
+  const wmText=`${wmUser||'гость'} · ${new Date().toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})} · EduPlatform`
   return (
     <div className="max-w-3xl mx-auto space-y-4">
+      {!result && !alreadyAttempted && (
+        <div className="tt-wm" aria-hidden="true">
+          {Array.from({length:16}).map((_,i)=>(<span key={i} style={{top:`${(i*6.5+2)%96}%`,left:`${i%2?'46%':'4%'}`,opacity:i%3===0?1:0.55}}>{wmText}</span>))}
+        </div>
+      )}
       {fromPath && <Link to={fromPath} className="inline-block px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-600">{t('tt_back_lesson')}</Link>}
       <div className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-2xl border p-4 sm:p-6">
         <h1 className="text-xl sm:text-2xl font-bold dark:text-white">{test.title}</h1>

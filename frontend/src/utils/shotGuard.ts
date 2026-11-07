@@ -61,8 +61,13 @@ export function enableShotGuard(onViolation: () => void, texts: ShotGuardTexts):
     show(texts.warnTitle, texts.warnMsg, false, 1700)
   }
 
+  // PrintScreen: скриншот ОС сделать нельзя запретом, но можно опустошить буфер
+  // обмена — Ctrl+V потом отдаёт не снимок, а текст-заглушку.
+  const scrubClipboard = () => {
+    try { navigator.clipboard?.writeText('EduPlatform — копирование материалов теста запрещено').catch(()=>{}) } catch {}
+  }
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'PrintScreen') { warn(); return }
+    if (e.key === 'PrintScreen') { warn(); scrubClipboard(); return }
     const k = (e.key || '').toLowerCase()
     if ((e.ctrlKey || e.metaKey) && !e.altKey && ['c', 'x', 's', 'p', 'u'].includes(k)) {
       e.preventDefault()
@@ -70,7 +75,7 @@ export function enableShotGuard(onViolation: () => void, texts: ShotGuardTexts):
     }
   }
   const onKeyUp = (e: KeyboardEvent) => {
-    if (e.key === 'PrintScreen') warn()
+    if (e.key === 'PrintScreen') { warn(); scrubClipboard() }
   }
   const onCtx = (e: Event) => { e.preventDefault(); warn() }
   const onCopy = (e: Event) => {

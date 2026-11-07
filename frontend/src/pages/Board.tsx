@@ -92,6 +92,8 @@ export default function Board() {
     ;(window as any).__tlEd = editor
     try { editor.user.updateUserPreferences({ locale: langRef.current === 'en' ? 'en' : 'ru' }) } catch {}
     try { editor.updateInstanceState({ isGridMode: false }) } catch {}
+    // отладочное меню tldraw («Show toast», «Create 100 shapes», Debug Flags…) — только для разработчиков
+    try { editor.updateInstanceState({ debugMode: false } as any) } catch {}
     // батчим: на каждый кадр максимум один колбэк — иначе на больших досках кисть отстаёт
     let pending = 0
     editor.store.listen(() => {

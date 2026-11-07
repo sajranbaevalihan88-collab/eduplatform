@@ -30,6 +30,12 @@ body { touch-action: manipulation; padding-bottom: env(safe-area-inset-bottom); 
 .rounded-2xl { border-radius: 0.875rem !important; }
 .rounded-3xl { border-radius: 1.25rem !important; }
 
+/* Водяной знак теста: персональный след поверх страницы (скрывать/уйти от него нельзя — часть потока) */
+.tt-wm { position: fixed; inset: 0; z-index: 40; overflow: hidden; pointer-events: none; }
+.tt-wm span { position: absolute; font-size: 15px; font-weight: 700; color: rgba(37,99,235,0.10); transform: rotate(-26deg); white-space: nowrap; user-select: none; }
+.dark .tt-wm span { color: rgba(147,197,253,0.10); }
+@media print { .tt-wm { display: block !important; } }
+
 /* FitBox-замер однострочности: перебивает inline pre-wrap внутри слайдов */
 .nowrap-probe, .nowrap-probe * { white-space: nowrap !important; }
 
