@@ -8,6 +8,37 @@ from .permissions import IsAdmin
 
 User = get_user_model()
 
+# --- Брут-защита по аккаунту: N неудачных входов в окно → блок 15 мин (независимо от IP) ---
+_LOGIN_MAX_FAILS = 10
+_LOGIN_WINDOW = 15 * 60
+
+def _lock_key(username: str) -> str:
+    return 'loginfail:' + (username or '').strip().lower()
+
+def _is_locked(username: str) -> bool:
+    from django.core.cache import cache
+    try:
+        return cache.get(_lock_key(username), 0) >= _LOGIN_MAX_FAILS
+    except Exception:
+        return False
+
+def _register_login_failure(username: str) -> None:
+    from django.core.cache import cache
+    try:
+        k = _lock_key(username)
+        cache.set(k, cache.get(k, 0) + 1, _LOGIN_WINDOW)
+    except Exception:
+        pass
+
+def _clear_login_failures(username: str) -> None:
+    from django.core.cache import cache
+    try:
+        cache.delete(_lock_key(username))
+    except Exception:
+        pass
+
+_LOCKED_MSG = 'Слишком много неудачных попыток входа в этот аккаунт — подождите 15 минут'
+
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
@@ -25,6 +56,17 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 class ThrottledTokenObtainPairView(TokenObtainPairView):
     throttle_classes = [LoginThrottle]
 
+    def post(self, request, *args, **kwargs):
+        username = (request.data or {}).get('username') or ''
+        if _is_locked(username):
+            return Response({'detail': _LOCKED_MSG}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        resp = super().post(request, *args, **kwargs)
+        if resp.status_code == 200:
+            _clear_login_failures(username)
+        else:
+            _register_login_failure(username)
+        return resp
+
 class PasswordChangeThrottle(throttling.UserRateThrottle):
     scope = 'password_change'
 
@@ -39,10 +81,14 @@ def login_view(request):
     # простая защита от перебора: username длина
     if len(username) > 150 or len(password) > 128:
         return Response({'error': 'Неверные данные'}, status=status.HTTP_401_UNAUTHORIZED)
+    if _is_locked(username):
+        return Response({'error': _LOCKED_MSG}, status=status.HTTP_429_TOO_MANY_REQUESTS)
     user = authenticate(username=username, password=password)
     if user:
+        _clear_login_failures(username)
         refresh = RefreshToken.for_user(user)
         return Response({'refresh': str(refresh), 'access': str(refresh.access_token), 'user': UserSerializer(user).data})
+    _register_login_failure(username)
     return Response({'error': 'Неверные данные'}, status=status.HTTP_401_UNAUTHORIZED)
 
 @api_view(['GET','PATCH'])
@@ -92,7 +138,7 @@ def change_password_view(request):
         validate_password(new, user=user)
     except _VE as e:
         return Response({'error': ' '.join(getattr(e, 'messages', [str(e)]))}, status=status.HTTP_400_BAD_REQUEST)
-    user.set_password(new)
+    user.set_password_with_stamp(new)
     user.save()
     # ревокация всех ранее выданных refresh: угнанная сессия умирает вместе со сменой пароля
     from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken

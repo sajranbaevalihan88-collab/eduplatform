@@ -384,6 +384,42 @@ class ClassroomViewSet(viewsets.ModelViewSet):
                         'score': s.score if s else None})
         return Response(out)
 
+    @action(detail=False, methods=['get'])
+    def my_diary(self, request):
+        """Дневник ученика: все сдачи с оценками/пометками по всем классам + средние.
+        Отдельного расписания нет — дата = момент сдачи/оценки (updated_at)."""
+        u = request.user
+        subs = (Submission.objects
+                .filter(student=u, status__in=['submitted', 'late'])
+                .select_related('assignment__classroom', 'assignment__lesson', 'assignment__test')
+                .order_by('-updated_at'))
+        rows = []
+        per_class = {}
+        for s in subs:
+            a = s.assignment
+            room = a.classroom
+            if room.is_paid and room.owner_id != u.id:
+                e = Enrollment.objects.filter(classroom=room, student=u).only('access_granted').first()
+                if not e or not e.access_granted:
+                    continue  # платный класс без доступа — из дневника прячем
+            rows.append({
+                'classroom_id': room.id, 'classroom_title': room.title, 'classroom_color': room.color,
+                'assignment_id': a.id, 'title': a.title, 'kind': a.kind,
+                'score': s.score, 'mark': s.mark, 'status': s.status,
+                'max_score': a.max_score, 'deadline': a.deadline,
+                'date': s.updated_at, 'has_answer': bool(s.answer),
+            })
+            c = per_class.setdefault(room.id, {'title': room.title, 'color': room.color, 'scores': [], 'graded': 0, 'total': 0})
+            if s.score is not None:
+                c['scores'].append(s.score)
+                c['graded'] += 1
+            c['total'] += 1
+        classes = []
+        for cid, c in per_class.items():
+            avg = round(sum(c['scores']) / len(c['scores']), 1) if c['scores'] else None
+            classes.append({'classroom_id': cid, 'title': c['title'], 'color': c['color'], 'avg': avg, 'graded': c['graded'], 'total': c['total']})
+        return Response({'rows': rows, 'classes': classes})
+
     @action(detail=True, methods=['post'])
     def ai_report(self, request, pk=None):
         """Отчёт учителю по классу (автогенерация), честный офлайн-фолбэк.
@@ -467,6 +503,15 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Assignment.objects.select_related('classroom', 'lesson', 'test').filter(
             classroom__in=_visible_classrooms(self.request.user))
+        u = self.request.user
+        # платный класс: пока оплата не подтверждена, материалы (задания) не отдаём —
+        # иначе неоплативший видит названия/инструкции/ссылки (лик контента)
+        paid_ids = list(Classroom.objects.filter(is_paid=True, enrollments__student=u).values_list('id', flat=True))
+        if paid_ids:
+            granted = set(Enrollment.objects.filter(student=u, classroom_id__in=paid_ids, access_granted=True).values_list('classroom_id', flat=True))
+            hidden = set(paid_ids) - granted - set(Classroom.objects.filter(owner=u).values_list('id', flat=True))
+            if hidden:
+                qs = qs.exclude(classroom_id__in=hidden)
         # счёт «сдано/оценено» для учителя: классы маленькие, поэтому подзапросы дёшевы,
         # а руками на фронте их не собрать — экономит N лишних fetch'ей
         qs = qs.annotate(
@@ -526,21 +571,24 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         if answer:
             answer = answer[:5000]
         attempt = None
+        # Оценку выставляет ТОЛЬКО учитель (gradebook_score) или автотест.
+        # Скор от клиента не принимается никогда — иначе POST {"score": 100} = само-оценка.
+        score = None
         if a.kind == 'test' and a.test_id:
             from apps.assessments.models import TestAttempt
             attempt = TestAttempt.objects.filter(test_id=a.test_id, user=u).order_by('-created_at').first()
             if attempt is not None:
                 score = attempt.score
-        try:
-            score = None if score is None else float(score)
-        except (TypeError, ValueError):
-            score = None
         now = timezone.now()
         late = bool(a.deadline and now > a.deadline)
+        existing = Submission.objects.filter(assignment=a, student=u).first()
+        defaults = {'status': 'late' if late else 'submitted',
+                    'attempt': attempt, 'answer': answer}
+        if score is not None or existing is None:
+            # новая автoоценка; повторная сдача без теста НЕ затирает оценку учителя
+            defaults['score'] = score
         sub, _ = Submission.objects.update_or_create(
-            assignment=a, student=u,
-            defaults={'status': 'late' if late else 'submitted',
-                      'score': score, 'attempt': attempt, 'answer': answer})
+            assignment=a, student=u, defaults=defaults)
         return Response(SubmissionSerializer(sub).data, status=200)
 
 

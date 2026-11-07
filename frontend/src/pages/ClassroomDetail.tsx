@@ -385,12 +385,16 @@ export default function ClassroomDetail(){
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={shareCode} className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-white/15 border border-white/30 flex items-center justify-center" title={t('cls_share')} aria-label={t('cls_share')}>
-            <Share2 size={16}/>
-          </button>
-          <button onClick={copy} className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-white/15 border border-white/30 font-mono font-bold text-sm" title={t('cls_copy_code')} aria-label={t('cls_copy_code')}>
-            {fmtCode(room.invite_code)} {copied? <Check size={16}/> : <Copy size={16}/>}
-          </button>
+          {isOwner && (
+            <>
+              <button onClick={shareCode} className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-white/15 border border-white/30 flex items-center justify-center" title={t('cls_share')} aria-label={t('cls_share')}>
+                <Share2 size={16}/>
+              </button>
+              <button onClick={copy} className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-white/15 border border-white/30 font-mono font-bold text-sm" title={t('cls_copy_code')} aria-label={t('cls_copy_code')}>
+                {fmtCode(room.invite_code)} {copied? <Check size={16}/> : <Copy size={16}/>}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -517,7 +521,15 @@ export default function ClassroomDetail(){
             </div>
           )}
 
-          {tab==='tasks' && (
+          {tab==='tasks' && needsPay && (
+            <div className="py-14 text-center">
+              <Lock size={36} className="mx-auto mb-3 text-amber-500"/>
+              <div className="font-bold dark:text-white">{t('cls_paid_locked_t')}</div>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">{t('cls_paid_locked_x')}</p>
+            </div>
+          )}
+
+          {tab==='tasks' && !needsPay && (
             <div className="space-y-3">
               {!isOwner && tasks.length>0 && (()=>{
                 const done = tasks.filter((a:any)=> ['submitted','late'].includes(myTasks[a.id]?.status)).length
@@ -593,6 +605,8 @@ export default function ClassroomDetail(){
               {tasks.map(a=>{
                 const my = myTasks[a.id]
                 const st = my?.status || 'pending'
+                // урок/тест мог быть удалён (SET_NULL) — кнопка «Открыть» тогда не врёт ссылкой в /lessons/null
+                const gone = (a.kind==='lesson' && !a.lesson) || (a.kind==='test' && !a.test)
                 const openTo = a.kind==='lesson' ? `/lessons/${a.lesson}` : `/tests/${a.test}/take`
                 const cd = countdown(a.deadline)
                 const kindCls = a.kind==='test'? 'bg-rose-100 text-rose-700' : a.kind==='link'? 'bg-violet-100 text-violet-700' : a.kind==='write'? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'
@@ -630,7 +644,9 @@ export default function ClassroomDetail(){
                     </div>
                     <span className={`text-xs px-2 py-1 rounded-full border ${ST_CLS[st]}`}>{ST_TXT[st]} {my?.score!=null? `${my.score}`:''}</span>
                     {!isOwner && a.kind==='link' && a.url && <a href={a.url} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 min-h-[44px] rounded-xl bg-violet-50 text-violet-700 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14}/></a>}
-                    {!isOwner && (a.kind==='lesson'||a.kind==='test') && <Link to={openTo} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-50 text-indigo-700 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14}/></Link>}
+                    {!isOwner && (a.kind==='lesson'||a.kind==='test') && (gone
+                      ? <span className="px-3 py-2.5 min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 text-sm font-semibold flex items-center gap-1" title={t('cls_material_gone')}>{t('cls_material_gone')}</span>
+                      : <Link to={openTo} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-50 text-indigo-700 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14}/></Link>)}
                     {!isOwner && st!=='submitted' && st!=='late' && a.kind==='write' && wOpen!==a.id && <button onClick={()=>startWrite(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-amber-500 text-white text-sm font-semibold">{t('cls_write_do')}</button>}
                     {!isOwner && st!=='submitted' && st!=='late' && a.kind!=='write' && <button onClick={()=>submit(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-semibold">{t('cls_submit')}</button>}
                   </div>

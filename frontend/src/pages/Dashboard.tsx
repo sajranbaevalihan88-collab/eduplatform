@@ -19,13 +19,14 @@ function CountUp({ value }: { value: number }) {
 }
 import client from '../api/client'
 import { Link } from 'react-router-dom'
-import { BookOpen, Layers, PenTool, Presentation as PresIcon, FlaskConical, ArrowRight, Cuboid, GraduationCap, Clock } from 'lucide-react'
+import { BookOpen, Layers, PenTool, Presentation as PresIcon, FlaskConical, ArrowRight, Cuboid, GraduationCap, Clock, BookOpenCheck } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 
 export default function Dashboard(){
   const {t}=useLang()
   const [stats,setStats]=useState({subjects:0,lessons:0,presentations:0,tests:0,boards:0,classes:0})
   const [me,setMe]=useState<any>(null)
+  const student = me?.role === 'student'
   const [due,setDue]=useState(0)
   useEffect(()=>{
     Promise.all([
@@ -40,6 +41,7 @@ export default function Dashboard(){
       // ученику: сколько заданий ждёт сдачи (pending+overdue по всем классам)
       try{
         const raw=localStorage.getItem('user'); const u=raw?JSON.parse(raw):null
+        if(u && u.role==='student') setMe(u)
         if(u && u.role==='student' && Array.isArray(rooms)){
           const lists=await Promise.all((rooms as any[]).map(rm=>
             client.get(`/classrooms/${rm.id}/my_tasks/`).then(r=>r.data.results||r.data||[]).catch(()=>[])))
@@ -94,6 +96,11 @@ export default function Dashboard(){
       {due>0 && (
         <Link to="/classes" className="flex items-center justify-center gap-2 rounded-2xl p-4 bg-amber-50 border border-amber-200 text-amber-800 font-semibold card-hover">
           <Clock size={18}/> {t('cls_due')}: {due} → {t('classes')}
+        </Link>
+      )}
+      {student && (
+        <Link to="/diary" className="flex items-center justify-center gap-2 rounded-2xl p-4 bg-indigo-50 border border-indigo-200 text-indigo-800 font-semibold card-hover">
+          <BookOpenCheck size={18}/> {t('diary')} — {t('dash_go')}
         </Link>
       )}
 

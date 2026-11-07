@@ -69,7 +69,11 @@ class SlideSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("bg_image должен быть строкой")
         if value and value.startswith('javascript:'):
             raise serializers.ValidationError("Недопустимый bg_image")
-        return value[:4000] if value else ''
+        # base64-картинка фона может быть большой — обрезка до 4000 символов
+        # превращала загруженный фон в мусор. data:image разрешён до 500 КБ.
+        if value and len(value) > 500_000:
+            raise serializers.ValidationError("Фон-картинка слишком большая (макс ~500 КБ base64)")
+        return value if value else ''
 
     class Meta:
         model = Slide

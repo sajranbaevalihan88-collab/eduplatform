@@ -61,6 +61,7 @@ const WordEditor = lazy(()=>import('./pages/WordEditor'))
 import Tests from './pages/Tests'
 import Classes from './pages/Classes'
 import ClassroomDetail from './pages/ClassroomDetail'
+import Diary from './pages/Diary'
 import TestBuilder from './pages/TestBuilder'
 import TestTake from './pages/TestTake'
 import Notes from './pages/Notes'
@@ -111,6 +112,7 @@ export default function App() {
                 <Route path="/tests/:id/take" element={<TestTake />} />
                 <Route path="/classes" element={<PrivateRoute><Classes /></PrivateRoute>} />
                 <Route path="/classes/:id" element={<PrivateRoute><ClassroomDetail /></PrivateRoute>} />
+                <Route path="/diary" element={<PrivateRoute><Diary /></PrivateRoute>} />
                 <Route path="/code" element={<CodeLab />} />
                 <Route path="/notes" element={<PrivateRoute><Notes /></PrivateRoute>} />
                 <Route path="/word" element={<PrivateRoute><WordEditor /></PrivateRoute>} />

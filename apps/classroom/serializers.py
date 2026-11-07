@@ -9,6 +9,19 @@ class ClassroomSerializer(serializers.ModelSerializer):
     assignments_count = serializers.IntegerField(source='assignments.count', read_only=True)
     my_status = serializers.SerializerMethodField()
     pending_count = serializers.SerializerMethodField()
+    # код приглашения видит ТОЛЬКО владелец (как в Google Classroom) — SerializerMethodField
+    invite_code = serializers.SerializerMethodField()
+    code_fmt = serializers.SerializerMethodField()
+
+    def _is_owner(self, obj):
+        u = self.context.get('request').user if self.context.get('request') else None
+        return bool(u and u.is_authenticated and obj.owner_id == u.id)
+
+    def get_invite_code(self, obj):
+        return obj.invite_code if self._is_owner(obj) else None
+
+    def get_code_fmt(self, obj):
+        return obj.code_fmt if self._is_owner(obj) else None
 
     class Meta:
         model = Classroom

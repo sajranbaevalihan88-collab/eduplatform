@@ -2,8 +2,9 @@ import { useEffect, useLayoutEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import client, { mediaUrl } from '../api/client'
 const resolveSrc = (src?:string)=> src?.startsWith('/media') ? mediaUrl(src) : (src||'')
-import { Plus, Trash2, Save, Eye, Play, Type, Image as ImgIcon, Square, Circle, Triangle, Star, Table, BarChart3, Video, Palette, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Copy, Layers, Maximize2, ZoomIn, ZoomOut, List, ListOrdered, Highlighter, WrapText, RotateCw, Move, Sparkles, Layout, Paintbrush, Wand2, Film, FileImage, Shapes, Hexagon, Diamond, Pentagon, BookOpen, Pencil } from 'lucide-react'
+import { Plus, Trash2, Save, Eye, Play, Type, Image as ImgIcon, Square, Circle, Triangle, Star, Table, BarChart3, Video, Palette, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Copy, Layers, Maximize2, ZoomIn, ZoomOut, List, ListOrdered, Highlighter, WrapText, Undo2, Redo2, Move, Sparkles, Layout, Paintbrush, Wand2, Film, FileImage, Shapes, Hexagon, Diamond, Pentagon, BookOpen, Pencil } from 'lucide-react'
 import { SvgShape, PdfPage, FitBox } from '../components/pptxView'
+import { toast } from '../context/UIContext'
 
 // Потерянный файл картинки: прячем битую иконку, показываем плейсхолдер (CSS .img-missing)
 const imgMissing = (e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -15,6 +16,7 @@ const imgMissing = (e: React.SyntheticEvent<HTMLImageElement>) => {
 
 type Block = { id:string, type:'text'|'image'|'shape'|'table'|'chart'|'video'|'icon', content?:string, src?:string, shape?:string, style?:any, table?:any, chartData?:any, animation?:string, paragraphs?:any }
 type Slide = { id?:number, order:number, background:string, backgroundType?:'solid'|'gradient'|'image', gradient?:string, bgImage?:string, content:{blocks:Block[]}, notes?:string, layout?:string, transition?:string, width?:number, height?:number }
+type Snapshot = { slides: Slide[], active: number }
 
 const SHAPES = [
   {k:'rect', label:'Прямоугольник', icon:Square},
@@ -102,10 +104,12 @@ export default function PresentationEditor(){
   const [subjects,setSubjects]=useState<any[]>([])
   const [subjSlug,setSubjSlug]=useState('')
   const [newLayout,setNewLayout]=useState('blank')
-  const [slides,setSlides]=useState<Slide[]>([{order:0, background:'#ffffff', backgroundType:'solid', layout:'title', transition:'fade', content:{blocks:[
+  const [slides,setSlidesRaw]=useState<Slide[]>([{order:0, background:'#ffffff', backgroundType:'solid', layout:'title', transition:'fade', content:{blocks:[
     {id:'b1', type:'text', content:'Заголовок презентации', style:{fontSize:36, bold:true, align:'center', color:'#1e293b', fontFamily:'Manrope', x:5, y:15, w:90, h:20, z:1, unit:'%'}},
     {id:'b2', type:'text', content:'Подзаголовок — идея урока, класс, цель', style:{fontSize:18, align:'center', color:'#64748b', fontFamily:'Inter', x:5, y:38, w:90, h:12, z:2, unit:'%'}},
   ]}}])
+  // любой setSlides = несохранённая правка (autosave/индикатор/beforeunload завязаны на dirty)
+  const setSlides: React.Dispatch<React.SetStateAction<Slide[]>> = (v)=>{ setSlidesRaw(v); setDirty(true) }
   const [active,setActive]=useState(0)
   const [selectedBlock,setSelectedBlock]=useState<string|null>(null)
   const [showPreview,setShowPreview]=useState(false)
@@ -115,8 +119,10 @@ export default function PresentationEditor(){
   const [zoom,setZoom]=useState(100)
   const [canvasFit,setCanvasFit]=useState(1)
   const canvasWrapRef=useRef<HTMLDivElement>(null)
+  const savingRef=useRef(false)
+  const [loadFailed,setLoadFailed]=useState(false)
   const [ribbonTab,setRibbonTab]=useState<'home'|'insert'|'design'|'transitions'|'animations'>('home')
-  const [history,setHistory]=useState<Slide[][]>([])
+  const [history,setHistory]=useState<Snapshot[]>([])
   const fileInputRef=useRef<HTMLInputElement>(null)
   const bgImageRef=useRef<HTMLInputElement>(null)
   const pptxInputRef=useRef<HTMLInputElement>(null)
@@ -184,8 +190,13 @@ export default function PresentationEditor(){
             content: s.content?.blocks ? s.content : {blocks:[{id:'b'+idx, type:'text', content:'Слайд '+(idx+1)}]},
             notes:s.notes||''
           }))
-          setSlides(s)
+          setSlidesRaw(s) // загрузка с сервера — НЕ помечаем dirty
         }
+      }).catch((e:any)=>{
+        // раньше ошибка глоталась: редактор молча показывал шаблон, и «Сохранить»
+        // затирал реальную презентацию пустышкой — теперь честный отказ
+        toast('Не удалось загрузить презентацию — проверь соединение и обнови страницу', 'error')
+        setLoadFailed(true)
       })
     }
     const sp = new URLSearchParams(window.location.search)
@@ -204,8 +215,15 @@ export default function PresentationEditor(){
   const cur=slides[active]
   const curSelected = cur?.content.blocks.find(b=>b.id===selectedBlock)
 
-  const pushHistory=()=> setHistory(h=>[...h.slice(-19), JSON.parse(JSON.stringify(slides))])
-  // Один переход по слайдам: не оставляет выделение/правку со старого слайда
+  // --- Несохранённые правки: индикатор + autosave + страж beforeunload + Ctrl+S ---
+  const [dirty,setDirty]=useState(false)
+  const [saving,setSaving]=useState(false)
+  const markDirty=()=>setDirty(true)
+
+  const pushHistory=()=>{
+    setHistory(h=>[...h.slice(-19), {slides: JSON.parse(JSON.stringify(slides)), active}])
+  }
+  // один переход по слайдам: не оставляет выделение/правку со старого слайда
   const selectSlide=(i:number)=>{
     setActive(i)
     setSelectedBlock(null)
@@ -224,11 +242,59 @@ export default function PresentationEditor(){
       list.scrollTo({ left: Math.max(0, left), behavior:'smooth' })
     }
   },[active, slides.length])
+  // undo/redo: снимок хранит и активный индекс — не падаем, если он вышел за длину
+  const [redoStack,setRedoStack]=useState<Snapshot[]>([])
   const undo=()=>{
     if(!history.length) return
     const prev=history[history.length-1]
-    setSlides(prev); setHistory(h=>h.slice(0,-1))
+    setRedoStack(r=>[...r.slice(-19), {slides: JSON.parse(JSON.stringify(slides)), active}])
+    setSlides(prev.slides)
+    setActive(Math.min(prev.active, prev.slides.length-1))
+    setHistory(h=>h.slice(0,-1))
+    markDirty()
   }
+  const redo=()=>{
+    if(!redoStack.length) return
+    const next=redoStack[redoStack.length-1]
+    setHistory(h=>[...h.slice(-19), {slides: JSON.parse(JSON.stringify(slides)), active}])
+    setSlides(next.slides)
+    setActive(Math.min(next.active, next.slides.length-1))
+    setRedoStack(r=>r.slice(0,-1))
+    markDirty()
+  }
+  // Ctrl+Z / Ctrl+Y(Shift+Z) / Ctrl+S / Delete — как в настоящем редакторе
+  useEffect(()=>{
+    const onKey=(e:KeyboardEvent)=>{
+      const tag=(e.target as HTMLElement|null)?.tagName?.toLowerCase()
+      if(tag==='input'||tag==='textarea'||(e.target as HTMLElement|null)?.isContentEditable) return
+      const ctrl=e.ctrlKey||e.metaKey
+      if(ctrl && e.key.toLowerCase()==='z'){ e.preventDefault(); if(e.shiftKey) redo(); else undo() }
+      else if(ctrl && e.key.toLowerCase()==='y'){ e.preventDefault(); redo() }
+      else if(ctrl && e.key.toLowerCase()==='s'){ e.preventDefault(); save() }
+      else if(e.key==='Delete' && selectedBlock){ e.preventDefault(); deleteBlock(selectedBlock) }
+      else if(e.key==='PageDown' || (e.key==='ArrowDown' && e.altKey)){ e.preventDefault(); setActive(i=>Math.min(i+1, slides.length-1)) }
+      else if(e.key==='PageUp' || (e.key==='ArrowUp' && e.altKey)){ e.preventDefault(); setActive(i=>Math.max(i-1, 0)) }
+    }
+    window.addEventListener('keydown', onKey)
+    return ()=>window.removeEventListener('keydown', onKey)
+  },[history, redoStack, slides, selectedBlock, active])
+  // Слайд-шоу: Esc — выход, стрелки/пробел — навигация (кнопка «Выйти Esc» больше не врёт)
+  useEffect(()=>{
+    if(!slideshow) return
+    const onKey=(e:KeyboardEvent)=>{
+      if(e.key==='Escape'){ e.preventDefault(); setSlideshow(false) }
+      else if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){ e.preventDefault(); setShowIdx(i=>Math.min(i+1, slides.length-1)) }
+      else if(e.key==='ArrowLeft'||e.key==='PageUp'){ e.preventDefault(); setShowIdx(i=>Math.max(i-1, 0)) }
+    }
+    window.addEventListener('keydown', onKey)
+    return ()=>window.removeEventListener('keydown', onKey)
+  },[slideshow, slides.length])
+  // Страж потери правок: F5/закрытие вкладки с несохранённым — спросим браузер
+  useEffect(()=>{
+    const onBefore=(e:BeforeUnloadEvent)=>{ if(dirty){ e.preventDefault(); e.returnValue='' } }
+    window.addEventListener('beforeunload', onBefore)
+    return ()=>window.removeEventListener('beforeunload', onBefore)
+  },[dirty])
   const handleDragStart=(e:React.MouseEvent, blockId:string)=>{
     const block = cur?.content.blocks.find(b=>b.id===blockId)
     if(!block || block.style?.x===undefined) return
@@ -298,6 +364,7 @@ export default function PresentationEditor(){
     }
   }
   const handleCancel=()=>{
+    if(dirty && !confirm('Есть несохранённые правки. Выйти без сохранения?')) return
     const hasAnyBlock = slides.some(s=> s.content.blocks.some((b:any)=> b.type!=='text' || b.content?.trim() || b.src || b.table || b.shape))
     const hasContent = title.trim()!=='Новая презентация' || desc.trim() || subject || slides.length>1 || hasAnyBlock
     if(importedId){
@@ -387,7 +454,10 @@ export default function PresentationEditor(){
   const duplicateSlide=()=>{
     pushHistory()
     const copy={...cur, id:undefined, order:slides.length, content: JSON.parse(JSON.stringify(cur.content))}
-    setSlides(s=>[...s, copy]); setActive(slides.length)
+    // копия сразу ПОСЛЕ текущего (как в PowerPoint), а не в конец
+    const at=active+1
+    setSlides(s=>{ const c=[...s]; c.splice(at,0,{...copy, order:at}); return c.map((s2,i2)=>({...s2, order:i2})) })
+    setActive(at)
   }
   const deleteSlide=()=>{
     if(slides.length<=1) return
@@ -403,15 +473,32 @@ export default function PresentationEditor(){
     const baseGeom = {x:20, y:35, w:60, h:30, ...(geomByType[type]||{}), z: (cur?.content.blocks.length||0)+1, unit:'%'}
     let block:Block={id:nid, type} as any
     if(type==='text') block={id:nid, type, content:'Новый текст — выдели чтобы форматировать', style:{fontSize:18, color:'#1e293b', align:'left', fontFamily:'Inter', lineHeight:1.4, ...baseGeom}}
+    if(type==='video') block={id:nid, type, content:'https://www.youtube.com/watch?v=dQw4w9WgXcQ', style:{...baseGeom}}
     if(type==='image') block={id:nid, type, src: extra.src||'https://picsum.photos/800/400', style:{borderRadius:8, shadow:false, ...baseGeom, w: (baseGeom as any).w||35, h: (baseGeom as any).h||30}}
     if(type==='shape') block={id:nid, type, shape: extra.shape||'rect', style:{fill:'#3B82F6', stroke:'#1e40af', strokeWidth:2, opacity:1, ...baseGeom}}
     if(type==='table') block={id:nid, type, table:{rows:3, cols:3, cells: Array.from({length:3},()=>Array.from({length:3},()=>({text:'',style:{}})))}, style:{...baseGeom}}
     if(type==='chart') block={id:nid, type, content:'chart', style:{chartType: extra.chartType||'bar', ...baseGeom}, chartData:{labels:['A','B','C','D','E'], values:[40,70,50,80,60]} as any}
-    if(type==='video') block={id:nid, type, src:'https://www.youtube.com/embed/dQw4w9WgXcQ', style:{...baseGeom}}
     if(type==='icon') block={id:nid, type, content: extra.icon||'⭐', style:{fontSize:32, ...baseGeom}}
     setSlides(sl=>sl.map((s,i)=>i!==active?s:{...s, content:{...s.content, blocks:[...s.content.blocks, block]}}))
     setSelectedBlock(nid)
     setPropsOpen(true)
+  }
+
+  // YouTube/VK/Rutube → embed-URL. Ничего не знаем о ссылке — отдаём как есть (iframe sandbox).
+  const videoEmbedUrl=(src:string)=>{
+    const s=(src||'').trim()
+    let m=s.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{6,})/)
+    if(m) return `https://www.youtube.com/embed/${m[1]}`
+    m=s.match(/vk\.com\/video(-?\d+)_(\d+)/)
+    if(m) return `https://vk.com/video_ext.php?oid=${m[1]}&id=${m[2]}`
+    m=s.match(/rutube\.ru\/video\/([\w]+)/)
+    if(m) return `https://rutube.ru/play/embed/${m[1]}`
+    return s
+  }
+  const addVideo=()=>{
+    // блок с дефолтной ссылкой сразу на слайде — URL меняется в панели «Свойства» (текстовое поле)
+    addBlock('video')
+    toast('Видео добавлено — вставь свою ссылку в поле текста в «Свойствах» (YouTube/VK/Rutube)', 'info')
   }
 
   const updateSelected=(patch:any)=>{
@@ -467,6 +554,13 @@ export default function PresentationEditor(){
                 </label>
               ))}
             </div>
+          </div>
+        )}
+        {selectedBlock && curSelected?.type==='video' && (
+          <div className="space-y-2">
+            <label className="text-xs font-semibold">Ссылка на видео (YouTube / VK / Rutube)</label>
+            <textarea value={curSelected.content||''} onChange={e=>updateSelected({content:e.target.value})} rows={2} placeholder="https://www.youtube.com/watch?v=..." className="w-full px-2 py-1.5 rounded border text-sm break-all"/>
+            <div className="text-[11px] text-slate-400">Ссылка автоматически превращается в плеер: watch?v=…, youtu.be/…, shorts/… — всё работает.</div>
           </div>
         )}
         {selectedBlock && curSelected?.type==='text' && (
@@ -536,11 +630,13 @@ export default function PresentationEditor(){
     reader.readAsDataURL(file)
   }
 
-  const save=async()=>{
+  const save=async(silent=false)=>{
+    if(loadFailed){ toast('Презентация не загружена — сохранить нельзя, чтобы не затереть реальные данные. Обнови страницу.', 'error'); return }
     const token=localStorage.getItem('token')
     if(!token){ alert('Войди чтобы сохранить'); nav('/login'); return }
     if(!title.trim()){ alert('Название обязательно'); return }
-    if(!subject && !confirm('Сохранить без предмета? Презентация не попадёт в уроки — предмет можно выбрать позже.')) return
+    if(!silent && !subject && !confirm('Сохранить без предмета? Презентация не попадёт в уроки — предмет можно выбрать позже.')) return
+    setSaving(true); savingRef.current = true
     try{
       if(isNew){
         if(importedId){
@@ -563,12 +659,21 @@ export default function PresentationEditor(){
         const existing=await client.get(`/presentations/${id}/`).then(r=>r.data.slides||[])
         for(const s of existing) await client.delete(`/slides/${s.id}/`).catch(()=>{})
         for(let i=0;i<slides.length;i++) await client.post(`/presentations/${id}/slides/`,{order:i, background:slides[i].background, backgroundType:slides[i].backgroundType, gradient:slides[i].gradient, bgImage:slides[i].bgImage, content:slides[i].content, notes:slides[i].notes||'', layout:slides[i].layout, transition:slides[i].transition})
-        alert('Сохранено')
+        if(!silent) alert('Сохранено')
+        setDirty(false)
       }
     }catch(e:any){
       alert(e.response?.data?.detail||JSON.stringify(e.response?.data)||'Ошибка сохранения')
     }
+    setSaving(false); savingRef.current = false
   }
+
+  // Autosave: каждые 5с, только для уже сохранённой презентации, молча и не параллельно
+  useEffect(()=>{
+    if(isNew || !id) return
+    const iv=setInterval(()=>{ if(dirty && !savingRef.current) save(true) }, 5000)
+    return ()=>clearInterval(iv)
+  },[isNew, id, dirty])
 
   const [showIdx,setShowIdx]=useState(0)
   useEffect(()=>{ if(slideshow) setShowIdx(active) },[slideshow])
@@ -654,6 +759,7 @@ export default function PresentationEditor(){
                       if(b.type==='shape') return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||20}%`, height:`${st.h||15}%`, zIndex:st.z||0, transform: st.rotation?`rotate(${st.rotation}deg)`:undefined, background: st.fill||'#3B82F6', border: st.stroke?`${st.strokeWidth||1}px ${st.dash||'solid'} ${st.stroke}`:undefined, borderRadius: st.shape==='circle'||st.shape==='ellipse'?'50%':(st.radiusPct!=null?(st.radiusPct<=0?0:'12px'):6)}}></div>
                       if(b.type==='table') return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||40}%`, height:`${st.h||25}%`, zIndex:st.z||0}}><div className={`grid gap-px w-full h-full ${((b.table?.cells||[]).some((row:any)=>row.some((c:any)=>c?.style?.background)))?'bg-slate-200':'bg-transparent'}`} style={{gridTemplateColumns:`repeat(${b.table?.cols||3},1fr)`}}>{(b.table?.cells||[]).flatMap((row:any)=>row.filter((c:any)=>!c?.merged).map((c:any,k:number)=><div key={k} className="p-1 text-xs flex items-center justify-center overflow-hidden" style={{gridColumn:`span ${c?.colspan||1}`, gridRow:`span ${c?.rowspan||1}`}}>{c?.text||'—'}</div>))}</div></div>
                       if(b.type==='chart') return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||40}%`, height:`${st.h||30}%`, zIndex:st.z||0}}><div className="w-full h-full bg-white rounded-lg border flex flex-col items-center justify-center p-1"><BarChart3 size={14}/><span className="text-xs">{b.style?.chartType||'bar'}</span></div></div>
+                      if(b.type==='video') return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||40}%`, height:`${st.h||30}%`, zIndex:st.z||0}}><iframe src={videoEmbedUrl(b.content||'')} title="video" className="w-full h-full rounded" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups"/></div>
                       return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||30}%`, zIndex:st.z||0}}>{b.content}</div>
                     })}
                   </div>
@@ -665,6 +771,7 @@ export default function PresentationEditor(){
                       {b.type==='shape' && <div className="h-12 rounded-lg border-2 flex items-center justify-center" style={{background:b.style?.fill||'#3B82F6', borderRadius: b.shape==='circle'?'50%':6}}></div>}
                       {b.type==='table' && <div className="border rounded-lg overflow-hidden"><div className="grid gap-px bg-slate-300" style={{gridTemplateColumns:`repeat(${b.table?.cols||3},1fr)`}}>{(b.table?.cells||[]).flatMap((row:any)=>row.filter((c:any)=>!c?.merged).map((c:any,k:number)=><div key={k} className="bg-white p-2 text-xs flex items-center justify-center" style={{gridColumn:`span ${c?.colspan||1}`, gridRow:`span ${c?.rowspan||1}`}}>{c?.text||'—'}</div>))}</div></div>}
                       {b.type==='chart' && <div className="h-20 bg-white rounded-lg border flex flex-col items-center justify-center"><BarChart3 size={16}/><span className="text-xs">{b.style?.chartType||'bar'}</span></div>}
+                      {b.type==='video' && <div className="aspect-video rounded-lg overflow-hidden bg-black"><iframe src={videoEmbedUrl(b.content||'')} title="video" className="w-full h-full" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups"/></div>}
                     </div>
                   ))
                 )}
@@ -695,6 +802,7 @@ export default function PresentationEditor(){
                   if(b.type==='shape' && st.svgPath) return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||20}%`, height:`${st.h||15}%`, zIndex:st.z||0}}><SvgShape st={st} gid={`ed-show-${b.id}`}/></div>
                   if(b.type==='shape') return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||20}%`, height:`${st.h||15}%`, zIndex:st.z||0, transform: st.rotation?`rotate(${st.rotation}deg)`:undefined, background: st.fill||'#3B82F6', border: st.stroke?`${st.strokeWidth||1}px ${st.dash||'solid'} ${st.stroke}`:undefined, borderRadius: b.shape==='circle'||b.shape==='ellipse'?'50%':(st.radiusPct!=null?(st.radiusPct<=0?0:'12px'):6)}}></div>
                   if(b.type==='table') return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||40}%`, height:`${st.h||25}%`, zIndex:st.z||0}}><div className={`grid gap-px w-full h-full ${((b.table?.cells||[]).some((row:any)=>row.some((c:any)=>c?.style?.background)))?'bg-slate-200':'bg-transparent'}`} style={{gridTemplateColumns:`repeat(${b.table?.cols||3},1fr)`}}>{(b.table?.cells||[]).flatMap((row:any)=>row.filter((c:any)=>!c?.merged).map((c:any,k:number)=><div key={k} className="p-1 text-xs flex items-center justify-center overflow-hidden" style={{gridColumn:`span ${c?.colspan||1}`, gridRow:`span ${c?.rowspan||1}`}}>{c?.text||'—'}</div>))}</div></div>
+                  if(b.type==='video') return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, width:`${st.w||40}%`, height:`${st.h||30}%`, zIndex:st.z||0}}><iframe src={videoEmbedUrl(b.content||'')} title="video" className="w-full h-full rounded" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups"/></div>
                   return <div key={b.id} className={anim} style={{position:'absolute', left:`${st.x||0}%`, top:`${st.y||0}%`, zIndex:st.z||0}}>{b.content}</div>
                 })}
               </div>
@@ -773,8 +881,8 @@ export default function PresentationEditor(){
       <div className="h-14 bg-[#f3f3f3] border-b flex items-center gap-2 px-3 overflow-hidden">
         <button onClick={()=>nav(subjSlug?`/subjects/${subjSlug}`:'/my-lessons')} className="px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-semibold shrink-0" title="Назад">← Назад</button>
         <div className="w-8 h-8 rounded bg-[#d24726] flex items-center justify-center text-white font-bold text-sm shrink-0">P</div>
-        <input value={title} onChange={e=>setTitle(e.target.value)} className="flex-1 min-w-0 max-w-none sm:max-w-[280px] px-3 py-2 max-sm:py-1.5 rounded border bg-white text-slate-900 font-semibold text-sm truncate" title={title}/>
-        <input value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Описание" className="hidden xl:block flex-1 min-w-[160px] max-w-[260px] px-3 py-1.5 rounded border bg-white text-sm truncate" title={desc}/>
+        <input value={title} onChange={e=>{setTitle(e.target.value); setDirty(true)}} className="flex-1 min-w-0 max-w-none sm:max-w-[280px] px-3 py-2 max-sm:py-1.5 rounded border bg-white text-slate-900 font-semibold text-sm truncate" title={title}/>
+        <input value={desc} onChange={e=>{setDesc(e.target.value); setDirty(true)}} placeholder="Описание" className="hidden xl:block flex-1 min-w-[160px] max-w-[260px] px-3 py-1.5 rounded border bg-white text-sm truncate" title={desc}/>
         <button onClick={()=>setIsPublic(v=>!v)} data-testid="pres-visibility" title={isPublic?'Публичная: видна всем в каталоге и по ссылке':'Приватная: только вы и уроки, где она назначена'}
           className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium whitespace-nowrap shrink-0 ${isPublic?'bg-emerald-50 border-emerald-300 text-emerald-700':'bg-white border-slate-300 text-slate-600'}`}>
           {isPublic ? '🌐 Публичная' : '🔒 Приватная'}
@@ -783,12 +891,13 @@ export default function PresentationEditor(){
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <button onClick={()=>pptxInputRef.current?.click()} disabled={importing} className="px-2.5 py-1.5 rounded-lg bg-white border border-orange-200 text-orange-700 flex items-center gap-1 text-xs font-medium hover:bg-orange-50 whitespace-nowrap" title="Загрузить готовый .pptx/.pdf как слайды">{importing ? '⏳' : '⬆'}<span className="hidden lg:inline">Импорт</span></button>
           <input ref={pptxInputRef} type="file" accept=".pptx,.ppt,.pdf" className="hidden" onChange={handlePptxImport}/>
-          <button onClick={undo} disabled={!history.length} className="p-2 rounded-lg bg-white border disabled:opacity-30 shrink-0"><RotateCw size={14}/></button>
+          <button onClick={undo} disabled={!history.length} title="Отменить (Ctrl+Z)" className="p-2 rounded-lg bg-white border disabled:opacity-30 shrink-0"><Undo2 size={14}/></button>
+          <button onClick={redo} disabled={!redoStack.length} title="Вернуть (Ctrl+Y)" className="p-2 rounded-lg bg-white border disabled:opacity-30 shrink-0"><Redo2 size={14}/></button>
           <button onClick={()=>setShowPreview(true)} className="hidden sm:flex px-3 py-1.5 rounded-lg bg-white border items-center gap-1.5 text-sm whitespace-nowrap"><Eye size={14}/> <span className="hidden lg:inline">Предпросмотр</span></button>
           <button onClick={()=>setSlideshow(true)} className="hidden sm:flex px-3 py-1.5 rounded-lg bg-slate-900 text-white items-center gap-1.5 text-sm whitespace-nowrap"><Play size={14}/> <span className="hidden lg:inline">Слайд-шоу</span></button>
           <button onClick={toggleEditFullscreen} className="hidden sm:flex px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 items-center gap-1.5 text-sm whitespace-nowrap" title="Полный экран редактирования (F)"><Maximize2 size={14}/> <span className="hidden lg:inline">{isEditFullscreen?'Выйти':'На весь'}</span></button>
           <button onClick={handleCancel} className="px-2.5 sm:px-3 py-2 max-sm:py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 font-semibold flex items-center gap-1.5 text-xs sm:text-sm whitespace-nowrap hover:bg-slate-50">Отмена</button>
-          <button onClick={save} className="px-3 py-2 max-sm:py-1.5 min-h-[44px] max-sm:min-h-[40px] rounded-lg bg-[#d24726] text-white font-semibold flex items-center gap-1.5 text-sm whitespace-nowrap"><Save size={14}/> <span className="hidden sm:inline">Сохранить</span></button>
+          <button onClick={()=>save()} className="px-3 py-2 max-sm:py-1.5 min-h-[44px] max-sm:min-h-[40px] rounded-lg bg-[#d24726] text-white font-semibold flex items-center gap-1.5 text-sm whitespace-nowrap"><Save size={14}/> <span className="hidden sm:inline">Сохранить</span>{dirty && <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulseSoft" title="Есть несохранённые правки (autosave каждые 5с)"/>}</button>
         </div>
       </div>
       <div className="px-3 py-2 bg-white border-b flex flex-nowrap overflow-x-auto lg:flex-wrap lg:overflow-visible items-center gap-2">
@@ -844,7 +953,7 @@ export default function PresentationEditor(){
             </>
           )}
           {ribbonTab==='insert' && (
-            <div className="flex max-lg:flex-nowrap gap-1.5 shrink-0">
+            <div className="flex gap-1.5 flex-wrap max-lg:flex-nowrap max-lg:shrink-0">
               <button onClick={()=>addBlock('text')} className="px-3 py-2.5 min-h-[44px] max-lg:min-h-[40px] rounded-lg bg-slate-900 text-white flex items-center gap-1.5 text-sm shrink-0"><Type size={14}/> Текст</button>
               <button onClick={()=>fileInputRef.current?.click()} className="px-3 py-2.5 min-h-[44px] max-lg:min-h-[40px] rounded-lg bg-white border flex items-center gap-1.5 text-sm shrink-0"><ImgIcon size={14}/> Картинка</button>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload}/>
@@ -859,6 +968,7 @@ export default function PresentationEditor(){
               </div>
               <button onClick={()=>addBlock('table')} className="px-3 py-2.5 min-h-[44px] max-lg:min-h-[40px] rounded-lg bg-white border flex items-center gap-1.5 text-sm shrink-0"><Table size={14}/> Таблица</button>
               <button onClick={()=>addBlock('chart')} className="px-3 py-2.5 min-h-[44px] max-lg:min-h-[40px] rounded-lg bg-white border flex items-center gap-1.5 text-sm shrink-0"><BarChart3 size={14}/> Диаграмма</button>
+              <button onClick={addVideo} className="px-3 py-2.5 min-h-[44px] max-lg:min-h-[40px] rounded-lg bg-white border flex items-center gap-1.5 text-sm shrink-0"><Video size={14}/> Видео</button>
             </div>
           )}
           {ribbonTab==='design' && (
@@ -972,7 +1082,7 @@ export default function PresentationEditor(){
             <Layers size={14}/> Слайд {active+1} из {slides.length} • {cur.layout} • {cur.transition} • <span className="px-2 py-0.5 rounded bg-white border">{zoom}%</span>
             <button onClick={()=>setZoom(z=>Math.max(60,z-10))} className="p-1 rounded bg-white border"><ZoomOut size={12}/></button>
             <button onClick={()=>setZoom(z=>Math.min(140,z+10))} className="p-1 rounded bg-white border"><ZoomIn size={12}/></button>
-            <button onClick={undo} className="ml-2 p-1 rounded bg-white border text-xs flex items-center gap-1"><RotateCw size={12}/> Отменить</button>
+            <button onClick={undo} className="ml-2 p-1 rounded bg-white border text-xs flex items-center gap-1"><Undo2 size={12}/> Отменить</button>
             <button onClick={()=>setShowGrid(v=>!v)} className={`ml-2 p-1 rounded border text-xs flex items-center gap-1 ${showGrid?'bg-indigo-600 text-white border-indigo-600':'bg-white'}`}>{showGrid?'⊞ Сетка вкл':'⊞ Сетка'}</button>
           </div>
 
@@ -1108,15 +1218,20 @@ export default function PresentationEditor(){
                     }
                     if(b.type==='chart'){
                       const chartType=b.style?.chartType||'bar'
+                      // данные из поля ввода, а не захардкоженные — иначе введённое игнорится
+                      const vals=(b as any).chartData?.values?.length ? (b as any).chartData.values : [40,70,50,80,60]
+                      const maxV=Math.max(...vals, 1)
+                      const pieStops = vals.length ? (()=>{ const total=vals.reduce((x:number,y:number)=>x+y,0)||1; let acc=0; return vals.map((v:number,i:number)=>{ const start=acc/total*100; acc+=v; const end=acc/total*100; const colors=['#8b5cf6','#f59e0b','#10b981','#3b82f6','#ef4444','#ec4899','#14b8a6']; return `${colors[i%colors.length]} ${start}% ${end}%` }).join(', ') })() : 'conic-gradient(#8b5cf6 0% 100%)'
+                      const linePts = vals.map((v:number,i:number)=>`${(i/Math.max(vals.length-1,1))*100},${40-(v/maxV)*36}`).join(' ')
                       return <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} onPointerDown={(e:any)=>handleDragStart(e,b.id)} style={{...common, cursor:'move', touchAction:'none'}} className={`group border-2 ${selCls} rounded-lg bg-white flex flex-col items-center justify-center p-2 overflow-hidden ${getAnimationClass(b.animation||'нет')}`}>
                         <div className="flex items-center gap-1 text-xs font-bold text-indigo-700"><BarChart3 size={14}/> {chartType}</div>
                         <div className="mt-1 w-full flex-1 flex items-end justify-center gap-1 min-h-[60px]">
                           {chartType==='pie' ? (
-                            <div className="w-16 h-16 rounded-full border-4 border-blue-500 relative overflow-hidden" style={{background:`conic-gradient(#8b5cf6 0% 40%, #f59e0b 40% 70%, #10b981 70% 100%)`}}><div className="absolute inset-2 bg-white rounded-full flex items-center justify-center text-xs font-bold">pie</div></div>
+                            <div className="w-16 h-16 rounded-full border-4 border-blue-500 relative overflow-hidden" style={{background:`conic-gradient(${pieStops})`}}><div className="absolute inset-2 bg-white rounded-full flex items-center justify-center text-xs font-bold">pie</div></div>
                           ) : chartType==='line' ? (
-                            <svg className="w-full h-12" viewBox="0 0 100 40"><polyline points="0,30 20,10 40,25 60,5 80,20 100,10" fill="none" stroke="#8b5cf6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            <svg className="w-full h-12" viewBox="0 0 100 40" preserveAspectRatio="none"><polyline points={linePts} fill="none" stroke="#8b5cf6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
                           ) : (
-                            [40,70,50,80,60].map((h,i)=><div key={i} className="flex-1 bg-indigo-500 rounded-t" style={{height:`${h}%`, background: '#8b5cf6'}}></div>)
+                            vals.map((h:number,i:number)=><div key={i} className="flex-1 bg-indigo-500 rounded-t" style={{height:`${Math.max(4, h/maxV*100)}%`, background: '#8b5cf6'}}></div>)
                           )}
                         </div>
                         <select value={chartType} onChange={e=>{e.stopPropagation(); setSlides(sl=>sl.map((s,i)=> i!==active? s: {...s, content:{...s.content, blocks:s.content.blocks.map(bb=> bb.id===b.id? {...bb, style:{...bb.style, chartType:e.target.value}}:bb)}}))}} onMouseDown={e=>e.stopPropagation()} onClick={e=>e.stopPropagation()} className="mt-1 text-xs border rounded px-1 py-0.5 bg-white">
@@ -1130,6 +1245,11 @@ export default function PresentationEditor(){
                           }} onMouseDown={e=>e.stopPropagation()} onClick={e=>e.stopPropagation()} className="w-full mt-1 px-2 py-1 rounded border text-xs" placeholder="40,70,50,80,60"/>
                         </div>
                         {isSelected && ['nw','n','ne','e','se','s','sw','w'].map((h:any)=>(<div key={h} className="absolute z-10" style={{left: h.includes('w') ? 0 : h.includes('e') ? undefined : '50%', right: h.includes('e') ? 0 : undefined, top: h.includes('n') ? 0 : h.includes('s') ? undefined : '50%', bottom: h.includes('s') ? 0 : undefined, transform: (h==='n'||h==='s') ? 'translateX(-50%)' : (h==='e'||h==='w') ? 'translateY(-50%)' : undefined, width:0, height:0}}><span data-resize-handle={h} onMouseDown={(e)=>handleResizeStart(e,b.id,h)} onPointerDown={(e:any)=>handleResizeStart(e,b.id,h)} className="absolute block w-6 h-6 touch-none" style={{left:-12, top:-12, cursor: h==='nw'||h==='se' ? 'nwse-resize' : h==='ne'||h==='sw' ? 'nesw-resize' : h==='n'||h==='s' ? 'ns-resize' : 'ew-resize'}}><span className="resize-dot pointer-events-none absolute block bg-white border border-slate-500 rounded-[3px]" style={{width:13, height:13, left:5.5, top:5.5}}/></span></div>))}
+                      </div>
+                    }
+                    if(b.type==='video'){
+                      return <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} onPointerDown={(e:any)=>handleDragStart(e,b.id)} style={{...common, cursor:'move', touchAction:'none'}} className={`group border-2 ${selCls} rounded-lg overflow-hidden bg-black`}>
+                        <iframe src={videoEmbedUrl(b.content||'')} title="video" className="w-full h-full pointer-events-none" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups"/>
                       </div>
                     }
                     return <div key={b.id} onClick={()=>setSelectedBlock(b.id)} onMouseDown={(e)=>handleDragStart(e,b.id)} onPointerDown={(e:any)=>handleDragStart(e,b.id)} style={{...common, cursor:'move', touchAction:'none'}} className={`group border-2 ${selCls} p-1`}>{b.content||''}</div>
@@ -1199,7 +1319,12 @@ export default function PresentationEditor(){
                         <div className="text-xs text-slate-400 mt-1">Данные в Свойствах →</div>
                       </div>
                     )}
-                    {b.type==='video' && <div className="aspect-video rounded-xl bg-black flex items-center justify-center text-white text-sm">🎥 {b.src||'Видео'}</div>}
+                    {b.type==='video' && (
+                      <div className="aspect-video rounded-xl overflow-hidden bg-black">
+                        <iframe src={videoEmbedUrl(b.content||'')} title="video" className="w-full h-full" allowFullScreen
+                          sandbox="allow-scripts allow-presentation allow-popups"/>
+                      </div>
+                    )}
                     {b.type==='icon' && <div className="text-4xl text-center" style={{fontSize:b.style?.fontSize||32}}>{b.content}</div>}
                      <button onClick={(e)=>{e.stopPropagation(); deleteBlock(b.id)}} className="absolute -top-2 -right-2 w-9 h-9 sm:w-6 sm:h-6 rounded-full bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100"><Trash2 size={14}/></button>
                   </div>

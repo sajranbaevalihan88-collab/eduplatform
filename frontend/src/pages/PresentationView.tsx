@@ -7,6 +7,18 @@ import { useLang } from '../context/LangContext'
 
 const resolveSrc = (src?:string)=> src?.startsWith('/media') ? mediaUrl(src) : (src||'')
 
+// YouTube/VK/Rutube → embed-URL (тот же хелпер, что в редакторе)
+const videoEmbedUrl=(src:string)=>{
+  const s=(src||'').trim()
+  let m=s.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{6,})/)
+  if(m) return `https://www.youtube.com/embed/${m[1]}`
+  m=s.match(/vk\.com\/video(-?\d+)_(\d+)/)
+  if(m) return `https://vk.com/video_ext.php?oid=${m[1]}&id=${m[2]}`
+  m=s.match(/rutube\.ru\/video\/([\w]+)/)
+  if(m) return `https://rutube.ru/play/embed/${m[1]}`
+  return s
+}
+
 // Потерянный файл картинки: прячем битую иконку, показываем плейсхолдер (CSS .img-missing)
 const imgMissing = (e: React.SyntheticEvent<HTMLImageElement>) => {
   const t = e.currentTarget
@@ -334,7 +346,8 @@ export default function PresentationView(){
           {b.type==='text' && <div className="max-w-[90%] text-center w-full">{renderRichText(b,false,isSlideshow,slideBg)}</div>}
           {b.type==='image' && <img onError={imgMissing} src={resolveSrc(b.src)} className={`${isSlideshow?'max-h-[360px]':'max-h-[300px]'} max-w-[80%] object-contain rounded-xl mx-auto`} alt=""/>}
           {b.type==='shape' && null}
-          {b.type==='table' && <div className="border rounded-lg overflow-hidden w-full max-w-[90%] mx-auto"><div className="grid gap-px bg-slate-200" style={{gridTemplateColumns:`repeat(${b.table?.cols||3},1fr)`}}>{Array.from({length:(b.table?.rows||3)*(b.table?.cols||3)}).map((_,k)=><div key={k} className="bg-white p-2 text-sm">{t('pv_cell')}</div>)}</div></div>}
+          {b.type==='table' && <div className="border rounded-lg overflow-hidden w-full max-w-[90%] mx-auto"><div className="grid gap-px bg-slate-200" style={{gridTemplateColumns:`repeat(${b.table?.cols||3},1fr)`}}>{(b.table?.cells||[]).flatMap((row:any)=>row.map((c:any,k:number)=><div key={k} className="bg-white p-2 text-sm" style={{gridColumn:`span ${c?.colspan||1}`, gridRow:`span ${c?.rowspan||1}`}}>{c?.text||'—'}</div>))}</div></div>}
+          {b.type==='video' && <div className="w-full max-w-[90%] mx-auto aspect-video rounded-lg overflow-hidden bg-black"><iframe src={videoEmbedUrl(b.content||'')} title="video" className="w-full h-full" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups"/></div>}
         </div>
       ))
     }
@@ -423,6 +436,7 @@ export default function PresentationView(){
               </div>
             )
           }
+          {b.type==='video' && <div style={{...common}}><iframe src={videoEmbedUrl(b.content||'')} title="video" className="w-full h-full rounded" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups"/></div>}
           return <div key={b.id} style={common}>{b.content||''}</div>
         })}
       </div>

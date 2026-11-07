@@ -43,12 +43,18 @@ export default function Classes(){
   }
   const remove=async(id:number)=>{
     if(!confirm(t('cls_del_confirm'))) return
-    await client.delete(`/classrooms/${id}/`).catch(()=>{})
+    try{
+      await client.delete(`/classrooms/${id}/`)
+      toast(t('cls_deleted'),'success')
+    }catch(e:any){ toast(e?.response?.data?.detail||e?.response?.data?.error||t('cls_err'),'error') }
     load()
   }
   const leave=async(id:number)=>{
     if(!confirm(t('cls_leave_confirm'))) return
-    await client.post(`/classrooms/${id}/leave/`).catch(()=>{})
+    try{
+      await client.post(`/classrooms/${id}/leave/`)
+      toast(t('cls_left'),'success')
+    }catch(e:any){ toast(e?.response?.data?.detail||e?.response?.data?.error||t('cls_err'),'error') }
     load()
   }
   const copy=(id:number, c:string)=>{
