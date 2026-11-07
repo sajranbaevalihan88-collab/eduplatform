@@ -7,10 +7,11 @@ User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
     is_staff = serializers.BooleanField(read_only=True)
+    is_superuser = serializers.BooleanField(read_only=True)
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'bio', 'is_staff']
-        read_only_fields = ['id', 'role', 'username', 'is_staff']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'bio', 'is_staff', 'is_superuser']
+        read_only_fields = ['id', 'role', 'username', 'is_staff', 'is_superuser']
 
 class MeUpdateSerializer(serializers.ModelSerializer):
     # ник можно менять, но со всеми проверками как при регистрации

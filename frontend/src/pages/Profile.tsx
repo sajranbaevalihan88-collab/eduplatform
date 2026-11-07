@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import client from '../api/client'
-import { User, Mail, Shield, BookOpen, Layers, Presentation, FlaskConical, LogOut, Trash2, Eye, EyeOff, Edit, Search, Filter, Gamepad2, Play, StickyNote, UserPlus, Check, X as XIcon } from 'lucide-react'
+import { User, Mail, Shield, BookOpen, Layers, Presentation, FlaskConical, LogOut, Trash2, Eye, EyeOff, Edit, Search, Filter, Gamepad2, Play, StickyNote, UserPlus, Users, Check, X as XIcon } from 'lucide-react'
 import { useNavigate, Link } from 'react-router-dom'
 import { toast } from '../context/UIContext'
 import Notes from './Notes'
@@ -52,6 +52,8 @@ export default function Profile(){
   const [delNick,setDelNick]=useState('')
   const [delBusy,setDelBusy]=useState(false)
   const [usersList,setUsersList]=useState<any[]|null>(null)
+  const [usersOpen,setUsersOpen]=useState(false)
+  const [usersQ,setUsersQ]=useState('')
   const delFound=useMemo(()=>{
     const q=delNick.trim().toLowerCase()
     if(!usersList || q.length<2) return undefined
@@ -61,12 +63,24 @@ export default function Profile(){
     if(!isAdmin || usersList) return
     client.get('/auth/users/').then(r=>setUsersList(Array.isArray(r.data)?r.data:[])).catch(()=>setUsersList([]))
   },[isAdmin])
+  const usersFiltered=useMemo(()=>{
+    if(!usersList) return []
+    const q=usersQ.trim().toLowerCase()
+    return q? usersList.filter((x:any)=>x.username.toLowerCase().includes(q)) : usersList
+  },[usersList, usersQ])
   const ROLE_LABEL:any={admin:'admin_role', teacher:'login_teacher', student:'login_student'}
-  const deleteUser=async()=>{
+  const canDeleteRow=(u:any)=>{
+    const meName=(me?.username||'').toLowerCase()
+    if(!meName || u.username.toLowerCase()===meName) return false
+    if(u.is_superuser) return false
+    if((u.is_staff || u.role==='admin') && !me?.is_superuser) return false
+    return true
+  }
+  const deleteUser=async(nickArg?:string)=>{
     if(delBusy) return
-    const nick=delNick.trim()
+    const nick=(nickArg ?? delNick).trim()
     if(!nick){ toast(t('admin_del_user_ph'),'error'); return }
-    if(delFound===null){ toast(t('del_user_notfound'),'error'); return }
+    if(!nickArg && delFound===null){ toast(t('del_user_notfound'),'error'); return }
     if(!confirm(t('admin_del_user_confirm').replace('{nick}',nick))) return
     setDelBusy(true)
     try{
@@ -74,6 +88,8 @@ export default function Profile(){
       toast(t('admin_del_user_done'),'success')
       setDelNick('')
       setUsersList(prev=> prev? prev.filter((x:any)=>x.username.toLowerCase()!==nick.toLowerCase()) : prev)
+      // тихий рефетч — чтобы список всегда сходился с сервером
+      client.get('/auth/users/').then(r=>setUsersList(Array.isArray(r.data)?r.data:[])).catch(()=>{})
     }catch(e:any){
       toast(e?.response?.data?.error||e?.response?.data?.detail||t('error'),'error')
     }
@@ -299,8 +315,38 @@ export default function Profile(){
                   )
                 )}
               </div>
-              <button onClick={deleteUser} disabled={delBusy||!delNick.trim()} className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-1"><Trash2 size={14}/>{delBusy?'...':t('admin_del_user_btn')}</button>
+              <button onClick={()=>deleteUser()} disabled={delBusy||!delNick.trim()} className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-1"><Trash2 size={14}/>{delBusy?'...':t('admin_del_user_btn')}</button>
             </div>
+          </div>
+
+          {/* Все пользователи сайта: поиск + удаление одной кнопкой */}
+          <div className="mt-5 pt-4 border-t dark:border-slate-800">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-bold text-sm flex items-center gap-2 dark:text-white"><Users size={15} className="text-indigo-600"/>{t('users_list_t')}</h3>
+              <button onClick={()=>setUsersOpen(v=>!v)} className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30" data-testid="users-toggle">
+                {usersOpen? t('close') : `${t('open')} (${usersList?.length ?? '…'})`}
+              </button>
+            </div>
+            {usersOpen && (
+              <div className="mt-2">
+                <input value={usersQ} onChange={e=>setUsersQ(e.target.value)} placeholder={t('users_search_ph')} className="w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+                <div className="mt-2 max-h-[280px] overflow-y-auto rounded-xl border dark:border-slate-700 divide-y dark:divide-slate-800" data-testid="users-list">
+                  {usersFiltered.map(u=>(
+                    <div key={u.id} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900">
+                      <span className="font-semibold text-sm dark:text-white flex-1 min-w-0 truncate">{u.username}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 ${u.role==='admin'?'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300':u.role==='teacher'?'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300':'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{t(ROLE_LABEL[u.role]||'admin_role')}</span>
+                      {String(u.username).toLowerCase()===String(me?.username||'').toLowerCase()
+                        ? <span className="text-[10px] text-slate-400 shrink-0 px-1">{t('users_you')}</span>
+                        : canDeleteRow(u)
+                          ? <button onClick={()=>deleteUser(u.username)} disabled={delBusy} className="p-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 disabled:opacity-40 shrink-0" title={t('admin_del_user_btn')} aria-label={`${t('admin_del_user_btn')} ${u.username}`}><Trash2 size={13}/></button>
+                          : <span className="text-[11px] text-slate-300 dark:text-slate-600 shrink-0" title={u.is_superuser? t('del_superuser_note') : t('del_user_staff_warn')}>🔒</span>}
+                    </div>
+                  ))}
+                  {usersFiltered.length===0 && <div className="px-3 py-4 text-center text-sm text-slate-400">{t('users_empty')}</div>}
+                </div>
+                <div className="text-[11px] text-slate-400 mt-1.5">{t('users_hint')}</div>
+              </div>
+            )}
           </div>
         </div>
       )}

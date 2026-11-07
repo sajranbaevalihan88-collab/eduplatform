@@ -200,10 +200,17 @@ def list_users(request):
     # только для аутентифицированных, скрываем email
     if not request.user.is_authenticated:
         return Response({'error': 'Not authenticated'}, status=401)
-    # не-админ видит только себя, админ — весь список (без обрезки [:20])
+    # не-админ видит только себя, админ — весь список (+поиск по нику ?q=)
     if request.user.role != 'admin' and not request.user.is_staff:
         return Response(UserSerializer([request.user], many=True).data)
     users = User.objects.all().order_by('id')
+    q = (request.query_params.get('q') or '').strip()
+    if q:
+        users = users.filter(username__icontains=q)
+    data = [{'id': u.id, 'username': u.username, 'role': u.role,
+             'is_staff': u.is_staff, 'is_superuser': u.is_superuser,
+             'date_joined': u.date_joined} for u in users]
+    return Response(data)
     # скрываем email для списка
     data = [{'id': u.id, 'username': u.username, 'role': u.role} for u in users]
     return Response(data)
