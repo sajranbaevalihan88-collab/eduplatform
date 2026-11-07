@@ -68,7 +68,7 @@ export default function Dashboard(){
       <div className="rounded-[24px] bg-slate-900 p-8 text-white relative overflow-hidden">
         <div className="relative">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-medium mb-3">{t('dash_new_board')}</div>
-          <h1 className="text-3xl md:text-4xl font-display font-extrabold animate-fadeIn dark:text-white" style={{animationDelay:'0.1s'}}>{me ? `${t('dash_hello')} ${me.username}! 👋` : t('welcome')}</h1>
+          <h1 className="text-3xl md:text-4xl font-display font-extrabold animate-fadeIn dark:text-white" style={{animationDelay:'0.1s'}}>{me ? `${t('dash_hello')} ${me.username}` : t('welcome')}</h1>
           <p className="text-white/80 mt-2 max-w-2xl animate-fadeIn" style={{animationDelay:'0.2s'}}>{me ? `${t('dash_role_prefix')} ${me.role} ${t('dash_role_suffix')}` : t('dash_guest')}</p>
           <div className="flex flex-wrap gap-3 mt-6 animate-fadeIn" style={{animationDelay:'0.3s'}}>
             <Link to="/lessons/new" className="px-6 py-3 rounded-xl bg-white text-slate-900 font-semibold flex items-center gap-2 btn-hover shadow-lg">{t('create_lesson')} <ArrowRight size={18} className="transition-transform group-hover:translate-x-1"/></Link>

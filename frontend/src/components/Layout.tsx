@@ -166,7 +166,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   },[items, nav])
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex overflow-x-clip">
+    <div className="min-h-screen bg-[#f2f4f8] dark:bg-slate-950 flex overflow-x-clip">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-xl focus:bg-indigo-600 focus:text-white">{t('skip_content')}</a>
       <a
         href="#main-navigation"
@@ -211,7 +211,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
       ) : (!isGameFull ? (
-        <button onClick={toggleSidebar} className="hidden lg:flex fixed left-4 top-4 z-30 p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300 animate-scaleIn" title={t('show_tabs')}><PanelLeft size={18}/></button>
+        <button onClick={toggleSidebar} className="hidden lg:flex fixed left-4 top-4 z-30 p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 shadow-lg btn-hover" title={t('show_tabs')}><PanelLeft size={18}/></button>
       ) : null)}
 
       {/* Mobile drawer */}
