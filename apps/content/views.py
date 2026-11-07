@@ -68,6 +68,37 @@ def media_images(request, name=''):
 def media_pdf(request, name=''):
     return media_fallback(request, 'pptx_pdf/' + (name or ''))
 
+def media_uploads(request, name=''):
+    """Раздача загруженных файлов (books/materials) с проверкой доступа:
+    публичные — всем, приватные — только владельцу и админу. 404 вместо 403 (не раскрываем существование)."""
+    safe = (name or '').replace('\\', '/').strip('/')
+    if not safe or '..' in safe.split('/'):
+        raise Http404()
+    from .models import UploadedFile
+    from django.contrib.auth.models import AnonymousUser
+    uf = UploadedFile.objects.filter(file='uploads/' + safe).select_related('owner').first()
+    if uf is None:
+        raise Http404()
+    user = request.user if request.user.is_authenticated else AnonymousUser()
+    is_admin = user.is_authenticated and (user.is_staff or getattr(user, 'role', None) == 'admin')
+    if not uf.is_public and not is_admin and (not user.is_authenticated or uf.owner_id != user.id):
+        raise Http404()
+    disk_path = os.path.join(str(getattr(settings, 'MEDIA_ROOT', 'media')), uf.file.name.replace('/', os.sep))
+    # mime строго по расширению: uf.mime_type приходит от клиента (Content-Type запроса) и ему нельзя доверять
+    ext = os.path.splitext(safe)[1].lower()
+    ctype = _MEDIA_MIME.get(ext, 'application/octet-stream')
+    resp = None
+    try:
+        if os.path.isfile(disk_path):
+            resp = FileResponse(open(disk_path, 'rb'), content_type=ctype)
+        else:
+            resp = FileResponse(uf.file.open('rb'), content_type=ctype)
+    except Exception:
+        raise Http404()
+    resp['X-Content-Type-Options'] = 'nosniff'
+    resp['Cache-Control'] = 'private, max-age=3600'
+    return resp
+
 def _validate_upload(file_obj):
     if not file_obj:
         raise ValueError("Файл не передан")

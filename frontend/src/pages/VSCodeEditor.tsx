@@ -703,7 +703,7 @@ export default function VSCodeEditor(){
                     }} className="px-2 py-0.5 rounded bg-[#3c3c3c] hover:bg-[#505050] text-white text-xs" title={t('vsc_open_tab')}>{t('vsc_open_tab')}</button>
                   </div>
                 </div>
-                <iframe ref={iframeRef} srcDoc={previewSrcDoc} className="flex-1 w-full border-0 min-h-0" sandbox="allow-scripts allow-same-origin allow-modals allow-forms" allow="fullscreen"/>
+                <iframe ref={iframeRef} srcDoc={previewSrcDoc} className="flex-1 w-full border-0 min-h-0" sandbox="allow-scripts allow-modals allow-forms" allow="fullscreen"/>
               </div>
             )}
             {showCmd && (

@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from apps.accounts.views import RegisterView, login_view, me_view, list_users, logout_view, create_assistant_view, change_password_view
+from apps.accounts.views import RegisterView, login_view, me_view, list_users, logout_view, create_assistant_view, change_password_view, delete_user_view, ThrottledTokenObtainPairView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from apps.catalog.views import SubjectViewSet, CourseViewSet
 from apps.content.views import UploadedFileViewSet, PresentationViewSet, SlideViewSet
@@ -40,7 +40,8 @@ urlpatterns = [
     path('auth/change-password/', change_password_view, name='change-password'),
     path('auth/users/', list_users, name='users'),
     path('auth/create-assistant/', create_assistant_view, name='create-assistant'),
-    path('auth/jwt/create/', TokenObtainPairView.as_view(), name='jwt-create'),
+    path('auth/delete-user/', delete_user_view, name='delete-user'),
+    path('auth/jwt/create/', ThrottledTokenObtainPairView.as_view(), name='jwt-create'),
     path('auth/jwt/refresh/', TokenRefreshView.as_view(), name='jwt-refresh'),
     path('auth/jwt/verify/', TokenVerifyView.as_view(), name='jwt-verify'),
     path('shared/', SharedCodeView.as_view(), name='shared-create'),

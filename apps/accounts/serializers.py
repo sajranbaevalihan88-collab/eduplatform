@@ -42,8 +42,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         validators=[UniqueValidator(User.objects.all(), message='Этот ник уже занят — придумай другой')]
     )
     password = serializers.CharField(write_only=True, validators=[validate_password])
-    # role нельзя ставить admin при регистрации
-    role = serializers.ChoiceField(choices=[('teacher','Учитель'),('student','Ученик')], default='teacher')
+    # при само-регистрации выдаём ТОЛЬКО student — teacher/admin создаёт администратор
+    role = serializers.ChoiceField(choices=[('teacher','Учитель'),('student','Ученик')], default='student', required=False)
 
     def validate_username(self, value):
         value = (value or '').strip()
@@ -53,22 +53,19 @@ class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'password', 'role', 'first_name', 'last_name']
-    
+
     def validate_role(self, value):
-        if value == 'admin':
-            raise serializers.ValidationError("Нельзя зарегистрироваться как admin")
+        if value != 'student':
+            raise serializers.ValidationError("Само-регистрация только для учеников — учительский аккаунт выдаёт администратор")
         return value
 
     def create(self, validated_data):
-        # защита от privilege escalation: только teacher/student
-        role = validated_data.get('role','teacher')
-        if role not in ['teacher','student']:
-            role = 'teacher'
+        # защита от privilege escalation: роль жёстко student, что бы ни прислал клиент
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data.get('email',''),
             password=validated_data['password'],
-            role=role,
+            role='student',
             first_name=validated_data.get('first_name',''),
             last_name=validated_data.get('last_name','')
         )

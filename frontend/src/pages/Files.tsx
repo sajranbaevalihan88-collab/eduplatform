@@ -2,13 +2,21 @@ import { useEffect, useState } from 'react'
 import client, { mediaUrl, mediaSrc } from '../api/client'
 import { Upload, FileText, Presentation, File, Image as ImgIcon, Trash2, Eye } from 'lucide-react'
 import { useLang } from '../context/LangContext'
+import { openMediaFile, fetchMediaBlobUrl } from '../utils/fileOpen'
 
 export default function Files(){
   const {t}=useLang()
   const [list,setList]=useState<any[]>([])
   const [uploading,setUploading]=useState(false)
   const [preview,setPreview]=useState<any|null>(null)
+  const [previewUrl,setPreviewUrl]=useState('')
   const [me,setMe]=useState<any>(null)
+  // приватные файлы закрыты auth-гейтом — blob с токеном, потом blob:URL
+  const openPreview=async(f:any)=>{
+    setPreview(f); setPreviewUrl('')
+    try{ setPreviewUrl(await fetchMediaBlobUrl(mediaUrl(f.file))) }
+    catch{ setPreviewUrl('') }
+  }
   const load=()=>client.get('/files/').then(r=>setList(Array.isArray(r.data)?r.data:r.data.results||[]))
   useEffect(()=>{
     load()
@@ -77,8 +85,8 @@ export default function Files(){
             <h3 className="font-semibold mt-3 line-clamp-1" title={f.title}>{f.title}</h3>
             <div className="text-xs text-slate-500 mt-1">{(f.size/1024).toFixed(1)} KB • {new Date(f.created_at).toLocaleDateString()}</div>
             <div className="flex gap-2 mt-4">
-              <a href={mediaUrl(f.file)} target="_blank" rel="noopener noreferrer" className="flex-1 px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium text-center flex items-center justify-center gap-1"><Eye size={14}/> {t('files_open')}</a>
-              <button onClick={()=>setPreview(f)} className="px-3 py-2 rounded-xl bg-slate-100 text-sm">{t('files_preview')}</button>
+              <button onClick={()=>openMediaFile(mediaUrl(f.file)).catch(()=>alert(t('books_load_err')))} className="flex-1 px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium text-center flex items-center justify-center gap-1"><Eye size={14}/> {t('files_open')}</button>
+              <button onClick={()=>openPreview(f)} className="px-3 py-2 rounded-xl bg-slate-100 text-sm">{t('files_preview')}</button>
               {canDelete(f) && <button onClick={()=>del(f.id)} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-red-50 text-red-600 flex items-center justify-center" aria-label={t('delete')}><Trash2 size={16}/></button>}
             </div>
           </div>
@@ -86,13 +94,13 @@ export default function Files(){
       </div>
       {list.length===0 && <div className="text-center py-16 text-slate-400 bg-white rounded-2xl border">{t('files_empty_list')}</div>}
       {preview && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={()=>setPreview(null)}>
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={()=>{setPreview(null); if(previewUrl) URL.revokeObjectURL(previewUrl)}}>
           <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}>
-            <div className="p-4 border-b flex items-center justify-between"><h3 className="font-bold">{preview.title}</h3><button onClick={()=>setPreview(null)} className="px-3 py-1.5 rounded-xl bg-slate-100">{t('close')}</button></div>
+            <div className="p-4 border-b flex items-center justify-between"><h3 className="font-bold">{preview.title}</h3><button onClick={()=>{setPreview(null); if(previewUrl) URL.revokeObjectURL(previewUrl)}} className="px-3 py-1.5 rounded-xl bg-slate-100">{t('close')}</button></div>
             <div className="flex-1 overflow-auto p-4 bg-slate-50">
-              {preview.file_type==='image' ? <img src={mediaSrc(preview.file)} className="max-w-full mx-auto rounded-xl" referrerPolicy="no-referrer"/> :
-               preview.file?.endsWith('.pdf') ? <iframe src={mediaSrc(preview.file)} className="w-full h-[60vh] rounded-xl border bg-white" sandbox="allow-same-origin" title="preview"/> :
-               <div className="text-center py-12"><p className="text-slate-500">{t('files_preview_na')}</p><a href={mediaSrc(preview.file)} target="_blank" rel="noopener noreferrer" className="inline-block mt-4 px-5 py-2.5 rounded-xl bg-indigo-600 text-white">{t('files_download')}</a></div>
+              {previewUrl && preview.file_type==='image' ? <img src={previewUrl} className="max-w-full mx-auto rounded-xl" referrerPolicy="no-referrer"/> :
+               previewUrl && preview.file?.endsWith('.pdf') ? <iframe src={previewUrl} className="w-full h-[60vh] rounded-xl border bg-white" sandbox="allow-same-origin" title="preview"/> :
+               <div className="text-center py-12"><p className="text-slate-500">{t('files_preview_na')}</p><button onClick={()=>openMediaFile(mediaUrl(preview.file), preview.title).catch(()=>alert(t('books_load_err')))} className="inline-block mt-4 px-5 py-2.5 rounded-xl bg-indigo-600 text-white">{t('files_download')}</button></div>
               }
             </div>
           </div>

@@ -2,6 +2,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { Layers, Presentation as PresIcon, FlaskConical, Plus, Upload, Search, BookOpen, X, Download, Trash2 } from 'lucide-react'
 import client, { mediaUrl, mediaSrc } from '../api/client'
+import { openMediaFile } from '../utils/fileOpen'
 import { isStudent } from '../utils/role'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
@@ -266,7 +267,7 @@ export default function SubjectDetail(){
                 <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
                   <BookOpen size={36} className="mx-auto mb-3 opacity-40"/>
                   <p>{bookErr||t('books_doc_hint')}</p>
-                  <a href={mediaSrc(book.url||book.file)} target="_blank" rel="noopener noreferrer" className="inline-block mt-3 px-4 py-2 rounded-xl bg-cyan-600 text-white text-sm font-semibold"><Download size={14} className="inline mr-1"/>{t('books_download')}</a>
+                  <button onClick={()=>openMediaFile(mediaSrc(book.url||book.file), book.title).catch(()=>alert(t('books_load_err')))} className="inline-block mt-3 px-4 py-2 rounded-xl bg-cyan-600 text-white text-sm font-semibold"><Download size={14} className="inline mr-1"/>{t('books_download')}</button>
                 </div>
               )}
             </div>

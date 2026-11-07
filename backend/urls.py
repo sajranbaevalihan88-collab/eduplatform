@@ -16,10 +16,12 @@ urlpatterns = [
 ]
 
 # DB-backed медиа (переживает редеплои Render free): раньше static(), иначе 404 с диска
-from apps.content.views import media_images, media_pdf
+# media_uploads — приватные загрузки за auth (до static(), иначе файлы ушли бы без проверки)
+from apps.content.views import media_images, media_pdf, media_uploads
 urlpatterns += [
     path('media/pptx_images/<path:name>', media_images),
     path('media/pptx_pdf/<path:name>', media_pdf),
+    path('media/uploads/<path:name>', media_uploads),
 ]
 
 if settings.DEBUG:

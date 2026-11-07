@@ -218,10 +218,10 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             'assignments_done': assigned_done
         })
 
-    @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny], throttle_classes=[throttling.AnonRateThrottle, throttling.UserRateThrottle])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated], throttle_classes=[throttling.AnonRateThrottle, throttling.UserRateThrottle])
     def answer(self, request, pk=None):
         """Проверка одного ответа для игр (Аркан): POST {question_id, option_id} -> {correct}.
-        Правильные ответы не отдаём — только да/нет, читерить через devtools не выйдет."""
+        Только для авторизованных: через гостевой перебор option_id восстанавливался ключ ответов."""
         test = self.get_object()
         try:
             qid = int(request.data.get('question_id'))

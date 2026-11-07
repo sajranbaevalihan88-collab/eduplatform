@@ -15,8 +15,10 @@ BLOCKED_PY = [
     # опасные os/shutil даже при разрешённом `import os`
     'os.system','os.popen','os.spawn','os.exec','os.fork','os.kill','os.remove','os.unlink','os.rename','os.mkdir','os.rmdir','os.removedirs',
     'os.chmod','os.chown','os.symlink','os.link','os.mknod','os.fifo',
+    'os.getenv','os.putenv','os.open','os.fdopen','os.environ',
     'shutil.rmtree','shutil.move','shutil.copy','shutil.copytree',
-    'pathlib.Path.write','pathlib.Path.unlink',
+    'pathlib.Path.write','pathlib.Path.unlink','pathlib.Path.read',
+    '.read_text','.write_text','.open_text',
 ]
 BLOCKED_JS = ['require(','process.','fs.','child_process','eval(','Function(','import(']
 
@@ -176,17 +178,24 @@ def _is_safe_code(code: str, lang: str):
         for pat in BLOCKED_PY:
             if pat.lower() in lower:
                 return False, f"Запрещенный паттерн: {pat}"
-        # AST проверка для python — только критичные импорты
+        # AST проверка для python — импорты и опасные вызовы
         try:
             tree = ast.parse(code)
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     for alias in node.names:
-                        if alias.name in ['subprocess','socket','ctypes','pickle']:
+                        if alias.name.split('.')[0] in ['subprocess','socket','ctypes','pickle','importlib','runpy','multiprocessing','sqlite3']:
                             return False, f"Импорт {alias.name} запрещен"
                 if isinstance(node, ast.ImportFrom):
-                    if node.module in ['subprocess','socket','ctypes','pickle']:
+                    if node.module.split('.')[0] in ['subprocess','socket','ctypes','pickle','importlib','runpy','multiprocessing','sqlite3']:
                         return False, f"Импорт из {node.module} запрещен"
+                # опасные вызовы: open/eval/exec/compile/__import__ — чтение файлов сервера и обход blacklist
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                    if node.func.id in ('open','eval','exec','compile','__import__','breakpoint','globals','locals','vars'):
+                        return False, f"Вызов {node.func.id}() запрещен"
+                # os.environ — слив секретов через env
+                if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == 'os' and node.attr == 'environ':
+                    return False, "Доступ к os.environ запрещен"
         except SyntaxError:
             pass
     elif lang == 'javascript':

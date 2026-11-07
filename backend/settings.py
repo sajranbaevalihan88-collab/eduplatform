@@ -286,8 +286,9 @@ REST_FRAMEWORK = {
         # класс 30+ человек жмёт одновременно (игры, тесты) — 120/мин душили даже 10 потоков
         'anon': os.environ.get('THROTTLE_ANON', '60/minute'),
         'user': os.environ.get('THROTTLE_USER', '600/minute'),
-        'login': '10/minute',
+        'login': os.environ.get('THROTTLE_LOGIN', '20/minute'),
         'register': '10/minute',
+        'password_change': '5/minute',
     },
 }
 
@@ -346,8 +347,17 @@ PISTON_URL = os.environ.get('PISTON_URL', 'https://emkc.org/api/v2/piston/execut
 PISTON_DAILY_LIMIT = int(os.environ.get('PISTON_DAILY_LIMIT', '500'))
 PISTON_TIMEOUT = 6
 # Для прод — полностью отключить локальный subprocess и гнать всё через Piston/Judge0 (изоляция из коробки)
-# Включите в Render/Railway: CODE_USE_PISTON_ONLY=True
-CODE_USE_PISTON_ONLY = os.environ.get('CODE_USE_PISTON_ONLY', 'False') == 'True'
+# По умолчанию В ПРОДЕ (DEBUG=False) локальный запуск кода запрещён — аноним мог бы читать файлы сервера
+# (blacklist-песочница не обеспечивает изоляцию). Включить локальный раннер в проде можно ТОЛЬКО явно:
+# CODE_USE_PISTON_ONLY=False + изоляция на уровне хоста.
+from django.conf import settings as _s  # noqa
+_local_runner_default = 'False' if os.environ.get('DEBUG', 'False') == 'True' else 'True'
+CODE_USE_PISTON_ONLY = os.environ.get('CODE_USE_PISTON_ONLY', _local_runner_default) == 'True'
+if not os.environ.get('CODE_USE_PISTON_ONLY'):
+    import sys as _sys
+    print('[settings] CODE_USE_PISTON_ONLY не задан явно — выбран дефолт:', 
+          'Piston-only (прод: локальный запуск кода отключён)' if CODE_USE_PISTON_ONLY else 'локальный раннер (dev).',
+          file=_sys.stderr)
 # Для Docker-изоляции каждого прогона (будущее): CODE_USE_DOCKER=True + DOCKER_IMAGE=python:3.11-slim
 CODE_USE_DOCKER = os.environ.get('CODE_USE_DOCKER', 'False') == 'True'
 

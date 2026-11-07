@@ -16,8 +16,17 @@ class RegisterView(generics.CreateAPIView):
     throttle_scope = 'register'
 
 class LoginThrottle(throttling.AnonRateThrottle):
+    # rate НЕ задаём здесь — класс жёстко перебивал THROTTLE_RATES['login'];
+    # лимит настраивается в settings (20/мин на IP: хватит классу за NAT, брут меньше)
     scope = 'login'
-    rate = '5/minute'
+
+# Тот же лимит на стандартный jwt/create — иначе там обходной путь для brute force
+from rest_framework_simplejwt.views import TokenObtainPairView
+class ThrottledTokenObtainPairView(TokenObtainPairView):
+    throttle_classes = [LoginThrottle]
+
+class PasswordChangeThrottle(throttling.UserRateThrottle):
+    scope = 'password_change'
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
@@ -51,22 +60,25 @@ def me_view(request):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def logout_view(request):
-    import logging as _lg
+    refresh_token = request.data.get('refresh')
+    if not refresh_token:
+        return Response({'error': 'No refresh token'}, status=400)
     try:
-        refresh_token = request.data.get('refresh')
-        if not refresh_token:
-            return Response({'error': 'No refresh token'}, status=400)
         token = RefreshToken(refresh_token)
+        # нельзя ревокать ЧУЖОЙ refresh — только свой
+        if str(token.payload.get('user_id')) != str(request.user.id):
+            return Response({'error': 'Можно завершить только свою сессию'}, status=403)
         token.blacklist()
-        return Response({'status': 'ok'})
     except Exception:
-        _lg.getLogger(__name__).exception("logout failed")
-        return Response({'error': 'Не удалось выйти'}, status=400)
+        # невалидный/уже отозванный токен — выход идемпотентен
+        pass
+    return Response({'status': 'ok'})
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
+@throttle_classes([PasswordChangeThrottle])
 def change_password_view(request):
-    """Смена своего пароля: {old_password, new_password}."""
+    """Смена своего пароля: {old_password, new_password}. Ревокает ВСЕ старые refresh-токены."""
     from django.contrib.auth.password_validation import validate_password
     from django.core.exceptions import ValidationError as _VE
     old = request.data.get('old_password') or ''
@@ -82,19 +94,27 @@ def change_password_view(request):
         return Response({'error': ' '.join(getattr(e, 'messages', [str(e)]))}, status=status.HTTP_400_BAD_REQUEST)
     user.set_password(new)
     user.save()
+    # ревокация всех ранее выданных refresh: угнанная сессия умирает вместе со сменой пароля
+    from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+    for t in OutstandingToken.objects.filter(user=user):
+        BlacklistedToken.objects.get_or_create(token=t)
+    # новая пара выдаётся ПОСЛЕ зачистки — иначе заблэклистилась бы сама
     refresh = RefreshToken.for_user(user)
     return Response({'status': 'ok', 'access': str(refresh.access_token), 'refresh': str(refresh)})
 
 @api_view(['POST'])
 @permission_classes([IsAdmin])
 def create_assistant_view(request):
-    """Создание аккаунта помощника администратором (role=teacher).
-    Помощник заходит по логину и паролю на обычной странице входа — отдельного входа нет."""
+    """Админ создаёт аккаунты: role='teacher' (спец-акк учителя) или 'assistant' (помощник с правами админа).
+    Заходят по логину и паролю на обычной странице входа — отдельного входа нет."""
     from django.contrib.auth.password_validation import validate_password
     from django.core.exceptions import ValidationError as _VE
     username = (request.data.get('username') or '').strip()
     password = request.data.get('password') or ''
     first_name = (request.data.get('first_name') or '').strip()
+    kind = (request.data.get('role') or 'teacher').strip()
+    if kind not in ('teacher', 'assistant'):
+        return Response({'error': 'role должен быть teacher или assistant'}, status=status.HTTP_400_BAD_REQUEST)
     if len(username) < 3:
         return Response({'error': 'Ник минимум 3 символа'}, status=status.HTTP_400_BAD_REQUEST)
     if User.objects.filter(username__iexact=username).exists():
@@ -103,8 +123,30 @@ def create_assistant_view(request):
         validate_password(password)
     except _VE as e:
         return Response({'error': ' '.join(getattr(e, 'messages', [str(e)]))}, status=status.HTTP_400_BAD_REQUEST)
-    u = User.objects.create_user(username=username, password=password, role='teacher', first_name=first_name)
+    role = 'admin' if kind == 'assistant' else 'teacher'
+    u = User.objects.create_user(username=username, password=password, role=role, first_name=first_name)
     return Response({'status': 'ok', 'user': UserSerializer(u).data}, status=status.HTTP_201_CREATED)
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def delete_user_view(request):
+    """Удаление аккаунта по нику (только админ). Нельзя удалить себя и суперпользователя."""
+    username = (request.data.get('username') or '').strip()
+    if not username:
+        return Response({'error': 'Укажите ник'}, status=status.HTTP_400_BAD_REQUEST)
+    if username.lower() == request.user.username.lower():
+        return Response({'error': 'Нельзя удалить свой аккаунт'}, status=status.HTTP_400_BAD_REQUEST)
+    u = User.objects.filter(username__iexact=username).first()
+    if not u:
+        return Response({'error': 'Пользователь с таким ником не найден'}, status=status.HTTP_404_NOT_FOUND)
+    if u.is_superuser:
+        return Response({'error': 'Нельзя удалить суперпользователя'}, status=status.HTTP_403_FORBIDDEN)
+    # сотрудников (админов/стафф) может удалять только суперпользователь —
+    # иначе помощник-админ смог бы удалить создавшего его администратора
+    if (u.is_staff or getattr(u, 'role', None) == 'admin') and not request.user.is_superuser:
+        return Response({'error': 'Сотрудников может удалить только суперпользователь'}, status=status.HTTP_403_FORBIDDEN)
+    u.delete()
+    return Response({'status': 'ok', 'deleted': username})
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
@@ -112,10 +154,10 @@ def list_users(request):
     # только для аутентифицированных, скрываем email
     if not request.user.is_authenticated:
         return Response({'error': 'Not authenticated'}, status=401)
-    # не-админ видит только себя, админ — до 20
+    # не-админ видит только себя, админ — весь список (без обрезки [:20])
     if request.user.role != 'admin' and not request.user.is_staff:
         return Response(UserSerializer([request.user], many=True).data)
-    users = User.objects.all().order_by('id')[:20]
+    users = User.objects.all().order_by('id')
     # скрываем email для списка
     data = [{'id': u.id, 'username': u.username, 'role': u.role} for u in users]
     return Response(data)

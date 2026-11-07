@@ -305,13 +305,14 @@ const tr = useLang().t
       }
       throw new Error('local')
     } catch (e: any) {
-      if (e.response) { alert(tr('arkan_offline')); return }
-      // офлайн-фолбэк: свои тесты (ответы известны)
+      // 401 — гость (answer закрыт для анонимов): играем по локальным данным из публичного сериалайзера
       if (typeof opt.is_correct === 'boolean') {
         const ok = opt.is_correct
         playArkanSound(ok ? 'correct' : 'wrong')
         setLock({ ok, pick: optIdx })
+        return
       }
+      if (e.response) { alert(tr('arkan_offline')); return }
     }
   }
 

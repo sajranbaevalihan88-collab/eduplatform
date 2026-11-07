@@ -98,7 +98,12 @@ def _limit_memory():
         pass
 
 def _get_run_env(tmpdir: str):
-    env = os.environ.copy()
+    # Whitelist окружения: ребёнок получает только то, что нужно для запуска.
+    # os.environ.copy() сливал бы GEMINI_API_KEY, POSTGRES_PASSWORD и прочие секреты
+    # через print(os.environ) — раньше вырезали лишь 3 ключа, остальное утекало.
+    _keep = {'PATH','SYSTEMROOT','WINDIR','SYSTEMDRIVE','TEMP','TMP','COMSPEC','PATHEXT',
+             'HOME','USERPROFILE','LANG','LC_ALL','LD_LIBRARY_PATH','NUMBER_OF_PROCESSORS'}
+    env = {k: v for k, v in os.environ.items() if k in _keep or k.upper() in _keep}
     env['PYTHONPATH'] = tmpdir + os.pathsep + env.get('PYTHONPATH','')
     env['SDL_VIDEODRIVER'] = 'dummy'
     env['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
@@ -106,8 +111,6 @@ def _get_run_env(tmpdir: str):
     # иначе на Windows print('Строка') даёт ???? при decode utf-8
     env['PYTHONIOENCODING'] = 'utf-8'
     env['PYTHONUTF8'] = '1'
-    for k in ['DJANGO_SECRET_KEY','DATABASE_URL','REDIS_URL']:
-        env.pop(k, None)
     return env
 
 def _count_inputs(code):
@@ -198,7 +201,8 @@ def run_single(code, language='python', stdin_data='', timeout=5):
             fname = os.path.join(tmpdir, 'main.js')
             with open(fname, 'w', encoding='utf-8') as f:
                 f.write(code)
-            result = subprocess.run(['node', fname], input=stdin_data, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout, cwd=tmpdir)
+            # env обязателен: без него node получает полный os.environ хоста
+            result = subprocess.run(['node', fname], input=stdin_data, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout, cwd=tmpdir, env=_get_run_env(tmpdir))
             return (result.stdout+result.stderr)[:5000], result.returncode==0
         elif language in ('html', 'css'):
             return code[:3000], True
@@ -232,6 +236,10 @@ def run_project(files, entry='main.py', requirements='', stdin_data='', timeout=
             f = files[0]
             lang_guess = (f.get('path') or '').split('.')[-1] if '.' in (f.get('path') or '') else 'python'
             return run_single(f.get('content') or f.get('code') or '', lang_guess, stdin_data, timeout)
+        if getattr(settings, 'CODE_USE_PISTON_ONLY', False) and len(files) > 1:
+            # мультифайловый проект в проде не должен уходить в локальный subprocess — нет изоляции
+            return ("Мультифайловые проекты выполняются только в локальном режиме. "
+                    "Для прода настрой self-hosted Piston или собери один файл.", False)
     except: pass
     if not files:
         return "Нет файлов проекта", False
@@ -285,30 +293,40 @@ def run_project(files, entry='main.py', requirements='', stdin_data='', timeout=
                     if not os.path.exists(init_path):
                         open(init_path, 'a').close()
 
-        # 2. requirements — pip install в tmpdir (изолированно, без сети = пропускаем если нет интернета)
+        # 2. requirements — pip install в tmpdir, ТОЛЬКО белый список пакетов.
+        # Произвольный requirements = произвольный код на установке (setup.py) → RCE.
         if requirements and requirements.strip():
-            req_file = os.path.join(tmpdir, 'requirements.txt')
-            with open(req_file, 'w', encoding='utf-8') as f:
-                f.write(requirements)
-            # пробуем pip install --target tmpdir --quiet (таймаут 20с)
-            try:
-                subprocess.run([sys.executable, '-m', 'pip', 'install', '--quiet', '--target', tmpdir, '-r', req_file],
-                               capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=20, cwd=tmpdir)
-            except subprocess.TimeoutExpired:
-                pass
-            except Exception:
-                pass
+            _safe_pkgs = {'pygame', 'numpy', 'pandas', 'matplotlib', 'pillow', 'flask', 'django', 'requests'}
+            _bad = []
+            _good = []
+            for line in requirements.splitlines():
+                ln = line.strip()
+                if not ln or ln.startswith('#'):
+                    continue
+                name = ln.split('==')[0].split('>=')[0].split('<=')[0].split('[')[0].strip().lower()
+                # запрещаем всё, что не «имя==версия» (URL, git+, опции pip)
+                if not re.fullmatch(r'[A-Za-z0-9_.\-]+(==[A-Za-z0-9_.\-.]+)?', ln) or name not in _safe_pkgs:
+                    _bad.append(ln)
+                else:
+                    _good.append(ln)
+            if _bad:
+                return ("Установка разрешена только из белого списка: " + ", ".join(sorted(_safe_pkgs)) +
+                        ". Запрещено: " + ", ".join(_bad[:3]), False)
+            if _good:
+                req_file = os.path.join(tmpdir, 'requirements.txt')
+                with open(req_file, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(_good))
+                # пробуем pip install --target tmpdir --quiet (таймаут 20с)
+                try:
+                    subprocess.run([sys.executable, '-m', 'pip', 'install', '--quiet', '--target', tmpdir, '-r', req_file],
+                                   capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=20, cwd=tmpdir)
+                except subprocess.TimeoutExpired:
+                    pass
+                except Exception:
+                    pass
 
-        # 3. Подготовка env — изолируем, но разрешаем os/sys внутри проекта
-        env = os.environ.copy()
-        env['PYTHONPATH'] = tmpdir + os.pathsep + env.get('PYTHONPATH','')
-        env['SDL_VIDEODRIVER'] = 'dummy'
-        env['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
-        env['PYTHONIOENCODING'] = 'utf-8'
-        env['PYTHONUTF8'] = '1'
-        # Убираем секреты хоста
-        for k in ['DJANGO_SECRET_KEY','DATABASE_URL','REDIS_URL']:
-            env.pop(k, None)
+        # 3. Подготовка env — whitelist (секреты хоста не утекают)
+        env = _get_run_env(tmpdir)
 
         # 4. Определяем команду запуска
         # entry может быть "main.py" или "manage.py check" или "manage.py runserver"
