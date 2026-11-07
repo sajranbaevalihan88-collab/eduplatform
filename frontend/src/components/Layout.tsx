@@ -166,7 +166,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   },[items, nav])
 
   return (
-    <div className="min-h-screen bg-[#f2f4f8] dark:bg-slate-950 flex overflow-x-clip">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex overflow-x-clip">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-xl focus:bg-indigo-600 focus:text-white">{t('skip_content')}</a>
       <a
         href="#main-navigation"
