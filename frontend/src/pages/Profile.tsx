@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import client from '../api/client'
-import { User, Mail, Shield, BookOpen, Layers, Presentation, FlaskConical, LogOut, Trash2, Eye, EyeOff, Edit, Search, Filter, Gamepad2, Play, StickyNote, UserPlus } from 'lucide-react'
+import { User, Mail, Shield, BookOpen, Layers, Presentation, FlaskConical, LogOut, Trash2, Eye, EyeOff, Edit, Search, Filter, Gamepad2, Play, StickyNote, UserPlus, Check, X as XIcon } from 'lucide-react'
 import { useNavigate, Link } from 'react-router-dom'
 import { toast } from '../context/UIContext'
 import Notes from './Notes'
@@ -41,26 +41,39 @@ export default function Profile(){
     setAsstBusy(true)
     try{
       await client.post('/auth/create-assistant/',{username:asst.username.trim(),password:asst.password,first_name:asst.first_name.trim(),role:asstRole})
-      toast(t('assistant_created'),'success')
+      toast(t(asstRole==='teacher'?'assistant_created_teacher':'assistant_created'),'success')
       setAsst({username:'',password:'',first_name:''})
     }catch(e:any){
       toast(e?.response?.data?.error||e?.response?.data?.detail||t('error'),'error')
     }
     setAsstBusy(false)
   }
-  // Удаление аккаунта по нику (только админ)
+  // Удаление аккаунта по нику (только админ) + живая проверка «существует ли аккаунт»
   const [delNick,setDelNick]=useState('')
   const [delBusy,setDelBusy]=useState(false)
+  const [usersList,setUsersList]=useState<any[]|null>(null)
+  const delFound=useMemo(()=>{
+    const q=delNick.trim().toLowerCase()
+    if(!usersList || q.length<2) return undefined
+    return usersList.find((x:any)=>x.username.toLowerCase()===q) || null
+  },[delNick, usersList])
+  useEffect(()=>{
+    if(!isAdmin || usersList) return
+    client.get('/auth/users/').then(r=>setUsersList(Array.isArray(r.data)?r.data:[])).catch(()=>setUsersList([]))
+  },[isAdmin])
+  const ROLE_LABEL:any={admin:'admin_role', teacher:'login_teacher', student:'login_student'}
   const deleteUser=async()=>{
     if(delBusy) return
     const nick=delNick.trim()
     if(!nick){ toast(t('admin_del_user_ph'),'error'); return }
+    if(delFound===null){ toast(t('del_user_notfound'),'error'); return }
     if(!confirm(t('admin_del_user_confirm').replace('{nick}',nick))) return
     setDelBusy(true)
     try{
       await client.post('/auth/delete-user/',{username:nick})
       toast(t('admin_del_user_done'),'success')
       setDelNick('')
+      setUsersList(prev=> prev? prev.filter((x:any)=>x.username.toLowerCase()!==nick.toLowerCase()) : prev)
     }catch(e:any){
       toast(e?.response?.data?.error||e?.response?.data?.detail||t('error'),'error')
     }
@@ -255,7 +268,7 @@ export default function Profile(){
       {isAdmin && (
         <div className="bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border p-5">
           <h2 className="font-bold flex items-center gap-2 dark:text-white"><UserPlus size={18} className="text-indigo-600"/>{t('assistants_title')}</h2>
-          <p className="text-xs text-slate-500 mt-1">{t('assistants_hint')}</p>
+          <p className="text-xs text-slate-500 mt-1">{asstRole==='teacher'? t('assistants_hint_teacher') : t('assistants_hint')}</p>
           <div className="mt-3">
             <div className="text-xs font-semibold text-slate-500 mb-1">{t('assistant_role_label')}</div>
             <div className="flex gap-2 flex-wrap">
@@ -264,15 +277,28 @@ export default function Profile(){
             </div>
           </div>
           <div className="flex flex-wrap gap-2 mt-3">
-            <input value={asst.username} onChange={e=>setAsst({...asst,username:e.target.value})} placeholder={t('assistant_username_ph')} className="flex-1 min-w-[140px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+            <input value={asst.username} onChange={e=>setAsst({...asst,username:e.target.value})} placeholder={asstRole==='teacher'? t('assistant_username_teacher_ph') : t('assistant_username_ph')} className="flex-1 min-w-[140px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
             <input value={asst.first_name} onChange={e=>setAsst({...asst,first_name:e.target.value})} placeholder={t('assistant_name_ph')} className="flex-1 min-w-[140px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
             <input type="password" value={asst.password} onChange={e=>setAsst({...asst,password:e.target.value})} placeholder={t('assistant_pass_ph')} className="flex-1 min-w-[160px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
-            <button onClick={createAssistant} disabled={asstBusy} className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-50">{asstBusy?'...':t('assistant_create')}</button>
+            <button onClick={createAssistant} disabled={asstBusy} className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-50">{asstBusy?'...':(asstRole==='teacher'? t('assistant_create_teacher') : t('assistant_create'))}</button>
           </div>
           <div className="mt-5 pt-4 border-t dark:border-slate-800">
             <h3 className="font-bold text-sm flex items-center gap-2 dark:text-white"><Trash2 size={15} className="text-red-600"/>{t('admin_del_user_t')}</h3>
             <div className="flex flex-wrap gap-2 mt-2">
-              <input value={delNick} onChange={e=>setDelNick(e.target.value)} placeholder={t('admin_del_user_ph')} className="flex-1 min-w-[160px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+              <div className="flex-1 min-w-[160px]">
+                <input value={delNick} onChange={e=>setDelNick(e.target.value)} placeholder={t('admin_del_user_ph')} className="w-full px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+                {delNick.trim().length>=2 && delFound!==undefined && (
+                  delFound ? (
+                    <div className="text-xs mt-1.5 flex items-center gap-1.5 flex-wrap" data-testid="del-user-found">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1"><Check size={13}/>{t('del_user_found')}: <b className="dark:text-white">{delFound.username}</b></span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">{t(ROLE_LABEL[delFound.role]||'admin_role')}</span>
+                      {(delFound.role==='admin') && <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1"><Shield size={12}/>{t('del_user_staff_warn')}</span>}
+                    </div>
+                  ) : (
+                    <div className="text-xs mt-1.5 text-red-600 dark:text-red-400 font-semibold flex items-center gap-1" data-testid="del-user-notfound"><XIcon size={13}/>{t('del_user_notfound')}</div>
+                  )
+                )}
+              </div>
               <button onClick={deleteUser} disabled={delBusy||!delNick.trim()} className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-1"><Trash2 size={14}/>{delBusy?'...':t('admin_del_user_btn')}</button>
             </div>
           </div>
