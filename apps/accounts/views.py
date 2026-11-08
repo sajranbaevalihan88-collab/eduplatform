@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
+from django.conf import settings
 from .serializers import RegisterSerializer, UserSerializer, MeUpdateSerializer
 from .permissions import IsAdmin
 
@@ -69,6 +70,9 @@ class ThrottledTokenObtainPairView(TokenObtainPairView):
 
 class PasswordChangeThrottle(throttling.UserRateThrottle):
     scope = 'password_change'
+
+class AnonRateThrottleBootstrap(throttling.AnonRateThrottle):
+    scope = 'anon'
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
@@ -172,6 +176,43 @@ def create_assistant_view(request):
     role = 'admin' if kind == 'assistant' else 'teacher'
     u = User.objects.create_user(username=username, password=password, role=role, first_name=first_name)
     return Response({'status': 'ok', 'user': UserSerializer(u).data}, status=status.HTTP_201_CREATED)
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([AnonRateThrottleBootstrap])
+def bootstrap_admin_view(request):
+    """Одноразовый bootstrap для прод-базы (где ещё нет ни одного админа).
+    Активен ТОЛЬКО если в env задан BOOTSTRAP_ADMIN_KEY — без ключа отвечает 403.
+    {key, username, password?}:
+      username существует → повышает до admin+staff+superuser (пароль не трогаем, если не передан)
+      username нет        → создаёт суперпользователя с переданным паролем (мин 8)
+      username пуст       → {users:[...]} — список ников и ролей (чтобы найти свой аккаунт)"""
+    from rest_framework import status as _st
+    expected = getattr(settings, 'BOOTSTRAP_ADMIN_KEY', '')
+    key = request.data.get('key') or ''
+    if not expected or not key or key != expected:
+        return Response({'error': 'bootstrap disabled'}, status=_st.HTTP_403_FORBIDDEN)
+    username = (request.data.get('username') or '').strip()
+    password = request.data.get('password') or ''
+    if not username:
+        return Response({'users': [{'username': u.username, 'role': u.role, 'staff': u.is_staff} for u in User.objects.all().order_by('id')]})
+    if len(username) < 3:
+        return Response({'error': 'username минимум 3 символа'}, status=_st.HTTP_400_BAD_REQUEST)
+    u = User.objects.filter(username__iexact=username).first()
+    if u:
+        u.role = 'admin'
+        u.is_staff = True
+        u.is_superuser = True
+        if password:
+            u.set_password(password)
+        u.save()
+        action = 'promoted'
+    else:
+        if len(password) < 8:
+            return Response({'error': 'Пароль минимум 8 символов (создаётся новый аккаунт)'}, status=_st.HTTP_400_BAD_REQUEST)
+        u = User.objects.create_superuser(username=username, email='', password=password, role='admin')
+        action = 'created'
+    return Response({'status': 'ok', 'action': action, 'user': UserSerializer(u).data})
 
 @api_view(['POST'])
 @permission_classes([IsAdmin])

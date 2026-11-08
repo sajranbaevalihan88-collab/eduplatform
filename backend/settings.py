@@ -366,3 +366,8 @@ CODE_USE_DOCKER = os.environ.get('CODE_USE_DOCKER', 'False') == 'True'
 # Без ключа generate честно падает на офлайн-генератор и отвечает source='offline'.
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
+
+# Bootstrap первого админа на прод-базе: пока env BOOTSTRAP_ADMIN_KEY пуст — эндпоинт мёртв (403).
+# Задать ключ → POST /api/auth/bootstrap-admin/ {key, username, password?} → повысить/создать админа
+# → УДАЛИТЬ переменную из env, чтобы эндпоинт навсегда отключился.
+BOOTSTRAP_ADMIN_KEY = os.environ.get('BOOTSTRAP_ADMIN_KEY', '')
