@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import client from '../api/client'
-import { User, Mail, Shield, BookOpen, Layers, Presentation, FlaskConical, LogOut, Trash2, Eye, Edit, Search, Filter, Gamepad2, Play, StickyNote, UserPlus } from 'lucide-react'
+import { User, Mail, Shield, BookOpen, Layers, Presentation, FlaskConical, LogOut, Trash2, Eye, EyeOff, Edit, Search, Filter, Gamepad2, Play, StickyNote, UserPlus } from 'lucide-react'
 import { useNavigate, Link } from 'react-router-dom'
 import { toast } from '../context/UIContext'
 import Notes from './Notes'
@@ -145,6 +145,14 @@ export default function Profile(){
 
   // Смена пароля: /auth/change-password/ (старый, новый, повтор) — на ответе обновляем JWT
   const [pw,setPw]=useState({old:'',n1:'',n2:''})
+  const [pwShow,setPwShow]=useState(false)
+  const pwInputType=pwShow?'text':'password'
+  const pwEyeBtn=(showLabel:boolean)=>{
+    return <button type="button" onClick={()=>setPwShow(v=>!v)} aria-label={showLabel ? t('login_hide_pass') : t('login_show_pass')} aria-pressed={showLabel}
+      className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2.5 min-w-[36px] min-h-[36px] rounded-lg text-slate-500 hover:bg-slate-200/70 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 flex items-center justify-center">
+      {showLabel ? <EyeOff size={18}/> : <Eye size={18}/>}
+    </button>
+  }
   const [pwBusy,setPwBusy]=useState(false)
   const [pwError,setPwError]=useState<string|null>(null)
   const [pwOpen,setPwOpen]=useState(false)
@@ -303,9 +311,18 @@ export default function Profile(){
         ) : (
           <div className="mt-4 space-y-3">
             {pwError && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">⚠ {pwError}</div>}
-            <input autoFocus type="password" autoComplete="current-password" placeholder={t('profile_old_pw')} value={pw.old} onChange={e=>setPw({...pw,old:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
-            <input type="password" autoComplete="new-password" placeholder={t('profile_new_pw')} value={pw.n1} onChange={e=>setPw({...pw,n1:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
-            <input type="password" autoComplete="new-password" placeholder={t('profile_new_pw2')} value={pw.n2} onChange={e=>setPw({...pw,n2:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
+            <div className="relative">
+              <input autoFocus type={pwInputType} autoComplete="current-password" placeholder={t('profile_old_pw')} value={pw.old} onChange={e=>setPw({...pw,old:e.target.value})} className="w-full px-4 py-2.5 pr-11 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
+              {pwEyeBtn(pwShow)}
+            </div>
+            <div className="relative">
+              <input type={pwInputType} autoComplete="new-password" placeholder={t('profile_new_pw')} value={pw.n1} onChange={e=>setPw({...pw,n1:e.target.value})} className="w-full px-4 py-2.5 pr-11 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
+              {pwEyeBtn(pwShow)}
+            </div>
+            <div className="relative">
+              <input type={pwInputType} autoComplete="new-password" placeholder={t('profile_new_pw2')} value={pw.n2} onChange={e=>setPw({...pw,n2:e.target.value})} className="w-full px-4 py-2.5 pr-11 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
+              {pwEyeBtn(pwShow)}
+            </div>
             <button onClick={changePassword} disabled={pwBusy||!pw.old||!pw.n1} className="w-full py-2.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:opacity-50">{pwBusy?'...':t('profile_pw_save')}</button>
           </div>
         )}
