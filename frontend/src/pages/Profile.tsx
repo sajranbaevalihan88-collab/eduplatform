@@ -13,7 +13,7 @@ export default function Profile(){
   const [me,setMe]=useState<any>(null)
   const [stats,setStats]=useState({lessons:0,pres:0,tests:0})
   const [edit,setEdit]=useState(false)
-  const [form,setForm]=useState({first_name:'',last_name:'',bio:'',email:''})
+  const [form,setForm]=useState({username:'',first_name:'',last_name:'',bio:'',email:''})
   const [myLessons,setMyLessons]=useState<any[]>([])
   const [myPres,setMyPres]=useState<any[]>([])
   const [myPresDrafts,setMyPresDrafts]=useState<any[]>([])
@@ -51,7 +51,7 @@ export default function Profile(){
   const load=()=>{
     client.get('/auth/me/').then(r=>{
       setMe(r.data)
-      setForm({first_name:r.data.first_name||'',last_name:r.data.last_name||'',bio:r.data.bio||'',email:r.data.email||''})
+      setForm({username:r.data.username||'',first_name:r.data.first_name||'',last_name:r.data.last_name||'',bio:r.data.bio||'',email:r.data.email||''})
       // load subjects for filter
       client.get('/subjects/').then(rr=>{
         const arr=Array.isArray(rr.data)?rr.data: rr.data.results||[]
@@ -137,9 +137,33 @@ export default function Profile(){
       setEdit(false)
       load()
     }catch(e:any){
-      const msg=e?.response?.data?.email?.[0] || e?.response?.data?.detail || JSON.stringify(e?.response?.data) || t('prof_save_err')
+      const d=e?.response?.data||{}
+      const msg=d.username?.[0] || d.email?.[0] || d.detail || JSON.stringify(d) || t('prof_save_err')
       setSaveError(msg)
     }
+  }
+
+  // Смена пароля: /auth/change-password/ (старый, новый, повтор) — на ответе обновляем JWT
+  const [pw,setPw]=useState({old:'',n1:'',n2:''})
+  const [pwBusy,setPwBusy]=useState(false)
+  const [pwError,setPwError]=useState<string|null>(null)
+  const [pwOpen,setPwOpen]=useState(false)
+  const changePassword=async()=>{
+    setPwError(null)
+    if(pw.n1!==pw.n2){ setPwError(t('profile_pw_mismatch')); return }
+    setPwBusy(true)
+    try{
+      const r=await client.post('/auth/change-password/',{old_password:pw.old,new_password:pw.n1})
+      if(r.data?.access) localStorage.setItem('access', r.data.access)
+      if(r.data?.refresh) localStorage.setItem('refresh', r.data.refresh)
+      setPw({old:'',n1:'',n2:''})
+      setPwOpen(false)
+      toast(t('profile_pw_changed'),'success')
+    }catch(e:any){
+      const d=e?.response?.data||{}
+      setPwError(d.error || d.new_password?.[0] || d.detail || JSON.stringify(d) || t('error'))
+    }
+    setPwBusy(false)
   }
 
   const logout=()=>{
@@ -252,7 +276,11 @@ export default function Profile(){
         ) : (
           <div className="mt-4 space-y-3">
             {saveError && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">⚠ {saveError}</div>}
-            <input autoFocus placeholder="Email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
+            <div>
+              <input autoFocus placeholder={t('profile_username_ph')} value={form.username} onChange={e=>setForm({...form,username:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
+              <div className="text-xs text-slate-500 mt-1">{t('profile_username_hint')}</div>
+            </div>
+            <input placeholder="Email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
             <div className="grid grid-cols-2 gap-3">
               <input placeholder={t('prof_ph_name')} value={form.first_name} onChange={e=>setForm({...form,first_name:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
               <input placeholder={t('prof_ph_surname')} value={form.last_name} onChange={e=>setForm({...form,last_name:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
@@ -260,6 +288,25 @@ export default function Profile(){
             <textarea placeholder={t('prof_ph_about')} value={form.bio} onChange={e=>setForm({...form,bio:e.target.value})} rows={3} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
             <button onClick={save} className="w-full py-2.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-600">{t('save')}</button>
             <div className="text-xs text-slate-500 text-center">{t('prof_role_hint')}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Настройки аккаунта: смена пароля */}
+      <div className="bg-white rounded-2xl border p-6">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-lg flex items-center gap-2"><Shield size={18}/> {t('profile_password_t')}</h3>
+          <button onClick={()=>{setPwOpen(!pwOpen); setPwError(null)}} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">{pwOpen?t('cancel'):t('profile_pw_change')}</button>
+        </div>
+        {!pwOpen ? (
+          <p className="mt-3 text-sm text-slate-500">{t('profile_password_hint')}</p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {pwError && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">⚠ {pwError}</div>}
+            <input autoFocus type="password" autoComplete="current-password" placeholder={t('profile_old_pw')} value={pw.old} onChange={e=>setPw({...pw,old:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
+            <input type="password" autoComplete="new-password" placeholder={t('profile_new_pw')} value={pw.n1} onChange={e=>setPw({...pw,n1:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
+            <input type="password" autoComplete="new-password" placeholder={t('profile_new_pw2')} value={pw.n2} onChange={e=>setPw({...pw,n2:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none"/>
+            <button onClick={changePassword} disabled={pwBusy||!pw.old||!pw.n1} className="w-full py-2.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:opacity-50">{pwBusy?'...':t('profile_pw_save')}</button>
           </div>
         )}
       </div>

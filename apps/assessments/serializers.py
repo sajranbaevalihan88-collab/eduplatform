@@ -76,8 +76,11 @@ class TestSerializer(serializers.ModelSerializer):
         return _validate_lesson_owner(self, value)
     class Meta:
         model = Test
-        fields = ['id','title','description','subject','pass_score','time_limit','time_per_question','is_public','is_lesson_private','lesson','owner','questions','questions_count','created_at','updated_at']
+        fields = ['id','title','description','subject','subject_name','subject_slug','pass_score','time_limit','time_per_question','is_public','is_lesson_private','lesson','owner','questions','questions_count','created_at','updated_at']
         read_only_fields = ['id','created_at','updated_at','owner']
+
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
+    subject_slug = serializers.CharField(source='subject.slug', read_only=True)
 
 class TestPublicSerializer(serializers.ModelSerializer):
     questions = QuestionPublicSerializer(many=True, read_only=True)
@@ -85,8 +88,11 @@ class TestPublicSerializer(serializers.ModelSerializer):
     lesson = _lesson_field()
     class Meta:
         model = Test
-        fields = ['id','title','description','subject','pass_score','time_limit','time_per_question','is_public','is_lesson_private','lesson','owner','questions','questions_count','created_at','updated_at']
+        fields = ['id','title','description','subject','subject_name','subject_slug','pass_score','time_limit','time_per_question','is_public','is_lesson_private','lesson','owner','questions','questions_count','created_at','updated_at']
         read_only_fields = ['id','created_at','updated_at','owner']
+
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
+    subject_slug = serializers.CharField(source='subject.slug', read_only=True)
 
 class TestDetailSerializer(serializers.ModelSerializer):
     questions = QuestionSerializer(many=True)

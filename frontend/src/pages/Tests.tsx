@@ -12,7 +12,7 @@ export default function Tests(){
   const [q,setQ]=useState('')
   const [me,setMe]=useState<any>(null)
   useEffect(()=>{
-    client.get('/tests/?is_public=true').then(r=>setList(Array.isArray(r.data)?r.data:r.data.results||[]))
+    client.get('/tests/').then(r=>setList(Array.isArray(r.data)?r.data:r.data.results||[]))
     const raw=localStorage.getItem('user'); if(raw) try{ setMe(JSON.parse(raw)) }catch{}
     const h=()=>{ const r=localStorage.getItem('user'); if(r) try{ setMe(JSON.parse(r)) }catch{} else setMe(null) }
     window.addEventListener('auth-change', h as any); window.addEventListener('storage', h)
@@ -42,6 +42,12 @@ export default function Tests(){
             </div>
             <h3 className="font-bold mt-3">{item.title}</h3>
             <p className="text-sm text-slate-500 line-clamp-2">{item.description||t('tests_no_desc')}</p>
+            <div className="flex flex-wrap items-center gap-1.5 text-xs mt-2">
+              {item.is_public
+                ? <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold">{t('tests_public')}</span>
+                : <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-semibold">{t('tests_private')}</span>}
+              {item.subject_name && <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold">{item.subject_name}</span>}
+            </div>
             <div className="flex gap-2 text-xs mt-3 text-slate-500"><span className="flex items-center gap-1"><Target size={12}/> {t('tests_pass')} {item.pass_score}%</span><span className="flex items-center gap-1"><Clock size={12}/> {item.time_limit||t('tests_no_limit')} {t('tests_min')}</span></div>
             <div className="flex gap-2 mt-4">
               <Link to={`/tests/${item.id}/take`} onClick={()=>requestGuardFullscreen()} className="flex-1 px-3 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 text-white text-sm font-semibold text-center flex items-center justify-center">{t('tests_take')}</Link>

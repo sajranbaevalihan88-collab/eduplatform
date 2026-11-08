@@ -70,7 +70,7 @@ export default function Subjects(){
               </div>
               <h3 className="font-bold text-lg mt-3 group-hover:text-indigo-600 transition">{s.name}</h3>
               <p className="text-sm text-slate-500 line-clamp-2">{s.description||t('subj_no_desc')}</p>
-              <div className="mt-3 flex items-center justify-between text-xs text-slate-400"><span>{s.courses?.length||0} {t('subj_courses')}</span><span className="text-indigo-600 font-medium opacity-0 group-hover:opacity-100 transition">{t('subj_go')}</span></div>
+              <div className="mt-3 flex items-center text-xs text-indigo-600 font-medium opacity-0 group-hover:opacity-100 transition">{t('subj_go')}</div>
             </div>
           </Link>
         ))}

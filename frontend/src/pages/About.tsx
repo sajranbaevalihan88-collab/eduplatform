@@ -1,5 +1,4 @@
-import { Link } from 'react-router-dom'
-import { Heart, Monitor, Zap, Layers, Check, Minus, X, ArrowRight, Sparkles } from 'lucide-react'
+import { Heart, Layers, Check, Minus, X, Sparkles } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 
 const DICT: Record<string, Record<string, string>> = {
@@ -21,11 +20,6 @@ const DICT: Record<string, Record<string, string>> = {
     ab_table_t: 'Чем отличаемся',
     ab_table_sub: 'Честное сравнение с известными платформами',
     ab_yes: 'Да', ab_part: 'Частично', ab_no: 'Нет',
-    ab_cta_t: 'Попробуйте сами — без регистрации',
-    ab_cta_sub: 'Демо-вход: логин demo, пароль demo1234. Или смотрите уроки гостем.',
-    ab_cta_btn: 'Открыть уроки',
-    ab_demo_btn: 'Войти как demo',
-    ab_made: 'Сделано школьником для учителей — к StudEXPO 2026',
   },
   en: {
     ab_title: 'About the platform',
@@ -45,11 +39,6 @@ const DICT: Record<string, Record<string, string>> = {
     ab_table_t: 'How we differ',
     ab_table_sub: 'An honest comparison with well-known platforms',
     ab_yes: 'Yes', ab_part: 'Partial', ab_no: 'No',
-    ab_cta_t: 'Try it yourself — no registration',
-    ab_cta_sub: 'Demo login: demo / demo1234. Or browse lessons as a guest.',
-    ab_cta_btn: 'Open lessons',
-    ab_demo_btn: 'Sign in as demo',
-    ab_made: 'Built by a student for teachers — for StudEXPO 2026',
   },
   kg: {
     ab_title: 'Platforma жөнүндө',
@@ -69,11 +58,6 @@ const DICT: Record<string, Record<string, string>> = {
     ab_table_t: 'Эмнеси менен айырмаланабыз',
     ab_table_sub: 'Белгилүү платформалар менен түз салыштыруу',
     ab_yes: 'Ооба', ab_part: 'Тартыш', ab_no: 'Жок',
-    ab_cta_t: 'Өзүңүз сынап көрүңүз — катталбай',
-    ab_cta_sub: 'Демо-кирүү: demo / demo1234. Же конок катары сабактарды көрүңүз.',
-    ab_cta_btn: 'Сабактарды ачуу',
-    ab_demo_btn: 'demo катары кирүү',
-    ab_made: 'Мугалимдер үчүн мектеп окуучусу жасаган — StudEXPO 2026',
   },
 }
 
@@ -167,16 +151,6 @@ export default function About() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 p-6 sm:p-8 text-center">
-        <h2 className="font-display font-bold text-2xl dark:text-white">{L.ab_cta_t}</h2>
-        <p className="text-slate-500 dark:text-slate-400 mt-2 text-sm">{L.ab_cta_sub}</p>
-        <div className="flex flex-wrap justify-center gap-3 mt-5">
-          <Link to="/lessons" className="px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg btn-hover inline-flex items-center gap-2">{L.ab_cta_btn} <ArrowRight size={16}/></Link>
-          <Link to="/login" className="px-5 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 dark:text-white font-bold btn-hover">{L.ab_demo_btn}</Link>
-        </div>
-        <div className="mt-6 text-xs text-slate-400 flex items-center justify-center gap-1.5"><Zap size={12}/> {L.ab_made}</div>
-      </section>
       <div className="text-center pb-4">
         <span className="text-xs text-slate-400 inline-flex items-center gap-1"><Layers size={12}/> {t('tagline')}</span>
       </div>

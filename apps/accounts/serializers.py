@@ -13,9 +13,27 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'role', 'username', 'is_staff']
 
 class MeUpdateSerializer(serializers.ModelSerializer):
+    # ник можно менять, но со всеми проверками как при регистрации
+    username = serializers.CharField(
+        min_length=3,
+        validators=[UniqueValidator(User.objects.all(), message='Этот ник уже занят — придумай другой')]
+    )
     class Meta:
         model = User
-        fields = ['email', 'first_name', 'last_name', 'bio']
+        fields = ['username', 'email', 'first_name', 'last_name', 'bio']
+
+    def validate_username(self, value):
+        value = value.strip()
+        if ' ' in value:
+            raise serializers.ValidationError('Ник без пробелов')
+        if len(value) < 3:
+            raise serializers.ValidationError('Ник минимум 3 символа')
+        # свой прежний ник не считается «занятым»
+        if self.instance and self.instance.username.lower() == value.lower():
+            return value
+        if User.objects.filter(username__iexact=value).exclude(pk=self.instance.pk).exists():
+            raise serializers.ValidationError('Этот ник уже занят — придумай другой')
+        return value
 
 
 class RegisterSerializer(serializers.ModelSerializer):

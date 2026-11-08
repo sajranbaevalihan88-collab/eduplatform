@@ -64,6 +64,28 @@ def logout_view(request):
         return Response({'error': 'Не удалось выйти'}, status=400)
 
 @api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def change_password_view(request):
+    """Смена своего пароля: {old_password, new_password}."""
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as _VE
+    old = request.data.get('old_password') or ''
+    new = request.data.get('new_password') or ''
+    user = request.user
+    if not user.check_password(old):
+        return Response({'error': 'Текущий пароль неверный'}, status=status.HTTP_400_BAD_REQUEST)
+    if old == new:
+        return Response({'error': 'Новый пароль совпадает с текущим'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        validate_password(new, user=user)
+    except _VE as e:
+        return Response({'error': ' '.join(getattr(e, 'messages', [str(e)]))}, status=status.HTTP_400_BAD_REQUEST)
+    user.set_password(new)
+    user.save()
+    refresh = RefreshToken.for_user(user)
+    return Response({'status': 'ok', 'access': str(refresh.access_token), 'refresh': str(refresh)})
+
+@api_view(['POST'])
 @permission_classes([IsAdmin])
 def create_assistant_view(request):
     """Создание аккаунта помощника администратором (role=teacher).
