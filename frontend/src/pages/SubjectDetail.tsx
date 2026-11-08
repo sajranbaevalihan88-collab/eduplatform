@@ -34,8 +34,11 @@ export default function SubjectDetail(){
       const arr=Array.isArray(r.data)?r.data:r.data.results||[]
       setSubject(arr.find((s:any)=>String(s.slug)===String(slug))||null)
     }).catch(()=>{})
-    const raw=localStorage.getItem('user')
-    if(raw) try{ setMe(JSON.parse(raw)) }catch{}
+    // свежий профиль с сервера (localStorage может быть протухшим после смены роли)
+    client.get('/auth/me/').then(r=>setMe(r.data)).catch(()=>{
+      const raw=localStorage.getItem('user')
+      if(raw) try{ setMe(JSON.parse(raw)) }catch{}
+    })
   },[slug])
 
   useEffect(()=>{

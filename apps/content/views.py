@@ -79,7 +79,21 @@ def media_uploads(request, name=''):
     uf = UploadedFile.objects.filter(file='uploads/' + safe).select_related('owner').first()
     if uf is None:
         raise Http404()
-    user = request.user if request.user.is_authenticated else AnonymousUser()
+    user = request.user
+    if not user.is_authenticated:
+        # Обычная функция не читает Bearer (DRF-JWT не применяется) — поподтянем юзера
+        # вручную, иначе приватные книги не открываются даже владельцу/админу.
+        try:
+            from rest_framework_simplejwt.authentication import JWTAuthentication
+            from rest_framework.exceptions import AuthenticationFailed
+            try:
+                result = JWTAuthentication().authenticate(request)
+            except AuthenticationFailed:
+                result = None
+            if result and result[0].is_authenticated:
+                user = result[0]
+        except Exception:
+            pass
     is_admin = user.is_authenticated and (user.is_staff or getattr(user, 'role', None) == 'admin')
     if not uf.is_public and not is_admin and (not user.is_authenticated or uf.owner_id != user.id):
         raise Http404()
@@ -92,7 +106,20 @@ def media_uploads(request, name=''):
         if os.path.isfile(disk_path):
             resp = FileResponse(open(disk_path, 'rb'), content_type=ctype)
         else:
-            resp = FileResponse(uf.file.open('rb'), content_type=ctype)
+            # диск пуст (эфемерный на Render free) → восстановить из MediaBlob
+            blob = MediaBlob.objects.filter(key='uploads/' + safe).first()
+            if blob and blob.data:
+                try:
+                    os.makedirs(os.path.dirname(disk_path), exist_ok=True)
+                    with open(disk_path, 'wb') as fh:
+                        fh.write(bytes(blob.data))
+                except Exception:
+                    pass
+                resp = FileResponse(open(disk_path, 'rb'), content_type=ctype)
+            else:
+                raise Http404()
+    except Http404:
+        raise
     except Exception:
         raise Http404()
     resp['X-Content-Type-Options'] = 'nosniff'
@@ -164,7 +191,19 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied('Книги добавляет только администратор')
         mime = file_obj.content_type if file_obj else ''
-        serializer.save(owner=self.request.user if self.request.user.is_authenticated else None, title=title, mime_type=mime)
+        instance = serializer.save(owner=self.request.user if self.request.user.is_authenticated else None, title=title, mime_type=mime)
+        # Копия байтов в MediaBlob: на Render free диск эфемерный — файл должен пережить редеплой
+        try:
+            if instance.file:
+                with instance.file.open('rb') as fh:
+                    data = fh.read()
+                if data:
+                    # ключ == file.name (например uploads/34/xxx.pdf) — ровно то, что ищет media_uploads
+                    store_media_blob(instance.file.name, data)
+                instance.file.close()
+        except Exception:
+            pass
+        return instance
 
     def perform_destroy(self, instance):
         is_admin = self.request.user.is_staff or getattr(self.request.user, 'role', None) == 'admin'
