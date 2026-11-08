@@ -24,6 +24,8 @@ export default function SubjectDetail(){
   const [bookObjUrl,setBookObjUrl]=useState('')
   const [bookLoading,setBookLoading]=useState(false)
   const [bookErr,setBookErr]=useState('')
+  const [pendingBook,setPendingBook]=useState<File|null>(null)
+  const [bookTitle,setBookTitle]=useState('')
   const fileRef=useRef<HTMLInputElement>(null)
 
   useEffect(()=>{
@@ -120,16 +122,19 @@ export default function SubjectDetail(){
     setUploading(false)
   }
 
-  const uploadBook=async(file:File)=>{
+  const uploadBook=async(title:string)=>{
+    if(!pendingBook) return
+    const file=pendingBook
     setUploading(true)
     try{
       const fd=new FormData()
       fd.append('file',file)
-      fd.append('title',file.name.replace(/\.[^/.]+$/,''))
+      fd.append('title',(title||file.name.replace(/\.[^/.]+$/,'')).trim())
       if(subject?.id) fd.append('subject',String(subject.id))
       fd.append('is_public','true')
       await client.post('/files/', fd, {headers:{'Content-Type':'multipart/form-data'}})
       toast(t('books_uploaded'),'success')
+      setPendingBook(null); setBookTitle('')
       loadBooks()
     }catch(e:any){
       toast(e?.response?.data?.detail||e?.response?.data?.error||t('pres_import_err'),'error')
@@ -167,7 +172,7 @@ export default function SubjectDetail(){
           </h1>
           {subject?.description && <p className="text-sm text-slate-500 mt-2">{subject.description}</p>}
         </div>
-        <div className="flex border-t dark:border-slate-800 overflow-x-auto">
+        <div className="flex border-t dark:border-slate-800 overflow-x-auto tab-scroll">
           {tabs.map(x=>(
             <button key={x.key} onClick={()=>setTab(x.key)}
               className={`px-4 py-3 text-sm font-semibold flex items-center gap-2 whitespace-nowrap border-b-2 transition ${tab===x.key?'border-indigo-600 text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20':'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>
@@ -191,7 +196,7 @@ export default function SubjectDetail(){
         {isTeacher && tab==='tests' && <Link to={`/tests/new?subject=${slug}`} className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center gap-2"><Plus size={16}/>{t('create')}</Link>}
         {isAdmin && tab==='books' && <>
           <button onClick={()=>fileRef.current?.click()} disabled={uploading} className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-50"><Upload size={16}/>{uploading?'...':t('subj_upload_book')}</button>
-          <input ref={fileRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f) uploadBook(f); e.target.value=''}}/>
+          <input ref={fileRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f){ setPendingBook(f); setBookTitle(f.name.replace(/\.[^/.]+$/,'')) } e.target.value=''}}/>
         </>}
       </div>
 
@@ -282,6 +287,30 @@ export default function SubjectDetail(){
               </div>
             ))}
             {fb.length===0 && <div className="col-span-full text-center py-10 text-slate-400">{t('subj_empty_books')}</div>}
+          </div>
+        </div>
+      )}
+
+      {pendingBook && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50" onClick={()=>{ if(!uploading){ setPendingBook(null); setBookTitle('') } }}>
+          <div className="bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border shadow-2xl w-full max-w-md p-5 space-y-3" onClick={e=>e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold dark:text-white flex items-center gap-2"><BookOpen size={18}/> {t('books_upload_title')}</h2>
+              <button onClick={()=>{ if(!uploading){ setPendingBook(null); setBookTitle('') } }} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-white" aria-label={t('close')}><X size={18}/></button>
+            </div>
+            <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 min-w-0">
+              <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 font-semibold uppercase shrink-0">{pendingBook.name.endsWith('.pdf')?'PDF':'Word'}</span>
+              <span className="truncate">{pendingBook.name}</span>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">{t('books_title_label')}</label>
+              <input autoFocus value={bookTitle} onChange={e=>setBookTitle(e.target.value)} placeholder={t('books_title_ph')}
+                className="w-full px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm" onKeyDown={e=>{ if(e.key==='Enter' && bookTitle.trim()) uploadBook(bookTitle) }}/>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={()=>{ if(!uploading){ setPendingBook(null); setBookTitle('') } }} disabled={uploading} className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm font-semibold disabled:opacity-50">{t('close')}</button>
+              <button onClick={()=>uploadBook(bookTitle)} disabled={uploading||!bookTitle.trim()} className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-50"><Upload size={15}/>{uploading?'...':t('subj_upload_book')}</button>
+            </div>
           </div>
         </div>
       )}
