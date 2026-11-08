@@ -6,6 +6,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.conf import settings
 from .serializers import RegisterSerializer, UserSerializer, MeUpdateSerializer
 from .permissions import IsAdmin
+from .models import ParentLink
 
 User = get_user_model()
 
@@ -216,6 +217,33 @@ def bootstrap_admin_view(request):
 
 @api_view(['POST'])
 @permission_classes([IsAdmin])
+def set_user_password_view(request):
+    """Админ задаёт новый пароль пользователю. Смотреть чужой пароль нельзя
+    в принципе (хранится хешем) — можно только заменить."""
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as _VE
+    username = (request.data.get('username') or '').strip()
+    new = request.data.get('new_password') or ''
+    u = User.objects.filter(username__iexact=username).first()
+    if not u:
+        return Response({'error': 'Пользователь с таким ником не найден'}, status=status.HTTP_404_NOT_FOUND)
+    # сотрудники — только для суперпользователя (как при удалении)
+    if (u.is_staff or u.role == 'admin' or u.is_superuser) and not request.user.is_superuser:
+        return Response({'error': 'Пароль сотрудника может сменить только суперпользователь'}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        validate_password(new, user=u)
+    except _VE as e:
+        return Response({'error': ' '.join(getattr(e, 'messages', [str(e)]))}, status=status.HTTP_400_BAD_REQUEST)
+    u.set_password_with_stamp(new)
+    u.save()
+    # старые refresh-токены пользователя умирают — сессия на всех устройствах закрывается
+    from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+    for t in OutstandingToken.objects.filter(user=u):
+        BlacklistedToken.objects.get_or_create(token=t)
+    return Response({'status': 'ok', 'username': u.username})
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
 def delete_user_view(request):
     """Удаление аккаунта по нику (только админ). Нельзя удалить себя и суперпользователя."""
     username = (request.data.get('username') or '').strip()
@@ -234,6 +262,103 @@ def delete_user_view(request):
         return Response({'error': 'Сотрудников может удалить только суперпользователь'}, status=status.HTTP_403_FORBIDDEN)
     u.delete()
     return Response({'status': 'ok', 'deleted': username})
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def list_children_view(request):
+    """Родитель: список его детей + краткая успеваемость (средний балл, классы).
+    GET /api/auth/children/ -> [{id, username, first_name, classes:[{title,color,avg,graded,total}], avg, graded, total}]"""
+    u = request.user
+    if u.role != 'parent' and not ParentLink.objects.filter(parent=u).exists():
+        return Response({'error': 'Только для родительского аккаунта'}, status=status.HTTP_403_FORBIDDEN)
+    children = [l.student for l in ParentLink.objects.filter(parent=u).select_related('student').order_by('id')]
+    from apps.classroom.models import Submission, Enrollment
+    out = []
+    for ch in children:
+        subs = Submission.objects.filter(
+            student=ch, status__in=['submitted', 'late'],
+            assignment__kind__isnull=False,
+        ).select_related('assignment__classroom')
+        classes_meta = {}
+        scores = []
+        total = 0
+        for s in subs:
+            room = s.assignment.classroom
+            if room.is_paid and room.owner_id != ch.id:
+                e = Enrollment.objects.filter(classroom=room, student=ch).only('access_granted').first()
+                if not e or not e.access_granted:
+                    continue  # платный класс без доступа — прячем (согласовано с my_diary)
+            total += 1
+            c = classes_meta.setdefault(room.id, {'title': room.title, 'color': room.color, 'scores': [], 'total': 0})
+            c['total'] += 1
+            if s.score is not None:
+                c['scores'].append(s.score)
+                scores.append(s.score)
+        classes = []
+        for cid, c in classes_meta.items():
+            classes.append({'classroom_id': cid, 'title': c['title'], 'color': c['color'],
+                            'avg': round(sum(c['scores'])/len(c['scores']), 1) if c['scores'] else None,
+                            'graded': len(c['scores']), 'total': c['total']})
+        out.append({'id': ch.id, 'username': ch.username, 'first_name': ch.first_name or ch.username,
+                    'total': total, 'graded': len(scores),
+                    'avg': round(sum(scores)/len(scores), 1) if scores else None,
+                    'classes': classes})
+    return Response(out)
+
+@api_view(['GET'])
+@permission_classes([IsAdmin])
+def parents_list_view(request):
+    """Админ: все родители + их дети. GET /api/auth/parents/ -> [{id, username, first_name, children:[{id, username}]}]"""
+    rows = []
+    links = {}
+    for l in ParentLink.objects.select_related('parent', 'student').order_by('id'):
+        links.setdefault(l.parent_id, []).append({'id': l.student_id, 'username': l.student.username})
+    for p in User.objects.filter(role='parent').order_by('id'):
+        rows.append({'id': p.id, 'username': p.username, 'first_name': p.first_name,
+                     'date_joined': p.date_joined, 'children': links.get(p.id, [])})
+    return Response(rows)
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def parents_create_view(request):
+    """Админ создаёт родительский аккаунт: роль жёстко 'parent', ники уникальны."""
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as _VE
+    username = (request.data.get('username') or '').strip()
+    password = request.data.get('password') or ''
+    first_name = (request.data.get('first_name') or '').strip()
+    if len(username) < 3:
+        return Response({'error': 'Ник минимум 3 символа'}, status=status.HTTP_400_BAD_REQUEST)
+    if User.objects.filter(username__iexact=username).exists():
+        return Response({'error': 'Этот ник уже занят — придумай другой'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        validate_password(password)
+    except _VE as e:
+        return Response({'error': ' '.join(getattr(e, 'messages', [str(e)]))}, status=status.HTTP_400_BAD_REQUEST)
+    u = User.objects.create_user(username=username, password=password, role='parent', first_name=first_name)
+    return Response({'status': 'ok', 'user': {'id': u.id, 'username': u.username, 'role': 'parent'}}, status=status.HTTP_201_CREATED)
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def parents_link_view(request):
+    """Админ привязывает/отвязывает ребёнка к родителю.
+    {parent_username, student_username, action: 'link'|'unlink'}"""
+    action = (request.data.get('action') or 'link').strip()
+    parent_un = (request.data.get('parent_username') or '').strip()
+    student_un = (request.data.get('student_username') or '').strip()
+    parent = User.objects.filter(username__iexact=parent_un).first()
+    if not parent or parent.role != 'parent':
+        return Response({'error': 'Родитель с таким ником не найден'}, status=status.HTTP_404_NOT_FOUND)
+    student = User.objects.filter(username__iexact=student_un).first()
+    if not student or student.role != 'student':
+        return Response({'error': 'Ученик с таким ником не найден (привязать можно только аккаунт ученика)'}, status=status.HTTP_404_NOT_FOUND)
+    if action == 'unlink':
+        deleted, _ = ParentLink.objects.filter(parent=parent, student=student).delete()
+        if not deleted:
+            return Response({'error': 'Эта связка и так не существует'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'status': 'ok', 'action': 'unlinked'})
+    link, created = ParentLink.objects.get_or_create(parent=parent, student=student)
+    return Response({'status': 'ok', 'action': 'linked' if created else 'already', 'link_id': link.id})
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])

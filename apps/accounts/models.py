@@ -6,6 +6,7 @@ class User(AbstractUser):
         ('teacher', 'Учитель'),
         ('student', 'Ученик'),
         ('admin', 'Админ'),
+        ('parent', 'Родитель'),
     ]
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='student')
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
@@ -21,3 +22,16 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.username} ({self.get_role_display()})"
+
+class ParentLink(models.Model):
+    """Связка «родитель — ребёнок»: создаёт и управляет только админ.
+    Родитель видит дневник/успеваемость только тех детей, что здесь привязаны."""
+    parent = models.ForeignKey(User, on_delete=models.CASCADE, related_name='parent_links')
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='child_links')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [['parent', 'student']]
+
+    def __str__(self):
+        return f"{self.parent.username} -> {self.student.username}"

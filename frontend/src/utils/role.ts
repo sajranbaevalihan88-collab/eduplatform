@@ -2,7 +2,7 @@
  * Ученик: только открывает (уроки/презентации/тесты/игры/код), Word — можно.
  * Учитель/админ: всё + создание. Гость (без входа): как ученик без личного. */
 
-export type Role = 'teacher' | 'student' | 'admin' | null
+export type Role = 'teacher' | 'student' | 'admin' | 'parent' | null
 
 export function getUser(): any | null {
   try {
@@ -15,7 +15,7 @@ export function getUser(): any | null {
 export function getRole(): Role {
   const u = getUser()
   const r = u?.role
-  if (r === 'student' || r === 'teacher' || r === 'admin') return r
+  if (r === 'student' || r === 'teacher' || r === 'admin' || r === 'parent') return r
   // админы Django без role в профиле
   if (u && (u.is_staff || u.is_superuser)) return 'admin'
   return null
@@ -34,4 +34,9 @@ export function isGuest(): boolean {
 export function canTeach(): boolean {
   const r = getRole()
   return r === 'teacher' || r === 'admin'
+}
+
+// Родитель: доступ как у ученика (смотреть можно, создавать нельзя) + страница детей
+export function isParent(): boolean {
+  return getRole() === 'parent'
 }

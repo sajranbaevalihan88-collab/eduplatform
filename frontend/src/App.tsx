@@ -26,11 +26,11 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 function ErrorFallback(){ return <div className="p-8 text-center"><h2 className="text-xl font-bold">Что-то пошло не так</h2><a href="/" className="text-indigo-600 underline">На главную</a></div> }
 
-// Только для учителей: ученик видит заглушку (создавать нельзя, бэк тоже запретит)
+// Только для учителей: ученик и родитель видят заглушку (создавать нельзя, бэк тоже запретит)
 function TeacherRoute({ children }: { children: React.ReactNode }) {
   const [token] = useState<string|null>(()=>localStorage.getItem('token'))
   if (!token) return <Navigate to="/login" replace />
-  if (getRole() === 'student') return (
+  if (getRole() === 'student' || getRole() === 'parent') return (
     <div className="max-w-xl mx-auto bg-white rounded-2xl border p-8 text-center space-y-3">
       <div className="text-5xl">🔒</div>
       <h2 className="text-xl font-bold">Только для учителей</h2>
@@ -62,6 +62,7 @@ import Tests from './pages/Tests'
 import Classes from './pages/Classes'
 import ClassroomDetail from './pages/ClassroomDetail'
 import Diary from './pages/Diary'
+import Children from './pages/Children'
 import TestBuilder from './pages/TestBuilder'
 import TestTake from './pages/TestTake'
 import Notes from './pages/Notes'
@@ -113,6 +114,8 @@ export default function App() {
                 <Route path="/classes" element={<PrivateRoute><Classes /></PrivateRoute>} />
                 <Route path="/classes/:id" element={<PrivateRoute><ClassroomDetail /></PrivateRoute>} />
                 <Route path="/diary" element={<PrivateRoute><Diary /></PrivateRoute>} />
+
+                <Route path="/children" element={<PrivateRoute><Children /></PrivateRoute>} />
                 <Route path="/code" element={<CodeLab />} />
                 <Route path="/notes" element={<PrivateRoute><Notes /></PrivateRoute>} />
                 <Route path="/word" element={<PrivateRoute><WordEditor /></PrivateRoute>} />

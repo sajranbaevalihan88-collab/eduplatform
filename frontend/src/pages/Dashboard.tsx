@@ -57,6 +57,7 @@ export default function Dashboard(){
       })
     }
   },[])
+  const adminLimited = me?.role === 'admin'
   const cards=[
     {label:t('subjects'),value:stats.subjects,icon:BookOpen,color:'bg-indigo-600',to:'/subjects'},
     {label:t('lessons'),value:stats.lessons,icon:Layers,color:'bg-indigo-600',to:'/lessons'},
@@ -64,7 +65,7 @@ export default function Dashboard(){
     {label:t('tests'),value:stats.tests,icon:FlaskConical,color:'bg-rose-600',to:'/tests'},
     {label:t('classes'),value:stats.classes,icon:GraduationCap,color:'bg-violet-600',to:'/classes'},
     {label:t('dash_boards'),value:stats.boards,icon:Cuboid,color:'bg-emerald-600',to:'/board'},
-  ]
+  ].filter(c=> !adminLimited || ['/subjects','/lessons','/tests'].includes(c.to))
   return (
     <div className="space-y-6 page-enter">
       <div className="rounded-[24px] bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 p-8 text-white relative overflow-hidden">
@@ -74,7 +75,7 @@ export default function Dashboard(){
           <p className="text-white/80 mt-2 max-w-2xl animate-fadeIn" style={{animationDelay:'0.2s'}}>{me ? `${t('dash_role_prefix')} ${me.role} ${t('dash_role_suffix')}` : t('dash_guest')}</p>
           <div className="flex flex-wrap gap-3 mt-6 animate-fadeIn" style={{animationDelay:'0.3s'}}>
             <Link to="/lessons/new" className="px-6 py-3 rounded-xl bg-orange-500 text-white font-semibold flex items-center gap-2 btn-hover shadow-lg hover:bg-orange-400">{t('create_lesson')} <ArrowRight size={18} className="transition-transform group-hover:translate-x-1"/></Link>
-            <Link to="/presentations/new" className="px-5 py-3 rounded-xl bg-white/10 border border-white/20 font-semibold backdrop-blur hover:bg-white/20 transition-all btn-hover">{t('dash_new_pres')}</Link>
+            {me?.role!=='admin' && <Link to="/presentations/new" className="px-5 py-3 rounded-xl bg-white/10 border border-white/20 font-semibold backdrop-blur hover:bg-white/20 transition-all btn-hover">{t('dash_new_pres')}</Link>}
             <Link to="/tests/new" className="px-5 py-3 rounded-xl bg-white/10 border border-white/20 font-semibold backdrop-blur hover:bg-white/20 transition-all btn-hover">{t('dash_new_test')}</Link>
           </div>
         </div>
@@ -118,8 +119,8 @@ export default function Dashboard(){
           <h3 className="font-bold flex items-center gap-2">{t('dash_quick')}</h3>
           <div className="grid grid-cols-2 gap-3 mt-4 stagger">
             <Link to="/lessons/new" className="p-4 rounded-xl bg-indigo-600 text-white text-center font-medium flex flex-col items-center gap-2 shadow-md btn-hover"><Layers size={24}/>{t('dash_new_lesson')}</Link>
-            <Link to="/board" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-indigo-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><PenTool size={24}/>{t('board')}</Link>
-            <Link to="/presentations/new" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-orange-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><Cuboid size={24}/>{t('dash_pres_one')}</Link>
+            {me?.role!=='admin' && <Link to="/board" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-indigo-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><PenTool size={24}/>{t('board')}</Link>}
+            {me?.role!=='admin' && <Link to="/presentations/new" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-orange-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><Cuboid size={24}/>{t('dash_pres_one')}</Link>}
             <Link to="/tests/new" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-rose-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><FlaskConical size={24}/>{t('dash_test_one')}</Link>
           </div>
         </div>

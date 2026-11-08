@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import client from '../api/client'
-import { User, Mail, Shield, BookOpen, Layers, Presentation, FlaskConical, LogOut, Trash2, Eye, EyeOff, Edit, Search, Filter, Gamepad2, Play, StickyNote, UserPlus, Users, Check, X as XIcon } from 'lucide-react'
+import { User, Mail, Shield, BookOpen, Layers, Presentation, FlaskConical, LogOut, Trash2, Eye, EyeOff, Edit, Search, Filter, Gamepad2, Play, StickyNote, UserPlus, Users, Check, X as XIcon, KeyRound } from 'lucide-react'
 import { useNavigate, Link } from 'react-router-dom'
 import { toast } from '../context/UIContext'
 import Notes from './Notes'
@@ -63,12 +63,75 @@ export default function Profile(){
     if(!isAdmin || usersList) return
     client.get('/auth/users/').then(r=>setUsersList(Array.isArray(r.data)?r.data:[])).catch(()=>setUsersList([]))
   },[isAdmin])
-  const usersFiltered=useMemo(()=>{
+  // Админ-панель: вкладки «Аккаунты», «Пользователи», «Родители»
+  const [admTab,setAdmTab]=useState<'create'|'users'|'parents'>('create')
+  // вкладка ролей в списке пользователей
+  const [usersTab,setUsersTab]=useState<'all'|'student'|'teacher'|'admin'|'parent'>('all')
+  // --- Родители: привязка ребёнка ---
+  const [parentsList,setParentsList]=useState<any[]|null>(null)
+  const [parentsOpen,setParentsOpen]=useState(false)
+  const [linkParent,setLinkParent]=useState('')
+  const [linkStudent,setLinkStudent]=useState('')
+  const [linkBusy,setLinkBusy]=useState(false)
+  const loadParents=()=>{
+    client.get('/auth/parents/').then(r=>setParentsList(Array.isArray(r.data)?r.data:[])).catch(()=>setParentsList([]))
+  }
+  useEffect(()=>{ if(isAdmin && parentsOpen && parentsList===null) loadParents() },[isAdmin, parentsOpen])
+  const refreshUsers=()=>client.get('/auth/users/').then(r=>setUsersList(Array.isArray(r.data)?r.data:[])).catch(()=>{})
+  const doLink=async(action:'link'|'unlink')=>{
+    if(linkBusy) return
+    if(!linkParent.trim()||!linkStudent.trim()){ toast(t('parents_link_need_both'),'error'); return }
+    setLinkBusy(true)
+    try{
+      await client.post('/auth/parents/link/',{parent_username:linkParent.trim(), student_username:linkStudent.trim(), action})
+      toast(action==='link'? t('parents_linked_ok') : t('parents_unlinked_ok'),'success')
+      if(action==='link'){ setLinkStudent('') }
+      loadParents()
+      refreshUsers()
+    }catch(e:any){
+      toast(e?.response?.data?.error||e?.response?.data?.detail||t('error'),'error')
+    }
+    setLinkBusy(false)
+  }
+  // Создание родительского аккаунта
+  const [par,setPar]=useState({username:'',password:'',first_name:''})
+  const [parBusy,setParBusy]=useState(false)
+  const createParent=async()=>{
+    if(parBusy) return
+    if(par.username.trim().length<3){ toast(t('assistant_err_short'),'error'); return }
+    if(par.password.length<8){ toast(t('assistant_err_pass'),'error'); return }
+    setParBusy(true)
+    try{
+      await client.post('/auth/parents/create/',{username:par.username.trim(),password:par.password,first_name:par.first_name.trim()})
+      toast(t('parents_created'),'success')
+      setPar({username:'',password:'',first_name:''})
+      loadParents(); refreshUsers()
+    }catch(e:any){
+      toast(e?.response?.data?.error||e?.response?.data?.detail||t('error'),'error')
+    }
+    setParBusy(false)
+  }
+  const usersGrouped=useMemo(()=>{
     if(!usersList) return []
     const q=usersQ.trim().toLowerCase()
-    return q? usersList.filter((x:any)=>x.username.toLowerCase().includes(q)) : usersList
-  },[usersList, usersQ])
-  const ROLE_LABEL:any={admin:'admin_role', teacher:'login_teacher', student:'login_student'}
+    return usersList.filter(u=>{
+      if(q && !u.username.toLowerCase().includes(q)) return false
+      if(usersTab==='all') return true
+      if(usersTab==='admin') return u.role==='admin'||u.is_superuser
+      return u.role===usersTab
+    })
+  },[usersList, usersQ, usersTab])
+  const usersCounts=useMemo(()=>{
+    const c={all:0,student:0,teacher:0,admin:0,parent:0} as any
+    for(const u of usersList||[]){
+      c.all++
+      if(u.role in c) c[u.role]++
+      if(u.is_superuser && u.role!=='admin') c.admin++
+    }
+    return c
+  },[usersList])
+  const usersFiltered=useMemo(()=>usersGrouped,[usersGrouped])
+  const ROLE_LABEL:any={admin:'admin_role', teacher:'login_teacher', student:'login_student', parent:'users_parent'}
   const canDeleteRow=(u:any)=>{
     const meName=(me?.username||'').toLowerCase()
     if(!meName || u.username.toLowerCase()===meName) return false
@@ -94,6 +157,26 @@ export default function Profile(){
       toast(e?.response?.data?.error||e?.response?.data?.detail||t('error'),'error')
     }
     setDelBusy(false)
+  }
+  // Смена пароля пользователя (посмотреть чужой пароль нельзя — хеш; только задать новый)
+  const [pwFor,setPwFor]=useState<string|null>(null)
+  const [pwVal,setPwVal]=useState('')
+  const [pwShowU,setPwShowU]=useState(true)
+  const [pwDoneNick,setPwDoneNick]=useState<string|null>(null)
+  const [upwBusy,setUpwBusy]=useState(false)
+  const setUserPassword=async(nick:string)=>{
+    if(upwBusy) return
+    if(pwVal.length<8){ toast(t('assistant_err_pass'),'error'); return }
+    setUpwBusy(true)
+    try{
+      await client.post('/auth/set-user-password/',{username:nick, new_password:pwVal})
+      toast(t('users_pw_done').replace('{nick}',nick),'success')
+      // строку НЕ закрываем: пароль, который ты сейчас задал, виден — запиши/скопируй
+      setPwDoneNick(nick)
+    }catch(e:any){
+      toast(e?.response?.data?.error||e?.response?.data?.detail||t('error'),'error')
+    }
+    setUpwBusy(false)
   }
 
   const load=()=>{
@@ -283,71 +366,173 @@ export default function Profile(){
 
       {isAdmin && (
         <div className="bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border p-5">
-          <h2 className="font-bold flex items-center gap-2 dark:text-white"><UserPlus size={18} className="text-indigo-600"/>{t('assistants_title')}</h2>
-          <p className="text-xs text-slate-500 mt-1">{asstRole==='teacher'? t('assistants_hint_teacher') : t('assistants_hint')}</p>
-          <div className="mt-3">
-            <div className="text-xs font-semibold text-slate-500 mb-1">{t('assistant_role_label')}</div>
-            <div className="flex gap-2 flex-wrap">
-              <button onClick={()=>setAsstRole('teacher')} className={`px-3 py-2 rounded-xl text-xs font-semibold border transition ${asstRole==='teacher'?'bg-indigo-600 text-white border-indigo-600':'bg-white dark:bg-slate-800 dark:text-white border-slate-200 dark:border-slate-700'}`}>🎓 {t('assistant_role_teacher')}</button>
-              <button onClick={()=>setAsstRole('assistant')} className={`px-3 py-2 rounded-xl text-xs font-semibold border transition ${asstRole==='assistant'?'bg-blue-700 text-white border-blue-700':'bg-white dark:bg-slate-800 dark:text-white border-slate-200 dark:border-slate-700'}`}>🛡 {t('assistant_role_admin')}</button>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2 mt-3">
-            <input value={asst.username} onChange={e=>setAsst({...asst,username:e.target.value})} placeholder={asstRole==='teacher'? t('assistant_username_teacher_ph') : t('assistant_username_ph')} className="flex-1 min-w-[140px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
-            <input value={asst.first_name} onChange={e=>setAsst({...asst,first_name:e.target.value})} placeholder={t('assistant_name_ph')} className="flex-1 min-w-[140px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
-            <input type="password" value={asst.password} onChange={e=>setAsst({...asst,password:e.target.value})} placeholder={t('assistant_pass_ph')} className="flex-1 min-w-[160px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
-            <button onClick={createAssistant} disabled={asstBusy} className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-50">{asstBusy?'...':(asstRole==='teacher'? t('assistant_create_teacher') : t('assistant_create'))}</button>
-          </div>
-          <div className="mt-5 pt-4 border-t dark:border-slate-800">
-            <h3 className="font-bold text-sm flex items-center gap-2 dark:text-white"><Trash2 size={15} className="text-red-600"/>{t('admin_del_user_t')}</h3>
-            <div className="flex flex-wrap gap-2 mt-2">
-              <div className="flex-1 min-w-[160px]">
-                <input value={delNick} onChange={e=>setDelNick(e.target.value)} placeholder={t('admin_del_user_ph')} className="w-full px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
-                {delNick.trim().length>=2 && delFound!==undefined && (
-                  delFound ? (
-                    <div className="text-xs mt-1.5 flex items-center gap-1.5 flex-wrap" data-testid="del-user-found">
-                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1"><Check size={13}/>{t('del_user_found')}: <b className="dark:text-white">{delFound.username}</b></span>
-                      <span className="px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">{t(ROLE_LABEL[delFound.role]||'admin_role')}</span>
-                      {(delFound.role==='admin') && <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1"><Shield size={12}/>{t('del_user_staff_warn')}</span>}
-                    </div>
-                  ) : (
-                    <div className="text-xs mt-1.5 text-red-600 dark:text-red-400 font-semibold flex items-center gap-1" data-testid="del-user-notfound"><XIcon size={13}/>{t('del_user_notfound')}</div>
-                  )
-                )}
-              </div>
-              <button onClick={()=>deleteUser()} disabled={delBusy||!delNick.trim()} className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-1"><Trash2 size={14}/>{delBusy?'...':t('admin_del_user_btn')}</button>
-            </div>
+          <h2 className="font-bold flex items-center gap-2 dark:text-white"><Shield size={18} className="text-indigo-600"/>{t('adm_panel_t')}</h2>
+          {/* Вкладки админ-панели */}
+          <div className="flex gap-2 mt-3 flex-wrap" data-testid="adm-tabs">
+            <button onClick={()=>setAdmTab('create')} className={`px-4 py-2.5 min-h-[40px] rounded-xl text-xs font-semibold border transition flex items-center gap-1.5 ${admTab==='create'?'bg-indigo-600 text-white border-indigo-600':'bg-white dark:bg-slate-800 dark:text-white border-slate-200 dark:border-slate-700'}`}><UserPlus size={14}/>{t('adm_tab_accounts')}</button>
+            <button onClick={()=>{setAdmTab('users'); setUsersOpen(true)}} className={`px-4 py-2.5 min-h-[40px] rounded-xl text-xs font-semibold border transition flex items-center gap-1.5 ${admTab==='users'?'bg-indigo-600 text-white border-indigo-600':'bg-white dark:bg-slate-800 dark:text-white border-slate-200 dark:border-slate-700'}`}><Users size={14}/>{t('adm_tab_users')}</button>
+            <button onClick={()=>{setAdmTab('parents'); setParentsOpen(true)}} className={`px-4 py-2.5 min-h-[40px] rounded-xl text-xs font-semibold border transition flex items-center gap-1.5 ${admTab==='parents'?'bg-indigo-600 text-white border-indigo-600':'bg-white dark:bg-slate-800 dark:text-white border-slate-200 dark:border-slate-700'}`}>👪 {t('adm_tab_parents')}</button>
           </div>
 
-          {/* Все пользователи сайта: поиск + удаление одной кнопкой */}
-          <div className="mt-5 pt-4 border-t dark:border-slate-800">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="font-bold text-sm flex items-center gap-2 dark:text-white"><Users size={15} className="text-indigo-600"/>{t('users_list_t')}</h3>
-              <button onClick={()=>setUsersOpen(v=>!v)} className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30" data-testid="users-toggle">
-                {usersOpen? t('close') : `${t('open')} (${usersList?.length ?? '…'})`}
-              </button>
-            </div>
-            {usersOpen && (
-              <div className="mt-2">
-                <input value={usersQ} onChange={e=>setUsersQ(e.target.value)} placeholder={t('users_search_ph')} className="w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
-                <div className="mt-2 max-h-[280px] overflow-y-auto rounded-xl border dark:border-slate-700 divide-y dark:divide-slate-800" data-testid="users-list">
-                  {usersFiltered.map(u=>(
-                    <div key={u.id} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900">
-                      <span className="font-semibold text-sm dark:text-white flex-1 min-w-0 truncate">{u.username}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 ${u.role==='admin'?'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300':u.role==='teacher'?'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300':'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{t(ROLE_LABEL[u.role]||'admin_role')}</span>
-                      {String(u.username).toLowerCase()===String(me?.username||'').toLowerCase()
-                        ? <span className="text-[10px] text-slate-400 shrink-0 px-1">{t('users_you')}</span>
-                        : canDeleteRow(u)
-                          ? <button onClick={()=>deleteUser(u.username)} disabled={delBusy} className="p-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 disabled:opacity-40 shrink-0" title={t('admin_del_user_btn')} aria-label={`${t('admin_del_user_btn')} ${u.username}`}><Trash2 size={13}/></button>
-                          : <span className="text-[11px] text-slate-300 dark:text-slate-600 shrink-0" title={u.is_superuser? t('del_superuser_note') : t('del_user_staff_warn')}>🔒</span>}
-                    </div>
-                  ))}
-                  {usersFiltered.length===0 && <div className="px-3 py-4 text-center text-sm text-slate-400">{t('users_empty')}</div>}
+          {/* --- Вкладка 1: создание аккаунтов учителей/админов --- */}
+          {admTab==='create' && (
+            <div className="mt-4">
+              <p className="text-xs text-slate-500">{asstRole==='teacher'? t('assistants_hint_teacher') : t('assistants_hint')}</p>
+              <div className="mt-3">
+                <div className="text-xs font-semibold text-slate-500 mb-1">{t('assistant_role_label')}</div>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={()=>setAsstRole('teacher')} className={`px-3 py-2 rounded-xl text-xs font-semibold border transition ${asstRole==='teacher'?'bg-indigo-600 text-white border-indigo-600':'bg-white dark:bg-slate-800 dark:text-white border-slate-200 dark:border-slate-700'}`}>🎓 {t('assistant_role_teacher')}</button>
+                  <button onClick={()=>setAsstRole('assistant')} className={`px-3 py-2 rounded-xl text-xs font-semibold border transition ${asstRole==='assistant'?'bg-blue-700 text-white border-blue-700':'bg-white dark:bg-slate-800 dark:text-white border-slate-200 dark:border-slate-700'}`}>🛡 {t('assistant_role_admin')}</button>
                 </div>
-                <div className="text-[11px] text-slate-400 mt-1.5">{t('users_hint')}</div>
               </div>
-            )}
-          </div>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <input value={asst.username} onChange={e=>setAsst({...asst,username:e.target.value})} placeholder={asstRole==='teacher'? t('assistant_username_teacher_ph') : t('assistant_username_ph')} className="flex-1 min-w-[140px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+                <input value={asst.first_name} onChange={e=>setAsst({...asst,first_name:e.target.value})} placeholder={t('assistant_name_ph')} className="flex-1 min-w-[140px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+                <input type="password" value={asst.password} onChange={e=>setAsst({...asst,password:e.target.value})} placeholder={t('assistant_pass_ph')} className="flex-1 min-w-[160px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+                <button onClick={createAssistant} disabled={asstBusy} className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-50">{asstBusy?'...':(asstRole==='teacher'? t('assistant_create_teacher') : t('assistant_create'))}</button>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-2">{t('acct_created_note')}</div>
+            </div>
+          )}
+
+          {/* --- Вкладка 2: список пользователей по вкладкам ролей --- */}
+          {admTab==='users' && (
+            <div className="mt-4">
+              <div className="flex gap-1.5 flex-wrap" data-testid="users-role-tabs">
+                {(['all','student','teacher','admin','parent'] as const).map(rt=>(
+                  <button key={rt} onClick={()=>setUsersTab(rt)} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition ${usersTab===rt?'bg-slate-800 dark:bg-indigo-600 text-white border-slate-800 dark:border-indigo-600':'bg-white dark:bg-slate-800 dark:text-white border-slate-200 dark:border-slate-700'}`}>
+                    {t(rt==='all'?'users_tab_all':rt==='student'?'users_tab_students':rt==='teacher'?'users_tab_teachers':rt==='admin'?'users_tab_admins':'users_tab_parents')} {usersCounts[rt]??'…'}
+                  </button>
+                ))}
+              </div>
+              <input value={usersQ} onChange={e=>setUsersQ(e.target.value)} placeholder={t('users_search_ph')} className="w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm mt-2"/>
+              <div className="mt-2 max-h-[300px] overflow-y-auto rounded-xl border dark:border-slate-700 divide-y dark:divide-slate-800" data-testid="users-list">
+                {usersFiltered.map(u=>(
+                  <div key={u.id} className="bg-white dark:bg-slate-900">
+                    <div className="flex items-center gap-2 px-3 py-2">
+                      <span className="font-semibold text-sm dark:text-white flex-1 min-w-0 truncate">{u.username}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 ${u.role==='admin'?'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300':u.role==='teacher'?'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300':u.role==='parent'?'bg-violet-50 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300':'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{t(ROLE_LABEL[u.role]||'admin_role')}</span>
+                      {String(u.username).toLowerCase()===String(me?.username||'').toLowerCase() ? (
+                        <span className="text-[10px] text-slate-400 shrink-0 px-1">{t('users_you')}</span>
+                      ) : (
+                        <>
+                          <button onClick={()=>{ setPwFor(pwFor===u.username? null : u.username); setPwShowU(true) }} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 shrink-0" title={t('users_pw_set')} aria-label={`${t('users_pw_set')} ${u.username}`}>
+                            <KeyRound size={13}/>
+                          </button>
+                          {canDeleteRow(u)
+                            ? <button onClick={()=>deleteUser(u.username)} disabled={delBusy} className="p-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 disabled:opacity-40 shrink-0" title={t('admin_del_user_btn')} aria-label={`${t('admin_del_user_btn')} ${u.username}`}><Trash2 size={13}/></button>
+                            : <span className="text-[11px] text-slate-300 dark:text-slate-600 shrink-0" title={u.is_superuser? t('del_superuser_note') : t('del_user_staff_warn')}>🔒</span>}
+                        </>
+                      )}
+                    </div>
+                    {pwFor===u.username && (
+                      <div className="px-3 pb-2">
+                        <div className="flex items-center gap-2">
+                          <input autoFocus type={pwShowU? 'text':'password'} value={pwVal} onChange={e=>{setPwVal(e.target.value); setPwDoneNick(null)}} onKeyDown={e=>e.key==='Enter'&&setUserPassword(u.username)} placeholder={t('users_pw_ph')} className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm font-mono"/>
+                          <button onClick={()=>setPwShowU(v=>!v)} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0" title={pwShowU? t('pw_hide') : t('pw_show')} aria-label={pwShowU? t('pw_hide') : t('pw_show')}>
+                            {pwShowU? <Eye size={13}/> : <EyeOff size={13}/>}
+                          </button>
+                          <button onClick={()=>{ if(pwVal){ try{ navigator.clipboard.writeText(pwVal); toast(t('pw_copied'),'success') }catch{ toast(pwVal,'success') } } }} disabled={!pwVal} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0 disabled:opacity-40" title={t('pw_copy')} aria-label={t('pw_copy')}>
+                            📋
+                          </button>
+                          <button onClick={()=>setUserPassword(u.username)} disabled={upwBusy||pwVal.length<8} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold disabled:opacity-40 shrink-0">{upwBusy?'...':t('users_pw_apply')}</button>
+                          <button onClick={()=>{setPwFor(null); setPwVal(''); setPwDoneNick(null)}} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 shrink-0" title={t('close')}>✕</button>
+                        </div>
+                        {pwDoneNick===u.username && (
+                          <div className="text-[11px] mt-1.5 text-emerald-600 dark:text-emerald-400 font-semibold">
+                            ✅ {t('users_pw_done').replace('{nick}',u.username)} — {t('pw_note_now')}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {usersFiltered.length===0 && <div className="px-3 py-4 text-center text-sm text-slate-400">{t('users_empty')}</div>}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1.5">{t('users_hint')}</div>
+              {/* Удаление по нику */}
+              <div className="mt-4 pt-3 border-t dark:border-slate-800">
+                <h3 className="font-bold text-sm flex items-center gap-2 dark:text-white"><Trash2 size={15} className="text-red-600"/>{t('admin_del_user_t')}</h3>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <div className="flex-1 min-w-[160px]">
+                    <input value={delNick} onChange={e=>setDelNick(e.target.value)} placeholder={t('admin_del_user_ph')} className="w-full px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+                    {delNick.trim().length>=2 && delFound!==undefined && (
+                      delFound ? (
+                        <div className="text-xs mt-1.5 flex items-center gap-1.5 flex-wrap" data-testid="del-user-found">
+                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1"><Check size={13}/>{t('del_user_found')}: <b className="dark:text-white">{delFound.username}</b></span>
+                          <span className="px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">{t(ROLE_LABEL[delFound.role]||'admin_role')}</span>
+                          {(delFound.role==='admin') && <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1"><Shield size={12}/>{t('del_user_staff_warn')}</span>}
+                        </div>
+                      ) : (
+                        <div className="text-xs mt-1.5 text-red-600 dark:text-red-400 font-semibold flex items-center gap-1" data-testid="del-user-notfound"><XIcon size={13}/>{t('del_user_notfound')}</div>
+                      )
+                    )}
+                  </div>
+                  <button onClick={()=>deleteUser()} disabled={delBusy||!delNick.trim()} className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-1"><Trash2 size={14}/>{delBusy?'...':t('admin_del_user_btn')}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* --- Вкладка 3: родители --- */}
+          {admTab==='parents' && (
+            <div className="mt-4">
+              {/* Создание родителя */}
+              <h3 className="font-bold text-sm flex items-center gap-2 dark:text-white"><UserPlus size={15} className="text-violet-600"/>{t('parents_create_t')}</h3>
+              <p className="text-xs text-slate-500 mt-1">{t('parents_create_hint')}</p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <input value={par.username} onChange={e=>setPar({...par,username:e.target.value})} placeholder={t('parents_nick_ph')} className="flex-1 min-w-[140px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+                <input value={par.first_name} onChange={e=>setPar({...par,first_name:e.target.value})} placeholder={t('assistant_name_ph')} className="flex-1 min-w-[140px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+                <input type="password" value={par.password} onChange={e=>setPar({...par,password:e.target.value})} placeholder={t('assistant_pass_ph')} className="flex-1 min-w-[160px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+                <button onClick={createParent} disabled={parBusy} className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50">{parBusy?'...':t('parents_create_btn')}</button>
+              </div>
+              {/* Привязка ребёнка */}
+              <div className="mt-4 pt-3 border-t dark:border-slate-800">
+                <h3 className="font-bold text-sm flex items-center gap-2 dark:text-white">🔗 {t('parents_link_t')}</h3>
+                <p className="text-xs text-slate-500 mt-1">{t('parents_link_hint')}</p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <input value={linkParent} onChange={e=>setLinkParent(e.target.value)} placeholder={t('parents_link_ph_parent')} className="flex-1 min-w-[140px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+                  <input value={linkStudent} onChange={e=>setLinkStudent(e.target.value)} placeholder={t('parents_link_ph_student')} className="flex-1 min-w-[140px] px-3 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
+                  <button onClick={()=>doLink('link')} disabled={linkBusy} className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-50">{linkBusy?'...':t('parents_link_btn')}</button>
+                  <button onClick={()=>doLink('unlink')} disabled={linkBusy} className="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 dark:text-white hover:bg-slate-300 text-slate-700 text-sm font-semibold disabled:opacity-50">{t('parents_unlink_btn')}</button>
+                </div>
+              </div>
+              {/* Список родителей + дети */}
+              <div className="mt-4 pt-3 border-t dark:border-slate-800">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-bold text-sm flex items-center gap-2 dark:text-white">👪 {t('parents_list_t')}</h3>
+                  <button onClick={()=>{setParentsOpen(v=>!v); if(!parentsOpen) loadParents()}} className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30" data-testid="parents-toggle">
+                    {parentsOpen? t('close') : `${t('open')} (${parentsList?.length ?? '…'})`}
+                  </button>
+                </div>
+                {parentsOpen && (
+                  <div className="mt-2 space-y-1.5 max-h-[300px] overflow-y-auto" data-testid="parents-list">
+                    {(parentsList||[]).map(p=>(
+                      <div key={p.id} className="px-3 py-2.5 rounded-xl border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-sm dark:text-white">{p.username}</span>
+                          {p.first_name && <span className="text-xs text-slate-500 dark:text-slate-400">({p.first_name})</span>}
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 font-semibold">{t('users_parent')}</span>
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5 items-center">
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">{t('parents_children')}:</span>
+                          {(p.children||[]).length===0 && <span className="text-[11px] text-slate-400 italic">{t('parents_no_children')}</span>}
+                          {(p.children||[]).map((ch:any)=>(
+                            <span key={ch.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white dark:bg-slate-900 border dark:border-slate-700 text-[11px] font-semibold dark:text-white">
+                              🧒 {ch.username}
+                              <button onClick={()=>{ setLinkParent(p.username); setLinkStudent(ch.username); doLink('unlink') }} disabled={linkBusy} className="text-slate-400 hover:text-red-600" title={t('parents_unlink_btn')}>✕</button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    {parentsList && parentsList.length===0 && <div className="px-3 py-4 text-center text-sm text-slate-400">{t('parents_none')}</div>}
+                  </div>
+                )}
+                <div className="text-[11px] text-slate-400 mt-1.5">{t('parents_hint')}</div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

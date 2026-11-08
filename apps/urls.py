@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from apps.accounts.views import RegisterView, login_view, me_view, list_users, logout_view, create_assistant_view, change_password_view, delete_user_view, bootstrap_admin_view, ThrottledTokenObtainPairView
+from apps.accounts.views import RegisterView, login_view, me_view, list_users, logout_view, create_assistant_view, change_password_view, delete_user_view, bootstrap_admin_view, set_user_password_view, list_children_view, parents_list_view, parents_create_view, parents_link_view, ThrottledTokenObtainPairView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from apps.catalog.views import SubjectViewSet, CourseViewSet
 from apps.content.views import UploadedFileViewSet, PresentationViewSet, SlideViewSet
@@ -41,6 +41,11 @@ urlpatterns = [
     path('auth/users/', list_users, name='users'),
     path('auth/create-assistant/', create_assistant_view, name='create-assistant'),
     path('auth/delete-user/', delete_user_view, name='delete-user'),
+    path('auth/set-user-password/', set_user_password_view, name='set-user-password'),
+    path('auth/children/', list_children_view, name='children'),
+    path('auth/parents/', parents_list_view, name='parents'),
+    path('auth/parents/create/', parents_create_view, name='parents-create'),
+    path('auth/parents/link/', parents_link_view, name='parents-link'),
     path('auth/bootstrap-admin/', bootstrap_admin_view, name='bootstrap-admin'),
     path('auth/jwt/create/', ThrottledTokenObtainPairView.as_view(), name='jwt-create'),
     path('auth/jwt/refresh/', TokenRefreshView.as_view(), name='jwt-refresh'),

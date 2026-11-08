@@ -5,7 +5,10 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, ValidationError, NotFound
 from apps.accounts.permissions import IsTeacherOrAdmin
+from django.contrib.auth import get_user_model
 from .models import Classroom, Enrollment, Assignment, Submission, Announcement, AnnouncementComment
+
+User = get_user_model()
 from .serializers import (ClassroomSerializer, EnrollmentSerializer, AssignmentSerializer,
                           SubmissionSerializer, AnnouncementSerializer, AnnouncementCommentSerializer)
 
@@ -387,10 +390,19 @@ class ClassroomViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def my_diary(self, request):
         """Дневник ученика: все сдачи с оценками/пометками по всем классам + средние.
-        Отдельного расписания нет — дата = момент сдачи/оценки (updated_at)."""
+        Отдельного расписания нет — дата = момент сдачи/оценки (updated_at).
+        Родитель: GET /classrooms/my_diary/?student=<ник> — дневник привязанного ребёнка."""
         u = request.user
+        if u.role == 'parent':
+            from apps.accounts.models import ParentLink
+            nick = (request.query_params.get('student') or '').strip()
+            student = User.objects.filter(username__iexact=nick).first() if nick else None
+            if not student or not ParentLink.objects.filter(parent=u, student=student).exists():
+                return Response({'error': 'Этот ученик не привязан к вашему аккаунту'}, status=403)
+        else:
+            student = u
         subs = (Submission.objects
-                .filter(student=u, status__in=['submitted', 'late'])
+                .filter(student=student, status__in=['submitted', 'late'])
                 .select_related('assignment__classroom', 'assignment__lesson', 'assignment__test')
                 .order_by('-updated_at'))
         rows = []
@@ -398,8 +410,8 @@ class ClassroomViewSet(viewsets.ModelViewSet):
         for s in subs:
             a = s.assignment
             room = a.classroom
-            if room.is_paid and room.owner_id != u.id:
-                e = Enrollment.objects.filter(classroom=room, student=u).only('access_granted').first()
+            if room.is_paid and room.owner_id != student.id:
+                e = Enrollment.objects.filter(classroom=room, student=student).only('access_granted').first()
                 if not e or not e.access_granted:
                     continue  # платный класс без доступа — из дневника прячем
             rows.append({
