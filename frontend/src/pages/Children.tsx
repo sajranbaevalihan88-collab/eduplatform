@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import client from '../api/client'
-import { BookOpenCheck, GraduationCap, Clock, Users, TrendingUp } from 'lucide-react'
+import { BookOpenCheck, GraduationCap, Clock, Users, TrendingUp, CalendarCheck } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
 
@@ -29,6 +29,7 @@ export default function Children(){
   const [sel,setSel]=useState<string>('')
   const [diary,setDiary]=useState<DiaryData|null>(null)
   const [filter,setFilter]=useState<number|null>(null)
+  const [attendance,setAttendance]=useState<any>(null)
 
   useEffect(()=>{
     client.get('/auth/children/')
@@ -42,6 +43,9 @@ export default function Children(){
     client.get('/classrooms/my_diary/',{ params:{ student: sel } })
       .then(r=>setDiary(r.data))
       .catch(()=>setDiary({rows:[],classes:[]}))
+    client.get('/classrooms/my_attendance/',{ params:{ student: sel, days: 90 } })
+      .then(r=>setAttendance(r.data))
+      .catch(()=>setAttendance(null))
   },[sel])
 
   const cur = useMemo(()=> (kids||[]).find(k=>k.username===sel) || null, [kids, sel])
@@ -129,6 +133,40 @@ export default function Children(){
               {c.avg!=null && <span className={`ml-1 px-1.5 py-0.5 rounded-md ${filter===c.classroom_id?'bg-white/20':'bg-slate-100 dark:bg-slate-800'}`}>{c.avg}</span>}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Посещаемость — за последние 3 месяца */}
+      {attendance && attendance.rows && attendance.rows.length>0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 p-4">
+          <h2 className="font-bold flex items-center gap-2 dark:text-white">
+            <CalendarCheck size={17} className="text-indigo-600"/>{t('diary_att')||'Посещаемость'}
+            <span className="text-xs font-medium text-slate-400">за 90 дней</span>
+          </h2>
+          <div className="grid sm:grid-cols-2 gap-2 mt-3">
+            {(attendance.classes||[]).map((c:any)=>(
+              <div key={c.classroom_id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 text-sm">
+                <div className="font-semibold dark:text-white">{c.title}</div>
+                <div className="flex gap-3 mt-1 text-xs">
+                  <span className="text-emerald-600 font-bold">✓ {c.present||0}</span>
+                  <span className="text-red-600 font-bold">✕ {c.absent||0}</span>
+                  <span className="text-amber-600 font-bold">⏰ {c.late||0}</span>
+                  <span className="text-slate-400">· {t('cls_att_absent_day')||''}{(c.present||0)+(c.absent||0)+(c.late||0)+(c.excused||0)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 space-y-1 max-h-40 overflow-auto">
+            {attendance.rows.slice(0,12).map((r:any,i:number)=>(
+              <div key={i} className="flex items-center gap-2 text-xs dark:text-slate-300">
+                <span className="font-semibold">{r.date}</span>
+                <span className="text-slate-400">{r.classroom_title}</span>
+                <span className={`px-1.5 py-0.5 rounded-md font-bold ${r.status==='present'?'bg-emerald-100 text-emerald-700': r.status==='absent'?'bg-red-100 text-red-700': r.status==='late'?'bg-amber-100 text-amber-700':'bg-slate-200 text-slate-500'}`}>
+                  {r.status==='present'?'был': r.status==='absent'?'не был': r.status==='late'?'опоздал':'освобождён'}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

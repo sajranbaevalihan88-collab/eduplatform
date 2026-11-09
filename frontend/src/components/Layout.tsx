@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info, Database, Volume2, VolumeX, FolderLock, BookOpenCheck, UsersRound } from 'lucide-react'
+import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info, Database, Volume2, VolumeX, FolderLock, BookOpenCheck, UsersRound, ListTree } from 'lucide-react'
 import A11yPanel from './A11yPanel'
 import { useState, useEffect, useRef } from 'react'
 import client from '../api/client'
@@ -30,7 +30,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // Админ-аккаунт: только админские фичи + предметы/уроки/тесты/книжки + игры.
   // Остальное (классы, доска, Word, презентации, код, SQL) — не нужно.
   const adminLimited = me?.role === 'admin'
-  const ADMIN_ALLOWED = new Set(['/', '/dashboard', '/subjects', '/my-lessons', '/games', '/about'])
+  const ADMIN_ALLOWED = new Set(['/', '/dashboard', '/subjects', '/my-lessons', '/games', '/about', '/programs'])
   const PARENT_ALLOWED = new Set(['/', '/children', '/games', '/about'])
   const items = [
     { to: '/', label: t('home'), icon: Sparkles },
@@ -40,6 +40,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     ...(!student && !isParent ? [{ to: '/my-lessons', label: t('my_lessons'), icon: FolderLock }] : []),
     { to: '/presentations', label: t('presentations'), icon: Presentation },
     { to: '/classes', label: t('classes'), icon: GraduationCap },
+    ...(!student && !isParent ? [{ to: '/programs', label: 'Учебная программа', icon: ListTree }] : []),
     // Дневник ученика: все оценки по классам в одном месте
     ...(student ? [{ to: '/diary', label: t('diary'), icon: BookOpenCheck }] : []),
     // Страница родителя: дети + успеваемость

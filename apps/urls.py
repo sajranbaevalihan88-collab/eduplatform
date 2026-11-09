@@ -11,6 +11,7 @@ from apps.board.views import BoardViewSet
 from apps.classroom.views import ClassroomViewSet, AssignmentViewSet, SubmissionViewSet, AnnouncementViewSet, AnnouncementCommentViewSet
 from apps.notes.views import NoteViewSet
 from apps.word.views import WordDocumentViewSet
+from apps.school.views import TopicViewSet
 
 router = DefaultRouter()
 router.register(r'subjects', SubjectViewSet)
@@ -31,6 +32,7 @@ router.register(r'announcements', AnnouncementViewSet, basename='announcement')
 router.register(r'announcement-comments', AnnouncementCommentViewSet, basename='announcement-comment')
 router.register(r'notes', NoteViewSet)
 router.register(r'word-docs', WordDocumentViewSet)
+router.register(r'topics', TopicViewSet, basename='topic')
 
 urlpatterns = [
     path('auth/register/', RegisterView.as_view(), name='register'),

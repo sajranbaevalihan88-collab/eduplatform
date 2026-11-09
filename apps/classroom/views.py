@@ -7,6 +7,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError, NotFoun
 from apps.accounts.permissions import IsTeacherOrAdmin
 from django.contrib.auth import get_user_model
 from .models import Classroom, Enrollment, Assignment, Submission, Announcement, AnnouncementComment
+from apps.school.views import SchoolMixin
 
 User = get_user_model()
 from .serializers import (ClassroomSerializer, EnrollmentSerializer, AssignmentSerializer,
@@ -45,7 +46,7 @@ def _pay_qr_data_uri(room):
     return 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
 
 
-class ClassroomViewSet(viewsets.ModelViewSet):
+class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
     serializer_class = ClassroomSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -513,8 +514,8 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        qs = Assignment.objects.select_related('classroom', 'lesson', 'test').filter(
-            classroom__in=_visible_classrooms(self.request.user))
+        qs = Assignment.objects.select_related('classroom', 'lesson', 'test', 'topic') \
+            .filter(classroom__in=_visible_classrooms(self.request.user))
         u = self.request.user
         # платный класс: пока оплата не подтверждена, материалы (задания) не отдаём —
         # иначе неоплативший видит названия/инструкции/ссылки (лик контента)

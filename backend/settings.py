@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'apps.code',
     'apps.board',
     'apps.classroom',
+    'apps.school',
     'apps.notes',
     'apps.word',
 ]

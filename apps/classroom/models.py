@@ -114,6 +114,10 @@ class Assignment(models.Model):
     max_score = models.PositiveIntegerField(default=100)
     manual_title = models.CharField(max_length=300, blank=True, help_text="Название для link/write/manual — колонки журнала")
     url = models.URLField(max_length=500, blank=True, default='', help_text="Ссылка для kind=link: YouTube, видео, материал")
+    # Привязка задания к теме учебной программы (apps.school.Topic) —
+    # через неё считаются «прогресс по темам» и экспорт журнала
+    topic = models.ForeignKey('school.Topic', on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name='assignments')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

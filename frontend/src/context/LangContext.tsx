@@ -142,6 +142,15 @@ const dict:Record<Lang,Record<string,string>>={
     guide_s5t:'Заметки', guide_s5x:'Личные заметки с напоминаниями голосом. Нужен вход.', guide_s5l:'Открыть профиль',
     shared_open_err:'Не удалось открыть ссылку', shared_home:'На главную', shared_shared:'📤 Поделились кодом',
     shared_copy_err:'Не скопировалось', shared_copied:'Скопировано', shared_copy:'Копировать', shared_to_editor:'В редактор',
+    cls_tab_attendance:'Посещаемость', cls_tab_schedule:'Расписание',
+    cls_att_date:'Дата', cls_att_save:'Сохранить', cls_att_saved:'Посещаемость сохранена',
+    cls_att_absent_day:'Всего дней:', cls_att_export:'Скачать CSV',
+    sc_grid:'Недельная сетка', sc_day:'День по дате', sc_set_hint:'Поменяй предмет в ячейке — сетка обновится',
+    sc_subs:'Замены', sc_sub_add:'Добавить замену',
+    subj_prog:'Учебная программа',
+    prog_t:'Учебная программа', prog_add:'Добавить тему', prog_csv:'Импорт CSV',
+    prog_imported:'Импортировано тем', prog_empty:'Тем пока нет', prog_sel_subject:'Предмет', prog_sel_grade:'Класс',
+    diary_att:'Посещаемость',
     // __I18N_A__
     tb_new_test:'Новый тест', tb_gen_prompt_min:'Напиши что сделать — хотя бы тему (от 10 символов)', tb_gen_fail:'Не получилось сгенерировать', tb_saved:'Тест сохранён ✓',
     tb_saved_short:'Сохранено ✓', tb_save_fail:'Не сохранилось — проверь связь', tb_title:'Конструктор теста', tb_back_lesson:'← Вернуться к уроку',
@@ -846,6 +855,15 @@ const dict:Record<Lang,Record<string,string>>={
     sprint_type_aria:'Type words',
     tb_gen_hint:'Questions appear below — check and fix before saving. 30–40 questions take longer (up to a minute).', sprint_sec:'s',
     tb_ai:'Auto:', notes_voice_settings:'Voice settings',
+    cls_tab_attendance:'Attendance', cls_tab_schedule:'Schedule',
+    cls_att_date:'Date', cls_att_save:'Save', cls_att_saved:'Attendance saved',
+    cls_att_absent_day:'Total days:', cls_att_export:'Download CSV',
+    sc_grid:'Weekly grid', sc_day:'Day by date', sc_set_hint:'Change the subject in a cell — the grid updates',
+    sc_subs:'Substitutions', sc_sub_add:'Add substitution',
+    subj_prog:'Curriculum program',
+    prog_t:'Curriculum program', prog_add:'Add topic', prog_csv:'CSV import',
+    prog_imported:'topics imported', prog_empty:'No topics yet', prog_sel_subject:'Subject', prog_sel_grade:'Grade',
+    diary_att:'Attendance',
     // __I18N_B__
     // __I18N_C__
     arkan_answering:'Answering:',
@@ -1813,6 +1831,15 @@ const dict:Record<Lang,Record<string,string>>={
     vsc_unknown_type_b:'» иштебейт. .py, .js, .html же .css кеңейүүсү менен файл түз - алар аткарылат.',
     vsc_wait_input:'⏳ Киргизүү күтүүдө:',
 
+    cls_tab_attendance:'Катышуу', cls_tab_schedule:'Жаа schedule'.replace('Жаа schedule','Жадвал'),
+    cls_att_date:'Дата', cls_att_save:'Сактоо', cls_att_saved:'Катышуу сакталды',
+    cls_att_absent_day:'Бардык күн:', cls_att_export:'CSV жүктөп алуу',
+    sc_grid:'Жумалык тор', sc_day:'Дата боюнча күн', sc_set_hint:'Уячадагы предметти өзгөрт — тор жаңыланат',
+    sc_subs:'Оорун алмаштыруулар', sc_sub_add:'Оорун алмаштыруу кошуу',
+    subj_prog:'Окуу программасы',
+    prog_t:'Окуу программасы', prog_add:'Тема кошуу', prog_csv:'CSV импорт',
+    prog_imported:'импорттолгон тема', prog_empty:'Темалар азырынча жок', prog_sel_subject:'Предмет', prog_sel_grade:'Класс',
+    diary_att:'Катышуу',
     // __I18N_B__
     // __I18N_C__
   }

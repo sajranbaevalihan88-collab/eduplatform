@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import client, { mediaUrl } from '../api/client'
-import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles, Share2, Video, PenLine, FlaskConical, BookOpen, X, Wallet, Lock } from 'lucide-react'
+import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles, Share2, Video, PenLine, FlaskConical, BookOpen, X, Wallet, Lock, CalendarCheck, CalendarDays } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
+import AttendancePanel from '../components/AttendancePanel'
+import SchedulePanel from '../components/SchedulePanel'
 import QuizBuilder from '../components/ClassroomQuizBuilder'
 import { playUiSound } from '../utils/sound'
 import { AI_FEATURES } from '../utils/features'
@@ -37,7 +39,7 @@ export default function ClassroomDetail(){
   const {id} = useParams()
   const nav = useNavigate()
   const [room,setRoom]=useState<any>(null)
-  const [tab,setTab]=useState<'stream'|'tasks'|'people'|'grades'>('stream')
+  const [tab,setTab]=useState<'stream'|'tasks'|'people'|'grades'|'attendance'|'schedule'>('stream')
   const [members,setMembers]=useState<any[]>([])
   const [tasks,setTasks]=useState<any[]>([])
   const [myTasks,setMyTasks]=useState<any>({})
@@ -56,6 +58,8 @@ export default function ClassroomDetail(){
   const [ainstr,setAinstr]=useState('')
   const [atitle,setAtitle]=useState('')
   const [aurl,setAurl]=useState('')
+  const [atopic,setAtopic]=useState('')
+  const [topics,setTopics]=useState<any[]>([])
   const [creating,setCreating]=useState(false)
   // письменный ответ ученика (kind=write)
   const [wOpen,setWOpen]=useState<number|null>(null)
@@ -116,6 +120,14 @@ export default function ClassroomDetail(){
     }).catch(()=>{})
   }
   useEffect(()=>{load()},[id])
+  useEffect(()=>{
+    // темы учебной программы (по предмету класса, если задан) для привязки задания к теме
+    const params:any = {}
+    if(room?.subject) params.subject = room.subject
+    client.get('/topics/', { params })
+      .then(r=>setTopics(Array.isArray(r.data)?r.data:r.data.results||[]))
+      .catch(()=>setTopics([]))
+  },[room?.subject])
   useEffect(()=>{
     if(akind==='lesson') client.get('/lessons/?owner=me').then(r=>setObjs(r.data.results||r.data||[])).catch(()=>{})
     else client.get('/tests/?owner=me').then(r=>setObjs(r.data.results||r.data||[])).catch(()=>{})
@@ -193,15 +205,15 @@ export default function ClassroomDetail(){
     try{
       if(akind==='link'){
         if(!aurl.trim()){ toast(t('cls_need_url'),'error'); return }
-        await client.post('/assignments/', {classroom:id, kind:'link', manual_title: atitle.trim()||t('cls_k_link'), url:aurl.trim(), instructions:ainstr, deadline:dl})
+        await client.post('/assignments/', {classroom:id, kind:'link', manual_title: atitle.trim()||t('cls_k_link'), url:aurl.trim(), instructions:ainstr, deadline:dl, topic: atopic||null})
       } else if(akind==='write'){
         if(!atitle.trim()){ toast(t('cls_need_task_title'),'error'); return }
-        await client.post('/assignments/', {classroom:id, kind:'write', manual_title: atitle.trim(), instructions:ainstr, deadline:dl})
+        await client.post('/assignments/', {classroom:id, kind:'write', manual_title: atitle.trim(), instructions:ainstr, deadline:dl, topic: atopic||null})
       } else {
         if(!aobj){ toast(t('cls_pick_obj'),'error'); return }
-        await client.post('/assignments/', {classroom:id, kind:akind, [akind]:Number(aobj), deadline:dl, instructions: ainstr})
+        await client.post('/assignments/', {classroom:id, kind:akind, [akind]:Number(aobj), deadline:dl, instructions: ainstr, topic: atopic||null})
       }
-      setAobj(''); setAdlDate(''); setAdlTime(''); setAinstr(''); setAtitle(''); setAurl(''); setCreating(false); load()
+      setAobj(''); setAdlDate(''); setAdlTime(''); setAinstr(''); setAtitle(''); setAurl(''); setAtopic(''); setCreating(false); load()
       toast(t('cls_added'),'success')
     }catch(e:any){ toast(e?.response?.data?.detail||e?.response?.data?.url||e?.response?.data?.manual_title||JSON.stringify(e?.response?.data)||'err','error') }
   }
@@ -368,6 +380,8 @@ export default function ClassroomDetail(){
     {k:'stream', label:t('cls_tab_stream'), icon:Megaphone},
     {k:'tasks', label:t('cls_tab_tasks'), icon:ClipboardList},
     {k:'people', label:t('cls_tab_people'), icon:Users},
+    {k:'attendance', label:t('cls_tab_attendance')||'Посещаемость', icon:CalendarCheck},
+    {k:'schedule', label:t('cls_tab_schedule')||'Расписание', icon:CalendarDays},
   ]
   if(isOwner) tabs.push({k:'grades', label:t('cls_tab_grades'), icon:BarChart3})
 
@@ -581,6 +595,14 @@ export default function ClassroomDetail(){
                       <FlaskConical size={17}/>{t('cls_new_quiz')}
                     </button>
                   )}
+                  {topics.length>0 && (
+                    <select value={atopic} onChange={e=>setAtopic(e.target.value)}
+                      data-testid="task-topic" aria-label="Тема из учебной программы"
+                      className="w-full px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white outline-none">
+                      <option value="">Тема учебной программы (необязательно)</option>
+                      {topics.map((tp:any)=><option key={tp.id} value={tp.id}>{tp.num}. {tp.title}</option>)}
+                    </select>
+                  )}
                   <div className="space-y-2">
                     <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5"><Clock size={14}/>{t('cls_deadline')}</div>
                     <div className="flex flex-wrap gap-2">
@@ -772,6 +794,14 @@ export default function ClassroomDetail(){
                 ))}
               </div>
             </div>
+          )}
+
+          {tab==='attendance' && (
+            <AttendancePanel classId={id} members={members} isOwner={isOwner}/>
+          )}
+
+          {tab==='schedule' && (
+            <SchedulePanel classId={id} isOwner={isOwner}/>
           )}
 
           {tab==='grades' && isOwner && (
