@@ -13,6 +13,7 @@ from apps.notes.views import NoteViewSet
 from apps.word.views import WordDocumentViewSet
 from apps.school.views import TopicViewSet
 from apps.messages.views import MessageViewSet
+from apps.portfolio.views import PortfolioView, PortfolioStudentsView, AchievementCreateView, AchievementDeleteView
 
 router = DefaultRouter()
 router.register(r'subjects', SubjectViewSet)
@@ -50,6 +51,10 @@ urlpatterns = [
     path('auth/parents/', parents_list_view, name='parents'),
     path('auth/parents/create/', parents_create_view, name='parents-create'),
     path('auth/parents/link/', parents_link_view, name='parents-link'),
+    path('portfolio/', PortfolioView.as_view(), name='portfolio'),
+    path('portfolio/students/', PortfolioStudentsView.as_view(), name='portfolio-students'),
+    path('portfolio/achievements/', AchievementCreateView.as_view(), name='achievement-create'),
+    path('portfolio/achievements/<int:pk>/', AchievementDeleteView.as_view(), name='achievement-delete'),
     path('auth/bootstrap-admin/', bootstrap_admin_view, name='bootstrap-admin'),
     path('auth/jwt/create/', ThrottledTokenObtainPairView.as_view(), name='jwt-create'),
     path('auth/jwt/refresh/', TokenRefreshView.as_view(), name='jwt-refresh'),

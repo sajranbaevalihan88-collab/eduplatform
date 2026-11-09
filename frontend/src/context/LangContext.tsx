@@ -158,6 +158,14 @@ const dict:Record<Lang,Record<string,string>>={
     msg_role_teacher:'Учитель', msg_role_parent:'Родитель', msg_role_admin:'Админ',
     msg_parent_of:'через', msg_err_empty:'Введите текст сообщения',
     msg_sent:'Отправлено', msg_draft_new:'Создать диалог',
+    pf_title:'Портфолио', pf_pick_student:'Выбрать ученика', pf_print:'Печать / PDF',
+    pf_topics_mastered:'тем изучено', pf_works:'работ', pf_ach:'достижений',
+    pf_ach_add:'Добавить', pf_ach_need_title:'Введите название достижения', pf_ach_added:'Достижение добавлено',
+    pf_ach_title_ph:'Название, напр. «Городская олимпиада — 2 место»', pf_ach_desc_ph:'Описание (необязательно)',
+    pf_save:'Сохранить', pf_cancel:'Отмена', pf_ach_empty:'Достижений пока нет',
+    pf_works_title:'Лучшие работы', pf_works_empty:'Оценённых работ пока нет',
+    pf_knowledge:'Карта знаний', pf_gaps_tip:'Пробелы для подтягивания:',
+    pf_diags_title:'Диагностики', pf_diags_empty:'Диагностик не проходил',
     // __I18N_A__
     tb_new_test:'Новый тест', tb_gen_prompt_min:'Напиши что сделать — хотя бы тему (от 10 символов)', tb_gen_fail:'Не получилось сгенерировать', tb_saved:'Тест сохранён ✓',
     tb_saved_short:'Сохранено ✓', tb_save_fail:'Не сохранилось — проверь связь', tb_title:'Конструктор теста', tb_back_lesson:'← Вернуться к уроку',
@@ -878,6 +886,14 @@ const dict:Record<Lang,Record<string,string>>={
     msg_role_teacher:'Teacher', msg_role_parent:'Parent', msg_role_admin:'Admin',
     msg_parent_of:'via', msg_err_empty:'Type a message first',
     msg_sent:'Sent', msg_draft_new:'Start conversation',
+    pf_title:'Portfolio', pf_pick_student:'Pick a student', pf_print:'Print / PDF',
+    pf_topics_mastered:'topics mastered', pf_works:'works', pf_ach:'achievements',
+    pf_ach_add:'Add', pf_ach_need_title:'Achievement needs a title', pf_ach_added:'Achievement added',
+    pf_ach_title_ph:'Title, e.g. "City olympiad — 2nd place"', pf_ach_desc_ph:'Description (optional)',
+    pf_save:'Save', pf_cancel:'Cancel', pf_ach_empty:'No achievements yet',
+    pf_works_title:'Best works', pf_works_empty:'No graded works yet',
+    pf_knowledge:'Knowledge map', pf_gaps_tip:'Topics to improve:',
+    pf_diags_title:'Diagnostics', pf_diags_empty:'No diagnostics taken',
     // __I18N_B__
     // __I18N_C__
     arkan_answering:'Answering:',
@@ -1861,6 +1877,14 @@ const dict:Record<Lang,Record<string,string>>={
     msg_role_teacher:'Мугалим', msg_role_parent:'Ата-эне', msg_role_admin:'Админ',
     msg_parent_of:'аркылуу', msg_err_empty:'Кабар текстин жазыңыз',
     msg_sent:'Жөнөтүлдү', msg_draft_new:'Чат баштоо',
+    pf_title:'Артпортуулоо', pf_pick_student:'Окуучу тандаңыз', pf_print:'Басып чыгаруу / PDF',
+    pf_topics_mastered:'тема өздөштүрүлдү', pf_works:'иш', pf_ach:'жетишүү',
+    pf_ach_add:'Кошуу', pf_ach_need_title:'Жетишүүнүн аталышын жазыңыз', pf_ach_added:'Жетишүү кошулду',
+    pf_ach_title_ph:'Аталышы, мис. «Шаардык олимпиада — 2-орун»', pf_ach_desc_ph:'Сүрөттөмө (милдеттүү эмес)',
+    pf_save:'Сактоо', pf_cancel:'Жокко чыгуу', pf_ach_empty:'Жетишүү жок',
+    pf_works_title:'Мыкты иштер', pf_works_empty:'Бааланган иш жок',
+    pf_knowledge:'Билим картасы', pf_gaps_tip:'Толуктоо үчүн темалар:',
+    pf_diags_title:'Диагностикалар', pf_diags_empty:'Диагностика өткөрүлгөн жок',
     // __I18N_B__
     // __I18N_C__
   }

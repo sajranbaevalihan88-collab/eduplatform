@@ -64,6 +64,7 @@ import ClassroomDetail from './pages/ClassroomDetail'
 import Programs from './pages/Programs'
 import Progress from './pages/Progress'
 import Messages from './pages/Messages'
+import Portfolio from './pages/Portfolio'
 import Diary from './pages/Diary'
 import Children from './pages/Children'
 import TestBuilder from './pages/TestBuilder'
@@ -118,6 +119,7 @@ export default function App() {
                 <Route path="/programs" element={<PrivateRoute><Programs /></PrivateRoute>} />
                 <Route path="/progress" element={<PrivateRoute><Progress /></PrivateRoute>} />
                 <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
+                <Route path="/portfolio" element={<PrivateRoute><Portfolio /></PrivateRoute>} />
                 <Route path="/classes/:id" element={<PrivateRoute><ClassroomDetail /></PrivateRoute>} />
                 <Route path="/diary" element={<PrivateRoute><Diary /></PrivateRoute>} />
 
