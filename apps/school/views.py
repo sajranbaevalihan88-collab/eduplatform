@@ -111,8 +111,103 @@ class TopicViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                          'skipped': skipped[:10], 'total_skip': len(skipped)})
 
 
+def _resolve_student(request):
+    """Кого смотрим: ученик — себя; родитель — привязанного ребёнка по ?student=."""
+    u = request.user
+    if getattr(u, 'role', None) == 'parent':
+        from apps.accounts.models import ParentLink
+        from django.contrib.auth import get_user_model
+        stu = get_user_model().objects.filter(
+            username__iexact=(request.query_params.get('student') or '').strip()).first()
+        if not stu or not ParentLink.objects.filter(parent=u, student=stu).exists():
+            return None, Response({'error': 'Этот ученик не привязан к вашему аккаунту'}, status=403)
+        return stu, None
+    if getattr(u, 'role', None) != 'student':
+        return None, Response({'error': 'Только для ученика и родителя'}, status=403)
+    return u, None
+
+
+def _topic_mastery(student):
+    """Карта знаний: взвешенный % освоения по темам из попыток тестов и сдач заданий.
+    Возвращает (per_topic, diagnostics)."""
+    from apps.assessments.models import TestAttempt
+    from apps.classroom.models import Submission
+
+    per = {}
+
+    def acc(tid, earned, total, title=None):
+        if not total:
+            return
+        rec = per.setdefault(tid, {'earned': 0, 'total': 0, 'title': title or ''})
+        rec['earned'] += earned or 0
+        rec['total'] += total
+        if title and not rec['title']:
+            rec['title'] = title
+
+    # попытки тестов (с разбивкой по темам)
+    for att in TestAttempt.objects.filter(user=student).select_related('test'):
+        for tid_s, rec in (att.topic_scores or {}).items():
+            try:
+                tid = int(tid_s)
+            except (TypeError, ValueError):
+                continue
+            acc(tid, rec.get('earned'), rec.get('total'), rec.get('title'))
+
+    # сдачи заданий с привязкой к теме
+    subs = (Submission.objects.filter(student=student, status__in=['submitted', 'late'],
+                                       assignment__topic__isnull=False)
+            .select_related('assignment__topic'))
+    for s in subs:
+        a = s.assignment
+        mx = a.max_score or 100
+        if s.score is not None:
+            acc(a.topic_id, s.score, mx, a.topic.title if a.topic else '')
+
+    # обогащаем названиями тем из БД (на случай пустых title в attempt)
+    if per:
+        from .models import Topic as _T
+        titles = {t.id: t.title for t in _T.objects.filter(id__in=per.keys())}
+        for tid, rec in per.items():
+            if not rec['title'] and tid in titles:
+                rec['title'] = titles[tid]
+
+    topics = []
+    for tid, rec in per.items():
+        pct = round(rec['earned'] / rec['total'] * 100, 1) if rec['total'] else 0
+        status = 'mastered' if pct >= 80 else ('learning' if pct >= 50 else 'gap')
+        topics.append({'topic_id': tid, 'title': rec['title'] or f'Тема #{tid}',
+                       'pct': pct, 'status': status,
+                       'earned': rec['earned'], 'total': rec['total']})
+    topics.sort(key=lambda x: (x['pct'], x['title']))
+    gaps = [t for t in topics if t['status'] == 'gap']
+    mastered = [t for t in topics if t['status'] == 'mastered']
+    learning = [t for t in topics if t['status'] == 'learning']
+
+    # входные диагностики: последние попытки по диагностическим тестам
+    diags = []
+    for att in TestAttempt.objects.filter(user=student, test__is_diagnostic=True) \
+            .select_related('test').order_by('-created_at'):
+        pass  # несколько попыток — один тест проходится один раз; берём последнюю ниже
+    from django.db.models import Max as _Max
+    last = (TestAttempt.objects.filter(user=student, test__is_diagnostic=True)
+            .values('test_id').annotate(_m=_Max('created_at')))
+    last_keys = {(r['test_id'], r['_m']) for r in last}
+    for att in TestAttempt.objects.filter(user=student, test__is_diagnostic=True) \
+            .select_related('test').order_by('-created_at'):
+        key = (att.test_id, att.created_at)
+        if key not in last_keys:
+            continue
+        last_keys.discard(key)
+        diags.append({'test_id': att.test_id, 'title': att.test.title,
+                      'score': att.score, 'passed': att.passed, 'date': att.created_at})
+    diags.sort(key=lambda d: d['date'], reverse=True)
+    return {'topics': topics, 'gaps': gaps, 'mastered': mastered,
+            'learning': learning, 'diagnostics': diags,
+            'tested_topics': len(topics)}
+
+
 class SchoolMixin:
-    """Actions ClassroomViewSet: посещаемость, расписание, замены, экспорт CSV."""
+    """Actions ClassroomViewSet: посещаемость, расписание, замены, экспорт CSV, прогресс по темам."""
 
     def _school_room(self, pk) -> Classroom:
         try:
@@ -239,6 +334,77 @@ class SchoolMixin:
         return Response({'rows': rows, 'classes': [{'classroom_id': cid, **v}
                                                    for cid, v in per_class.items()],
                          'days': days})
+
+    # ---------- путь обучения ученика ----------
+    @action(detail=False, methods=['get'])
+    def my_progress(self, request):
+        """Карта знаний ученика (привязка родителя — ?student=<ник>)."""
+        student, err = _resolve_student(request)
+        if err:
+            return err
+        prog = _topic_mastery(student)
+        # персональные задания ученика (подтянуть темы)
+        from apps.classroom.models import Assignment, Submission
+        personal = (Assignment.objects.filter(assigned_to=student)
+                    .select_related('classroom', 'topic').order_by('deadline', '-created_at'))
+        sub_map = {s.assignment_id: s for s in
+                   Submission.objects.filter(student=student, assignment__in=personal)}
+        pers = []
+        now = timezone.now()
+        for a in personal:
+            s = sub_map.get(a.id)
+            if s:
+                st = s.status
+            elif a.deadline and a.deadline < now:
+                st = 'overdue'
+            else:
+                st = 'pending'
+            pers.append({'id': a.id, 'title': a.title, 'kind': a.kind,
+                         'classroom_id': a.classroom_id, 'classroom_title': a.classroom.title,
+                         'topic_title': a.topic.title if a.topic else '', 'deadline': a.deadline,
+                         'status': st, 'score': s.score if s else None})
+        prog['personal_tasks'] = pers
+        # доступные диагностики (ещё не пройденные)
+        from apps.assessments.models import Test
+        taken = {d['test_id'] for d in prog['diagnostics']}
+        available = (Test.objects.filter(is_diagnostic=True)
+                     .exclude(id__in=taken)
+                     .select_related('subject'))[:10]
+        prog['diagnostics_available'] = [
+            {'id': t.id, 'title': t.title,
+             'subject': t.subject.name if t.subject else '',
+             'diagnostic_grade': t.diagnostic_grade}
+            for t in available]
+        prog['student'] = student.username
+        return Response(prog)
+
+    @action(detail=True, methods=['get'])
+    def class_progress(self, request, pk=None):
+        """Аналитика класса для учителя: % по темам на ученика, кто отстаёт, диагностика."""
+        from apps.classroom.models import Enrollment
+        room = self._school_room(pk)
+        if not (_is_admin(request.user) or room.owner_id == request.user.id):
+            raise PermissionDenied('Только владелец класса')
+        students = [e.student for e in room.enrollments.exclude(access_granted=False)
+                    .select_related('student').order_by('student__username')]
+        rows = []
+        gaps_all = {}
+        for stu in students:
+            prog = _topic_mastery(stu)
+            avg = round(sum(t['pct'] for t in prog['topics']) / len(prog['topics']), 1) \
+                if prog['topics'] else None
+            for g in prog['gaps']:
+                gaps_all.setdefault(g['topic_id'], {
+                    'title': g['title'], 'students': []})['students'].append(stu.username)
+            rows.append({'student': stu.id, 'username': stu.username, 'avg': avg,
+                         'tested_topics': prog['tested_topics'],
+                         'gaps': [g['title'] for g in prog['gaps']],
+                         'diagnostics_taken': len(prog['diagnostics']),
+                         'diagnostics': prog['diagnostics']})
+        rows.sort(key=lambda r: (r['avg'] is None, r['avg']))
+        return Response({'classroom': room.title, 'students': rows,
+                         'class_gaps': [{'topic_id': tid, **v}
+                                        for tid, v in gaps_all.items()]})
 
     # ---------- расписание ----------
     @action(detail=True, methods=['get'])

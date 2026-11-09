@@ -59,6 +59,12 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
         subject = self.request.query_params.get('subject')
         if subject:
             qs = qs.filter(subject__slug=subject)
+        diag = self.request.query_params.get('diagnostic')
+        if diag is not None and diag != '':
+            qs = qs.filter(is_diagnostic=(diag.lower() in ('true', '1', 'yes')))
+        grade = (self.request.query_params.get('grade') or '').strip()
+        if grade:
+            qs = qs.filter(diagnostic_grade=grade)
         return qs
 
     def perform_create(self, serializer):
@@ -106,6 +112,7 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
         total = 0
         earned = 0
         details = []
+        topic_scores = {}
         # используем prefetched options из queryset (prefetch_related), без N+1
         questions = list(test.questions.all())
         # собрать все options одним запросом
@@ -176,6 +183,11 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             if is_correct:
                 earned += q.points
             details.append({'question_id': q.id, 'correct': is_correct, 'points': q.points if is_correct else 0})
+            if getattr(q, 'topic_id', None):
+                rec = topic_scores.setdefault(str(q.topic_id), {'earned': 0, 'total': 0, 'title': q.topic.title if q.topic else ''})
+                rec['total'] += q.points
+                if is_correct:
+                    rec['earned'] += q.points
         
         score_pct = (earned/total*100) if total else 0
         passed = score_pct >= test.pass_score
@@ -189,7 +201,8 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                 score=round(score_pct,1),
                 max_score=total,
                 passed=passed,
-                answers=answers
+                answers=answers,
+                topic_scores=topic_scores
             )
             # Класс-рум: тест назначен заданием — отметка «Сдано» происходит сразу здесь,
             # а не отдельным кликом в классе. Счётчик отдаём фронту для тоста.

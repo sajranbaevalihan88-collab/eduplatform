@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import client, { mediaUrl } from '../api/client'
-import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles, Share2, Video, PenLine, FlaskConical, BookOpen, X, Wallet, Lock, CalendarCheck, CalendarDays } from 'lucide-react'
+import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles, Share2, Video, PenLine, FlaskConical, BookOpen, X, Wallet, Lock, CalendarCheck, CalendarDays, TrendingUp } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
 import AttendancePanel from '../components/AttendancePanel'
 import SchedulePanel from '../components/SchedulePanel'
+import ProgressTab from '../components/ProgressTab'
 import QuizBuilder from '../components/ClassroomQuizBuilder'
 import { playUiSound } from '../utils/sound'
 import { AI_FEATURES } from '../utils/features'
@@ -39,7 +40,7 @@ export default function ClassroomDetail(){
   const {id} = useParams()
   const nav = useNavigate()
   const [room,setRoom]=useState<any>(null)
-  const [tab,setTab]=useState<'stream'|'tasks'|'people'|'grades'|'attendance'|'schedule'>('stream')
+  const [tab,setTab]=useState<'stream'|'tasks'|'people'|'grades'|'attendance'|'schedule'|'progress'>('stream')
   const [members,setMembers]=useState<any[]>([])
   const [tasks,setTasks]=useState<any[]>([])
   const [myTasks,setMyTasks]=useState<any>({})
@@ -60,6 +61,7 @@ export default function ClassroomDetail(){
   const [aurl,setAurl]=useState('')
   const [atopic,setAtopic]=useState('')
   const [topics,setTopics]=useState<any[]>([])
+  const [apersonal,setApersonal]=useState('')
   const [creating,setCreating]=useState(false)
   // письменный ответ ученика (kind=write)
   const [wOpen,setWOpen]=useState<number|null>(null)
@@ -205,15 +207,15 @@ export default function ClassroomDetail(){
     try{
       if(akind==='link'){
         if(!aurl.trim()){ toast(t('cls_need_url'),'error'); return }
-        await client.post('/assignments/', {classroom:id, kind:'link', manual_title: atitle.trim()||t('cls_k_link'), url:aurl.trim(), instructions:ainstr, deadline:dl, topic: atopic||null})
+        await client.post('/assignments/', {classroom:id, kind:'link', manual_title: atitle.trim()||t('cls_k_link'), url:aurl.trim(), instructions:ainstr, deadline:dl, topic: atopic||null, assigned_to: apersonal||null})
       } else if(akind==='write'){
         if(!atitle.trim()){ toast(t('cls_need_task_title'),'error'); return }
-        await client.post('/assignments/', {classroom:id, kind:'write', manual_title: atitle.trim(), instructions:ainstr, deadline:dl, topic: atopic||null})
+        await client.post('/assignments/', {classroom:id, kind:'write', manual_title: atitle.trim(), instructions:ainstr, deadline:dl, topic: atopic||null, assigned_to: apersonal||null})
       } else {
         if(!aobj){ toast(t('cls_pick_obj'),'error'); return }
-        await client.post('/assignments/', {classroom:id, kind:akind, [akind]:Number(aobj), deadline:dl, instructions: ainstr, topic: atopic||null})
+        await client.post('/assignments/', {classroom:id, kind:akind, [akind]:Number(aobj), deadline:dl, instructions: ainstr, topic: atopic||null, assigned_to: apersonal||null})
       }
-      setAobj(''); setAdlDate(''); setAdlTime(''); setAinstr(''); setAtitle(''); setAurl(''); setAtopic(''); setCreating(false); load()
+      setAobj(''); setAdlDate(''); setAdlTime(''); setAinstr(''); setAtitle(''); setAurl(''); setAtopic(''); setApersonal(''); setCreating(false); load()
       toast(t('cls_added'),'success')
     }catch(e:any){ toast(e?.response?.data?.detail||e?.response?.data?.url||e?.response?.data?.manual_title||JSON.stringify(e?.response?.data)||'err','error') }
   }
@@ -384,6 +386,7 @@ export default function ClassroomDetail(){
     {k:'schedule', label:t('cls_tab_schedule')||'Расписание', icon:CalendarDays},
   ]
   if(isOwner) tabs.push({k:'grades', label:t('cls_tab_grades'), icon:BarChart3})
+  tabs.push({k:'progress', label:'Прогресс', icon:TrendingUp})
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
@@ -603,6 +606,14 @@ export default function ClassroomDetail(){
                       {topics.map((tp:any)=><option key={tp.id} value={tp.id}>{tp.num}. {tp.title}</option>)}
                     </select>
                   )}
+                  {members.length>0 && (
+                    <select value={apersonal} onChange={e=>setApersonal(e.target.value)}
+                      data-testid="task-personal" aria-label="Персонально ученику"
+                      className="w-full px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white outline-none">
+                      <option value="">Весь класс (общее задание)</option>
+                      {members.map((m:any)=><option key={m.id} value={m.student}>{m.student_name} — персонально</option>)}
+                    </select>
+                  )}
                   <div className="space-y-2">
                     <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5"><Clock size={14}/>{t('cls_deadline')}</div>
                     <div className="flex flex-wrap gap-2">
@@ -802,6 +813,14 @@ export default function ClassroomDetail(){
 
           {tab==='schedule' && (
             <SchedulePanel classId={id} isOwner={isOwner}/>
+          )}
+
+          {tab==='progress' && isOwner && (
+            <ProgressTab classId={id}/>
+          )}
+
+          {tab==='progress' && !isOwner && (
+            <div className="text-center text-slate-400 py-8">Прогресс по темам — ученику на странице «Мой прогресс»</div>
           )}
 
           {tab==='grades' && isOwner && (

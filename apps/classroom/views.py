@@ -364,11 +364,16 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def my_tasks(self, request, pk=None):
-        """Задания класса со статусом текущего ученика (для виджета 'осталось сдать')."""
+        """Задания класса со статусом текущего ученика. Персональные (assigned_to) — только себе."""
         room = self.get_object()
         if not room.has_access(request.user):
             raise PermissionDenied('Ты не участник класса')
         assignments = list(room.assignments.exclude(kind='manual').order_by('deadline', '-created_at', 'id'))
+        # персональное задание другого ученика в 'моих задачах' не всплывает
+        u = request.user
+        role = getattr(u, 'role', None)
+        if role not in ('teacher', 'admin') and not getattr(u, 'is_staff', False):
+            assignments = [a for a in assignments if not a.assigned_to_id or a.assigned_to_id == u.id]
         sub_map = {s.assignment_id: s for s in Submission.objects.filter(
             assignment__in=assignments, student=request.user)}
         now = timezone.now()
@@ -537,6 +542,10 @@ class AssignmentViewSet(viewsets.ModelViewSet):
                 filter=Q(submissions__status__in=['submitted', 'late'], submissions__score__isnull=False),
                 distinct=True),
         )
+        # персональные задания (assigned_to): ученик видит общее + личное себе. Учителя/админы видят всё.
+        u = self.request.user
+        if getattr(u, 'role', None) not in ('teacher', 'admin') and not getattr(u, 'is_staff', False):
+            qs = qs.filter(Q(assigned_to__isnull=True) | Q(assigned_to=u))
         kind = self.request.query_params.get('kind')
         if kind:
             qs = qs.filter(kind=kind)

@@ -30,6 +30,7 @@ export default function Children(){
   const [diary,setDiary]=useState<DiaryData|null>(null)
   const [filter,setFilter]=useState<number|null>(null)
   const [attendance,setAttendance]=useState<any>(null)
+  const [progress,setProgress]=useState<any>(null)
 
   useEffect(()=>{
     client.get('/auth/children/')
@@ -46,6 +47,9 @@ export default function Children(){
     client.get('/classrooms/my_attendance/',{ params:{ student: sel, days: 90 } })
       .then(r=>setAttendance(r.data))
       .catch(()=>setAttendance(null))
+    client.get('/classrooms/my_progress/',{ params:{ student: sel } })
+      .then(r=>setProgress(r.data))
+      .catch(()=>setProgress(null))
   },[sel])
 
   const cur = useMemo(()=> (kids||[]).find(k=>k.username===sel) || null, [kids, sel])
@@ -167,6 +171,52 @@ export default function Children(){
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Прогресс по темам: что умеет, что подтянуть */}
+      {progress && progress.topics && progress.topics.length>0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 p-4">
+          <h2 className="font-bold flex items-center gap-2 dark:text-white">
+            <TrendingUp size={17} className="text-indigo-600"/>Путь обучения и темы
+            <span className="text-xs font-medium text-slate-400">изучено {progress.mastered.length} · подтянуть {progress.gaps.length}</span>
+          </h2>
+          <div className="mt-3 space-y-2.5">
+            {progress.topics.map((tp:any)=>(
+              <div key={tp.topic_id}>
+                <div className="flex items-center gap-2 text-sm mb-1">
+                  <span className="flex-1 truncate dark:text-white">{tp.title}</span>
+                  <span className={`font-bold ${tp.pct>=80?'text-emerald-600': tp.pct>=50?'text-sky-600':'text-red-600'}`}>{tp.pct}%</span>
+                </div>
+                <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <div className={`h-full rounded-full ${tp.pct>=80?'bg-emerald-500': tp.pct>=50?'bg-sky-500':'bg-red-500'}`} style={{ width: `${Math.max(2, tp.pct)}%` }}/>
+                </div>
+              </div>
+            ))}
+          </div>
+          {progress.diagnostics && progress.diagnostics.length>0 && (
+            <div className="mt-3 pt-3 border-t dark:border-slate-700">
+              <div className="text-xs font-semibold text-slate-500 mb-1">Диагностики</div>
+              {progress.diagnostics.map((d:any)=>(
+                <div key={d.test_id} className="flex items-center gap-2 text-xs dark:text-slate-300 py-0.5">
+                  <span className="flex-1 truncate">{d.title}</span>
+                  <b>{d.score}%</b>
+                  <span className="text-slate-400">{new Date(d.date).toLocaleDateString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {progress.personal_tasks && progress.personal_tasks.length>0 && (
+            <div className="mt-3 pt-3 border-t dark:border-slate-700">
+              <div className="text-xs font-semibold text-slate-500 mb-1">Персональные задания</div>
+              {progress.personal_tasks.map((a:any)=>(
+                <div key={a.id} className="flex items-center gap-2 text-xs dark:text-slate-300 py-0.5">
+                  <span className="flex-1 truncate">{a.title}</span>
+                  <span className="text-slate-400">{a.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

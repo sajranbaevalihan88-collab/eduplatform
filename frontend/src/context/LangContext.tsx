@@ -151,6 +151,7 @@ const dict:Record<Lang,Record<string,string>>={
     prog_t:'Учебная программа', prog_add:'Добавить тему', prog_csv:'Импорт CSV',
     prog_imported:'Импортировано тем', prog_empty:'Тем пока нет', prog_sel_subject:'Предмет', prog_sel_grade:'Класс',
     diary_att:'Посещаемость',
+    progress_t:'Мой прогресс',
     // __I18N_A__
     tb_new_test:'Новый тест', tb_gen_prompt_min:'Напиши что сделать — хотя бы тему (от 10 символов)', tb_gen_fail:'Не получилось сгенерировать', tb_saved:'Тест сохранён ✓',
     tb_saved_short:'Сохранено ✓', tb_save_fail:'Не сохранилось — проверь связь', tb_title:'Конструктор теста', tb_back_lesson:'← Вернуться к уроку',
@@ -864,6 +865,7 @@ const dict:Record<Lang,Record<string,string>>={
     prog_t:'Curriculum program', prog_add:'Add topic', prog_csv:'CSV import',
     prog_imported:'topics imported', prog_empty:'No topics yet', prog_sel_subject:'Subject', prog_sel_grade:'Grade',
     diary_att:'Attendance',
+    progress_t:'My progress',
     // __I18N_B__
     // __I18N_C__
     arkan_answering:'Answering:',
@@ -1840,6 +1842,7 @@ const dict:Record<Lang,Record<string,string>>={
     prog_t:'Окуу программасы', prog_add:'Тема кошуу', prog_csv:'CSV импорт',
     prog_imported:'импорттолгон тема', prog_empty:'Темалар азырынча жок', prog_sel_subject:'Предмет', prog_sel_grade:'Класс',
     diary_att:'Катышуу',
+    progress_t:'Менин прогрессим',
     // __I18N_B__
     // __I18N_C__
   }

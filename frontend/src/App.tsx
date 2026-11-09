@@ -62,6 +62,7 @@ import Tests from './pages/Tests'
 import Classes from './pages/Classes'
 import ClassroomDetail from './pages/ClassroomDetail'
 import Programs from './pages/Programs'
+import Progress from './pages/Progress'
 import Diary from './pages/Diary'
 import Children from './pages/Children'
 import TestBuilder from './pages/TestBuilder'
@@ -114,6 +115,7 @@ export default function App() {
                 <Route path="/tests/:id/take" element={<TestTake />} />
                 <Route path="/classes" element={<PrivateRoute><Classes /></PrivateRoute>} />
                 <Route path="/programs" element={<PrivateRoute><Programs /></PrivateRoute>} />
+                <Route path="/progress" element={<PrivateRoute><Progress /></PrivateRoute>} />
                 <Route path="/classes/:id" element={<PrivateRoute><ClassroomDetail /></PrivateRoute>} />
                 <Route path="/diary" element={<PrivateRoute><Diary /></PrivateRoute>} />
 

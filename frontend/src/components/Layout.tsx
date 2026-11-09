@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info, Database, Volume2, VolumeX, FolderLock, BookOpenCheck, UsersRound, ListTree } from 'lucide-react'
+import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info, Database, Volume2, VolumeX, FolderLock, BookOpenCheck, UsersRound, ListTree, TrendingUp } from 'lucide-react'
 import A11yPanel from './A11yPanel'
 import { useState, useEffect, useRef } from 'react'
 import client from '../api/client'
@@ -43,6 +43,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     ...(!student && !isParent ? [{ to: '/programs', label: 'Учебная программа', icon: ListTree }] : []),
     // Дневник ученика: все оценки по классам в одном месте
     ...(student ? [{ to: '/diary', label: t('diary'), icon: BookOpenCheck }] : []),
+    // Путь обучения: диагностика, карта знаний, персональные задания
+    ...(student ? [{ to: '/progress', label: 'Мой прогресс', icon: TrendingUp }] : []),
     // Страница родителя: дети + успеваемость
     ...(isParent ? [{ to: '/children', label: t('children_nav'), icon: UsersRound }] : []),
     // доска — только учителям (у ученика её нет)

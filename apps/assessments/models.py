@@ -6,6 +6,9 @@ class Test(models.Model):
     description = models.TextField(blank=True)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name='tests')
     subject = models.ForeignKey('catalog.Subject', on_delete=models.SET_NULL, null=True, blank=True, related_name='tests', help_text='Предмет для раздела «Предметы»')
+    # Входная диагностика: один раз на ученика, результат идёт в «путь обучения»
+    is_diagnostic = models.BooleanField(default=False, help_text='Тест отмечен как входная диагностика')
+    diagnostic_grade = models.CharField(max_length=10, blank=True, default='', help_text='Класс, для которого диагностика: «8», «9» …')
     is_public = models.BooleanField(default=True)
     is_lesson_private = models.BooleanField(default=False, help_text="Создан внутри урока — не показывать в общей ленте")
     lesson = models.ForeignKey('lessons.Lesson', on_delete=models.SET_NULL, null=True, blank=True, related_name='tests', help_text="Урок, внутри которого создан контент. Пока урок не опубликован — видит только владелец")
@@ -25,6 +28,8 @@ class Question(models.Model):
         ('true_false', 'Верно/Неверно'),
     ]
     test = models.ForeignKey(Test, on_delete=models.CASCADE, related_name='questions')
+    # Привязка вопроса к теме учебной программы → вклад в «карту знаний»
+    topic = models.ForeignKey('school.Topic', on_delete=models.SET_NULL, null=True, blank=True, related_name='questions')
     text = models.TextField()
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='single')
     points = models.PositiveIntegerField(default=1)
@@ -55,7 +60,11 @@ class TestAttempt(models.Model):
     score = models.FloatField(default=0)
     max_score = models.FloatField(default=0)
     passed = models.BooleanField(default=False)
+    violation_count = models.PositiveIntegerField(default=0, help_text='Попытки скриншота/выхода из вкладки (антиспид-чит)')
+    violations = models.JSONField(default=list)  # детали нарушений: [{at, kind}]
     answers = models.JSONField(default=dict, blank=True)  # {question_id: [option_ids] or text}
+    # Разбивка по темам: {topic_id: {'earned': x, 'total': y}} — для карты знаний ученика
+    topic_scores = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

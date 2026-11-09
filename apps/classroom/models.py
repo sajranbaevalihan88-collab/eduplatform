@@ -118,6 +118,10 @@ class Assignment(models.Model):
     # через неё считаются «прогресс по темам» и экспорт журнала
     topic = models.ForeignKey('school.Topic', on_delete=models.SET_NULL, null=True, blank=True,
                               related_name='assignments')
+    # Персональное задание: только одному ученику (путь обучения — подтянуть тему).
+    # null — задание общего доступа для всего класса.
+    assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                    null=True, blank=True, related_name='personal_assignments')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

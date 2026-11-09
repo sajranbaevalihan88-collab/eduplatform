@@ -7,7 +7,7 @@ import { useLang } from '../context/LangContext'
 import { AI_FEATURES } from '../utils/features'
 
 type Opt={text:string,is_correct:boolean}
-type Q={text:string,type:string,points:number,options:Opt[],explanation?:string}
+type Q={text:string,type:string,points:number,topic?:number|null,options:Opt[],explanation?:string}
 
 export default function TestBuilder(){
   const {id}=useParams()
@@ -18,6 +18,9 @@ export default function TestBuilder(){
   const [desc,setDesc]=useState('')
   const [pass,setPass]=useState(60)
   const [timePerQ,setTimePerQ]=useState(30)
+  const [isDiag,setIsDiag]=useState(false)
+  const [diagGrade,setDiagGrade]=useState('')
+  const [topics,setTopics]=useState<any[]>([])
   const [questions,setQuestions]=useState<Q[]>([])
   const [showGen,setShowGen]=useState(false)
   const [genCount,setGenCount]=useState(5)
@@ -61,14 +64,21 @@ export default function TestBuilder(){
   useEffect(()=>{
     if(!isNew) client.get(`/tests/${id}/`).then(r=>{
       setTitle(r.data.title); setDesc(r.data.description); setPass(r.data.pass_score); setTimePerQ(r.data.time_per_question||0); if(r.data.subject!=null) setSubject(Number(r.data.subject))
-      if(r.data.questions?.length) setQuestions(r.data.questions.map((q:any)=>({text:q.text,type:q.type,points:q.points,explanation:q.explanation||'',options:q.options.map((o:any)=>({text:o.text,is_correct:o.is_correct}))})))
+      setIsDiag(!!(r.data as any).is_diagnostic); setDiagGrade((r.data as any).diagnostic_grade||'')
+      if(r.data.questions?.length) setQuestions(r.data.questions.map((q:any)=>({text:q.text,type:q.type,points:q.points,topic:q.topic??null,explanation:q.explanation||'',options:q.options.map((o:any)=>({text:o.text,is_correct:o.is_correct}))})))
     })
   },[id])
+  // Темы учебной программы для привязки вопросов (по выбранному предмету)
+  useEffect(()=>{
+    const params:any = {}
+    if(subject) params.subject = subject
+    client.get('/topics/', { params }).then(r=>setTopics(Array.isArray(r.data)?r.data:r.data.results||[])).catch(()=>setTopics([]))
+  },[subject])
   const save=async()=>{
     if(saving) return
     setSaving(true)
     try{
-      const payload={title,description:desc,subject:subject||null,pass_score:pass,time_limit:0,time_per_question:Math.max(0, timePerQ||0),questions:questions.map((q,i)=>({...q,order:i,explanation:(q as any).explanation||'',options:q.options.map((o,j)=>({...o,order:j}))}))}
+      const payload={title,description:desc,subject:subject||null,pass_score:pass,time_limit:0,time_per_question:Math.max(0, timePerQ||0),is_diagnostic:isDiag,diagnostic_grade:isDiag?diagGrade.trim():'',questions:questions.map((q,i)=>({...q,topic:q.topic||null,order:i,explanation:(q as any).explanation||'',options:q.options.map((o,j)=>({...o,order:j}))}))}
       if(isNew){
         await client.post('/tests/',payload)
         toast(t('tb_saved'),'success')
@@ -128,6 +138,17 @@ export default function TestBuilder(){
           <label className="text-sm" title={t('tb_sec_per_q')}>{t('tb_sec_per_q')}</label><input type="number" min={0} max={300} value={timePerQ} onChange={e=>setTimePerQ(Math.max(0, parseInt(e.target.value)||0))} className="w-24 px-3 py-2 rounded-xl border"/>
           <span className="text-xs text-slate-400">{t('tb_no_limit_hint')}</span>
         </div>
+        <label className="flex flex-wrap items-center gap-2 text-sm dark:text-slate-200">
+          <input type="checkbox" checked={isDiag} onChange={e=>setIsDiag(e.target.checked)}
+            data-testid="tb-diag" className="w-4 h-4 accent-indigo-600"/>
+          <span className="font-semibold">Входная диагностика</span>
+          <span className="text-xs text-slate-400">(результат попадёт в путь обучения ученика)</span>
+          {isDiag && (
+            <input value={diagGrade} onChange={e=>setDiagGrade(e.target.value)} placeholder="Класс: 8"
+              data-testid="tb-diag-grade" aria-label="Класс диагностики"
+              className="w-28 px-3 py-1.5 rounded-xl border bg-slate-50 dark:bg-slate-800 text-sm"/>
+          )}
+        </label>
       </div>
       {questions.map((q,qi)=>(
         <div key={qi} className="bg-white rounded-2xl border p-5 space-y-3">
@@ -149,6 +170,14 @@ export default function TestBuilder(){
               <option value="single">{t('tb_single')}</option><option value="multiple">{t('tb_multiple')}</option><option value="true_false">{t('tb_tf')}</option>
             </select>
             <input type="number" value={q.points} onChange={e=>setQuestions(qs=>qs.map((x,i)=>i===qi?{...x,points:parseInt(e.target.value)||1}:x))} className="w-20 px-3 py-2 rounded-xl border" placeholder={t('points')}/>
+            {topics.length>0 && (
+              <select value={q.topic||''} onChange={e=>setQuestions(qs=>qs.map((x,i)=>i===qi?{...x,topic:e.target.value?Number(e.target.value):null}:x))}
+                data-testid={`q-topic-${qi}`} aria-label="Тема вопроса"
+                className="px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 text-sm">
+                <option value="">Без темы</option>
+                {topics.map((tp:any)=><option key={tp.id} value={tp.id}>{tp.num}. {tp.title}</option>)}
+              </select>
+            )}
           </div>
           {(q as any).explanation !== undefined && (q as any).explanation !== '' && (
             <div className="text-xs px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100">{t('tb_ai')} {(q as any).explanation}</div>

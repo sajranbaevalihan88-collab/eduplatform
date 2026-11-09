@@ -69,6 +69,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 class AssignmentSerializer(serializers.ModelSerializer):
     title = serializers.CharField(read_only=True)
     topic_title = serializers.CharField(source='topic.title', read_only=True, default='')
+    assigned_to_name = serializers.CharField(source='assigned_to.username', read_only=True, default='')
     object_id = serializers.SerializerMethodField()
     submitted_count = serializers.IntegerField(read_only=True, default=0)
     graded_count = serializers.IntegerField(read_only=True, default=0)
@@ -76,8 +77,8 @@ class AssignmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Assignment
         fields = ['id', 'classroom', 'kind', 'lesson', 'test', 'title', 'object_id', 'manual_title', 'url',
-                  'topic', 'topic_title', 'instructions', 'deadline', 'max_score', 'created_at',
-                  'submitted_count', 'graded_count']
+                  'topic', 'topic_title', 'assigned_to', 'assigned_to_name', 'instructions', 'deadline',
+                  'max_score', 'created_at', 'submitted_count', 'graded_count']
         read_only_fields = ['id', 'created_at']
 
     def get_object_id(self, obj):
