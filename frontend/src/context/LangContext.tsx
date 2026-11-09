@@ -152,6 +152,12 @@ const dict:Record<Lang,Record<string,string>>={
     prog_imported:'Импортировано тем', prog_empty:'Тем пока нет', prog_sel_subject:'Предмет', prog_sel_grade:'Класс',
     diary_att:'Посещаемость',
     progress_t:'Мой прогресс',
+    msg_t:'Сообщения', msg_new_chat:'Новый диалог', msg_pick_contact:'Кому написать',
+    msg_send:'Отправить', msg_type_hint:'Введите сообщение…', msg_no_dialogs:'Диалогов пока нет — выберите адресата в «Новом диалоге»',
+    msg_empty_chat:'Начните переписку первым сообщением',
+    msg_role_teacher:'Учитель', msg_role_parent:'Родитель', msg_role_admin:'Админ',
+    msg_parent_of:'через', msg_err_empty:'Введите текст сообщения',
+    msg_sent:'Отправлено', msg_draft_new:'Создать диалог',
     // __I18N_A__
     tb_new_test:'Новый тест', tb_gen_prompt_min:'Напиши что сделать — хотя бы тему (от 10 символов)', tb_gen_fail:'Не получилось сгенерировать', tb_saved:'Тест сохранён ✓',
     tb_saved_short:'Сохранено ✓', tb_save_fail:'Не сохранилось — проверь связь', tb_title:'Конструктор теста', tb_back_lesson:'← Вернуться к уроку',
@@ -866,6 +872,12 @@ const dict:Record<Lang,Record<string,string>>={
     prog_imported:'topics imported', prog_empty:'No topics yet', prog_sel_subject:'Subject', prog_sel_grade:'Grade',
     diary_att:'Attendance',
     progress_t:'My progress',
+    msg_t:'Messages', msg_new_chat:'New conversation', msg_pick_contact:'Write to',
+    msg_send:'Send', msg_type_hint:'Type a message…', msg_no_dialogs:'No conversations yet — pick a person in "New conversation"',
+    msg_empty_chat:'Be the first to write',
+    msg_role_teacher:'Teacher', msg_role_parent:'Parent', msg_role_admin:'Admin',
+    msg_parent_of:'via', msg_err_empty:'Type a message first',
+    msg_sent:'Sent', msg_draft_new:'Start conversation',
     // __I18N_B__
     // __I18N_C__
     arkan_answering:'Answering:',
@@ -1843,6 +1855,12 @@ const dict:Record<Lang,Record<string,string>>={
     prog_imported:'импорттолгон тема', prog_empty:'Темалар азырынча жок', prog_sel_subject:'Предмет', prog_sel_grade:'Класс',
     diary_att:'Катышуу',
     progress_t:'Менин прогрессим',
+    msg_t:'Кабарлар', msg_new_chat:'Жаңы чат', msg_pick_contact:'Кимге жазуу',
+    msg_send:'Жөнөтүү', msg_type_hint:'Кабар жазыңыз…', msg_no_dialogs:'Чат жок — «Жаңы чат»тан адресат тандаңыз',
+    msg_empty_chat:'Биринчи болуп жазыңыз',
+    msg_role_teacher:'Мугалим', msg_role_parent:'Ата-эне', msg_role_admin:'Админ',
+    msg_parent_of:'аркылуу', msg_err_empty:'Кабар текстин жазыңыз',
+    msg_sent:'Жөнөтүлдү', msg_draft_new:'Чат баштоо',
     // __I18N_B__
     // __I18N_C__
   }
