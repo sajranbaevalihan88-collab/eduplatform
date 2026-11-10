@@ -4,11 +4,12 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import get_object_or_404
+from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Achievement
+from .models import Achievement, ALLOWED_EXTENSIONS, FILE_MAX_MB
 from .serializers import AchievementSerializer
 
 
@@ -111,8 +112,15 @@ class PortfolioStudentsView(APIView):
         if not (u.is_staff or getattr(u, 'role', '') == 'admin'):
             qs = (qs.filter(enrollments__classroom__owner=u)
                   .exclude(enrollments__access_granted=False).distinct())
+        # автокомплит: поиск по нику/имени, до 50 совпадений; без q — как раньше, до 400
+        q = (request.query_params.get('q') or '').strip()
+        if q:
+            qs = qs.filter(models.Q(username__icontains=q) | models.Q(first_name__icontains=q))
+            limit = 50
+        else:
+            limit = 400
         out = []
-        for s in qs.order_by('username')[:400]:
+        for s in qs.order_by('username')[:limit]:
             classes = [e.classroom.title for e in
                        Enrollment.objects.filter(student=s, classroom__owner=u)
                        .exclude(access_granted=False)]
@@ -123,8 +131,9 @@ class PortfolioStudentsView(APIView):
 
 class AchievementCreateView(APIView):
     """POST /api/portfolio/achievements/ {user, title, kind, description, event_date} —
-    учитель класса ученика или админ."""
+    учитель класса ученика или админ. Поддерживает JSON и multipart/form-data (файл)."""
     permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def post(self, request):
         u = request.user
@@ -144,10 +153,20 @@ class AchievementCreateView(APIView):
         kind = request.data.get('kind') or 'gramota'
         if kind not in dict(Achievement.KIND_CHOICES):
             kind = 'gramota'
+        # файл: расширение jpg/jpeg/png/webp/gif/pdf, размер до 8 МБ
+        f = request.FILES.get('file')
+        if f is not None:
+            ext = f.name.rsplit('.', 1)[-1].lower() if '.' in f.name else ''
+            if ext not in ALLOWED_EXTENSIONS:
+                return Response({'file': 'Можно только jpg, jpeg, png, webp, gif, pdf'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            if f.size > FILE_MAX_MB * 1024 * 1024:
+                return Response({'file': f'Файл больше {FILE_MAX_MB} МБ'},
+                                status=status.HTTP_400_BAD_REQUEST)
         a = Achievement.objects.create(
             student=stu, title=title, kind=kind,
             description=(request.data.get('description') or '').strip(),
-            event_date=request.data.get('event_date') or None, added_by=u)
+            event_date=request.data.get('event_date') or None, added_by=u, file=f or None)
         return Response(AchievementSerializer(a).data, status=status.HTTP_201_CREATED)
 
 

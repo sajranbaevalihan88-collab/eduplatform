@@ -1,9 +1,11 @@
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework import viewsets, permissions, status, throttling
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 
 from .models import Message
@@ -53,7 +55,10 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         u = self.request.user
-        return (Message.objects.filter(models.Q(sender=u) | models.Q(recipient=u))
+        qs = Message.objects.filter(models.Q(sender=u) | models.Q(recipient=u))
+        # не показываем сообщения, удалённые «у себя» текущим пользователем
+        return (qs.exclude(models.Q(sender=u, del_for_sender=True) |
+                           models.Q(recipient=u, del_for_recipient=True))
                 .select_related('sender', 'recipient').order_by('created_at'))
 
     def list(self, request, *args, **kwargs):
@@ -65,9 +70,11 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
         qs = self.get_queryset().filter(
             models.Q(sender_id=peer_id) | models.Q(recipient_id=peer_id))[:500]
         data = self.get_serializer(qs, many=True).data
-        # входящие в этой переписке считаем прочитанными при открытии
+        # открыл чат — прочитано как в WhatsApp: доставлено + прочитано
+        now = timezone.now()
         (Message.objects.filter(recipient=request.user, sender_id=peer_id, read_at__isnull=True)
-         .update(read_at=timezone.now()))
+         .update(read_at=now,
+                 delivered_at=Coalesce(models.F('delivered_at'), models.Value(now))))
         return Response(data)
 
     def create(self, request, *args, **kwargs):
@@ -88,6 +95,9 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
     def threads(self, request):
         """Диалоги текущего пользователя: партнёр, последнее сообщение, непрочитанные."""
         u = request.user
+        # получатель увидел список диалогов → «доставлено» (read_at не трогаем)
+        Message.objects.filter(recipient=u, delivered_at__isnull=True).update(
+            delivered_at=timezone.now())
         msgs = list(self.get_queryset())  # объём сообщений учителя/родителя невелик — питон проще памяти БД
         conv = {}  # partner_id -> {'last': msg, 'unread': int}
         for m in msgs:
@@ -95,7 +105,8 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
             rec = conv.setdefault(partner_id, {'last': m, 'unread': 0})
             if m.created_at > rec['last'].created_at:
                 rec['last'] = m
-            if m.recipient_id == u.id and m.read_at is None:
+            # удалённые у всех сообщения непрочитанными не считаем
+            if m.recipient_id == u.id and m.read_at is None and not m.is_deleted:
                 rec['unread'] += 1
         partners = get_user_model().objects.in_bulk([cid for cid in conv])
         data = []
@@ -103,12 +114,32 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
             p = partners.get(pid)
             if not p:
                 continue
+            last = rec['last']
             data.append({'user': p.id, 'username': p.username, 'role': getattr(p, 'role', ''),
-                         'last_text': rec['last'].text[:200], 'last_at': rec['last'].created_at,
+                         'last_text': '' if last.is_deleted else last.text[:200],
+                         'last_at': last.created_at,
                          'unread': rec['unread']})
         data.sort(key=lambda r: r['last_at'] or r['last_at'], reverse=True)
         total_unread = sum(r['unread'] for r in data)
         return Response({'threads': data, 'unread_total': total_unread})
+
+    def destroy(self, request, pk=None):
+        """DELETE /messages/<pk>/[?for_all=1] — удалить у себя или у всех (только отправитель)."""
+        u = request.user
+        # 404, если не участник переписки (get_queryset не вернёт чужое)
+        msg = get_object_or_404(Message, models.Q(sender=u) | models.Q(recipient=u), pk=pk)
+        for_all = (request.query_params.get('for_all') or '').lower() in ('1', 'true')
+        if for_all:
+            if msg.sender_id != u.id:
+                raise PermissionDenied('Удалить у всех может только отправитель')
+            msg.is_deleted = True
+            msg.text = ''
+            msg.save(update_fields=['is_deleted', 'text'])
+        else:  # «удалить у себя»
+            field = 'del_for_sender' if msg.sender_id == u.id else 'del_for_recipient'
+            setattr(msg, field, True)
+            msg.save(update_fields=[field])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=['get'])
     def contacts(self, request):

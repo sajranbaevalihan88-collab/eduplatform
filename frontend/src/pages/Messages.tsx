@@ -2,11 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import client from '../api/client'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
-import { MessageSquare, Send, Plus, ChevronLeft } from 'lucide-react'
+import { MessageSquare, Send, Plus, ChevronLeft, Check, CheckCheck, Trash2 } from 'lucide-react'
 
 type Thread = { user: number; username: string; role: string; last_text: string | null; last_at: string | null; unread: number }
 type Contact = { id: number; username: string; role: string; first_name?: string; via_children?: string[] }
-type Msg = { id: number; sender: number; sender_name: string; text: string; created_at: string }
+type Msg = { id: number; sender: number; sender_name: string; text: string; created_at: string; delivered_at: string | null; read_at: string | null; is_deleted: boolean }
+
+// статус доставки:.sent → delivered → read (вычисляем по временным меткам бэка)
+const msgStatus = (m: Msg): 'sent' | 'delivered' | 'read' =>
+  m.read_at ? 'read' : m.delivered_at ? 'delivered' : 'sent'
 
 const roleLabel = (role: string, t: (k: string) => string) =>
   role === 'teacher' ? t('msg_role_teacher') : role === 'parent' ? t('msg_role_parent') : t('msg_role_admin')
@@ -20,7 +24,10 @@ export default function Messages() {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
+  const [menuId, setMenuId] = useState<number | null>(null) // открытое меню удаления (одно одновременно)
+  const menuRef = useRef<HTMLDivElement | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
+  const meId = (JSON.parse(localStorage.getItem('user') || '{}') as any).id as number | undefined
 
   const loadThreads = useCallback(() => {
     client.get('/messages/threads/').then(r => {
@@ -75,6 +82,28 @@ export default function Messages() {
   const roleCls = (r: string) => r === 'teacher' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
     : r === 'parent' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
     : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+
+  // закрытие меню удаления: клик вне / Esc
+  useEffect(() => {
+    if (menuId === null) return
+    const onDoc = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuId(null)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuId(null) }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey) }
+  }, [menuId])
+
+  const delMsg = async (id: number, forAll: boolean) => {
+    setMenuId(null)
+    try {
+      await client.delete(`/messages/${id}/`, { params: forAll ? { for_all: 1 } : {} })
+      if (peer) loadMsgs(peer.id)
+      loadThreads()
+      toast(t('msg_deleted_ok'), 'success')
+    } catch { /* noop */ }
+  }
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -141,17 +170,44 @@ export default function Messages() {
 
               <div className="flex-1 overflow-auto p-4 space-y-2.5">
                 {msgs.map(m => {
-                  const isMine = m.sender_name !== peer.username
+                  const isMine = meId != null ? m.sender === meId : m.sender_name !== peer.username
+                  const st = m.is_deleted ? null : msgStatus(m)
                   return (
-                    <div key={m.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`} data-testid={`msg-${m.id}`}>
+                    <div key={m.id} className={`relative flex ${isMine ? 'justify-end' : 'justify-start'} group`} data-testid={`msg-${m.id}`}>
                       <div className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm ${isMine
                         ? 'bg-indigo-600 text-white rounded-br-md'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-bl-md'}`}>
-                        <div className="whitespace-pre-wrap break-word">{m.text}</div>
-                        <div className={`text-[10px] mt-0.5 ${isMine ? 'text-indigo-200' : 'text-slate-400'}`}>
-                          {new Date(m.created_at).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-bl-md'} ${m.is_deleted && !isMine ? 'italic' : ''}`}
+                        data-testid={`msg-bubble-${m.id}`}>
+                        {m.is_deleted ? (
+                          <div className={`italic ${isMine ? 'text-indigo-200/90' : 'text-slate-400'}`} data-testid={`msg-deleted-${m.id}`}>{t('msg_deleted')}</div>
+                        ) : (
+                          <div className="whitespace-pre-wrap break-word">{m.text}</div>
+                        )}
+                        <div className={`flex items-center gap-1 text-[10px] mt-0.5 ${isMine ? 'text-indigo-200' : 'text-slate-400'}`}>
+                          <span>{new Date(m.created_at).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                          {isMine && st === 'sent' && <Check size={12} className="text-slate-400" data-testid={`msg-sent-${m.id}`}/>}
+                          {isMine && st === 'delivered' && <CheckCheck size={12} className="text-slate-300" data-testid={`msg-delivered-${m.id}`}/>}
+                          {isMine && st === 'read' && <CheckCheck size={12} className="text-sky-500" data-testid={`msg-read-${m.id}`}/>}
                         </div>
                       </div>
+                      {!m.is_deleted && (
+                        <button onClick={() => setMenuId(v => v === m.id ? null : m.id)} data-testid={`msg-del-${m.id}`}
+                          className="self-center p-1 mr-1 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity print:hidden"
+                          aria-label={t('msg_del_me')}>
+                          <Trash2 size={14}/>
+                        </button>
+                      )}
+                      {menuId === m.id && (
+                        <div ref={menuRef} data-testid={`msg-del-menu-${m.id}`}
+                          className={`absolute z-20 top-4 ${isMine ? 'right-10' : 'left-10'} rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg py-1 text-sm`}>
+                          {isMine && (
+                            <button onClick={() => delMsg(m.id, true)} data-testid="msg-del-all-btn"
+                              className="w-full text-left px-3 py-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-slate-800">{t('msg_del_all')}</button>
+                          )}
+                          <button onClick={() => delMsg(m.id, false)} data-testid="msg-del-me-btn"
+                            className="w-full text-left px-3 py-1.5 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800">{t('msg_del_me')}</button>
+                        </div>
+                      )}
                     </div>
                   )
                 })}

@@ -17,6 +17,10 @@ class Message(models.Model):
                                   related_name='received_messages')
     text = models.TextField()
     read_at = models.DateTimeField(null=True, blank=True, help_text='Когда получатель открыл')
+    delivered_at = models.DateTimeField(null=True, blank=True, help_text='Когда получатель увидел (чат/диалоги)')
+    del_for_sender = models.BooleanField(default=False, help_text='Удалено у отправителя')
+    del_for_recipient = models.BooleanField(default=False, help_text='Удалено у получателя')
+    is_deleted = models.BooleanField(default=False, help_text='Удалено у всех — текст затёрт')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

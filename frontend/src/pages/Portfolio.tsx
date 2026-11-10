@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import client from '../api/client'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
-import { Medal, FolderKanban, TrendingUp, Star, Printer, Plus, Trash2, User as UserIcon, ChevronRight } from 'lucide-react'
+import { Medal, FolderKanban, TrendingUp, Star, Printer, Plus, Trash2, User as UserIcon, ChevronRight, X, FileText, Paperclip } from 'lucide-react'
 
 type Work = { assignment_id: number; title: string; kind: string; classroom: string; topic: string; score: number; max_score: number; pct: number; submitted_at: string }
-type Ach = { id: number; title: string; kind: string; description: string; event_date: string | null; added_by_name: string; created_at: string }
+type Ach = { id: number; title: string; kind: string; description: string; event_date: string | null; added_by_name: string; created_at: string; file?: string | null; is_image?: boolean }
+type Student = { id: number; username: string; first_name: string; classes?: string[] }
 type TopicRow = { topic_id: number; title: string; pct: number; status: string }
 type Data = {
   username: string; first_name: string; is_self: boolean; diag_avg: number | null
@@ -23,6 +24,8 @@ const KIND_META: Record<string, { emoji: string; label: string }> = {
 }
 const pctCls = (p: number) => p >= 80 ? 'bg-emerald-500' : p >= 50 ? 'bg-sky-500' : 'bg-red-500'
 const pctTxt = (p: number) => p >= 80 ? 'text-emerald-600' : p >= 50 ? 'text-sky-600' : 'text-red-600'
+const FILE_OK = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf']
+const FILE_MAX = 8 * 1024 * 1024
 
 export default function Portfolio() {
   const { t } = useLang()
@@ -35,6 +38,17 @@ export default function Portfolio() {
   const [nkind, setNkind] = useState('gramota')
   const [ndesc, setNdesc] = useState('')
   const [ndate, setNdate] = useState('')
+  // файл достижения
+  const [nfile, setNfile] = useState<File | null>(null)
+  const [nfileUrl, setNfileUrl] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  // комбобокс поиска ученика (учитель/админ)
+  const [sq, setSq] = useState('')
+  const [sOpen, setSOpen] = useState(false)
+  const [sRes, setSRes] = useState<Student[]>([])
+  const [selUser, setSelUser] = useState<Student | null>(null)
+  const sqTimer = useRef<number | null>(null)
+  const sqBlur = useRef<number | null>(null)
 
   const user = params.get('user') || ''
 
@@ -73,19 +87,66 @@ export default function Portfolio() {
     setData(null)
   }
 
+  // отражение выбранного ученика (в т.ч. авто-выбранного) для комбобокса
+  useEffect(() => {
+    if (!user) { setSelUser(null); return }
+    setSelUser(prev => prev && prev.username === user ? prev : (people.find(p => p.username === user) || null))
+  }, [user, people])
+
+  const onSqChange = (v: string) => {
+    setSq(v)
+    if (sqTimer.current) window.clearTimeout(sqTimer.current)
+    if (v.trim().length < 2) { setSRes([]); return }
+    sqTimer.current = window.setTimeout(() => {
+      client.get('/portfolio/students/', { params: { q: v.trim() } }).then(r => {
+        const arr: Student[] = Array.isArray(r.data) ? r.data : (r.data as any)?.results || []
+        setSRes(arr)
+        setSOpen(true)
+      }).catch(() => setSRes([]))
+    }, 300)
+  }
+  const closeSearch = () => { setSOpen(false); setSq(''); setSRes([]) }
+
+  const chooseStudent = (s: Student) => {
+    setSelUser(s)
+    pick(s.username)
+    closeSearch()
+  }
+
+  const clearFile = () => {
+    if (nfileUrl) URL.revokeObjectURL(nfileUrl)
+    setNfile(null)
+    setNfileUrl(null)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+  const onPickFile = (f: File | null) => {
+    clearFile()
+    if (!f) return
+    const ext = f.name.toLowerCase().split('.').pop() || ''
+    if (!FILE_OK.includes(ext) || f.size > FILE_MAX) { toast(t('pf_ach_file_err'), 'error'); return }
+    setNfile(f)
+    if (f.type.startsWith('image/')) setNfileUrl(URL.createObjectURL(f))
+  }
+
   const addAch = async () => {
     const title = ntitle.trim()
     if (!title || !user) { toast(t('pf_ach_need_title'), 'error'); return }
     try {
-      await client.post('/portfolio/achievements/', {
-        user, title, kind: nkind, description: ndesc.trim(),
-        event_date: ndate || null,
-      })
+      const fd = new FormData()
+      fd.append('user', user)
+      fd.append('title', title)
+      fd.append('kind', nkind)
+      fd.append('description', ndesc.trim())
+      fd.append('event_date', ndate || '')
+      if (nfile) fd.append('file', nfile)
+      // Content-Type явно multipart — иначе дефолт application/json у клиента роняет файл
+      await client.post('/portfolio/achievements/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      clearFile()
       setAdding(false); setNtitle(''); setNdesc(''); setNdate(''); setNkind('gramota')
       toast(t('pf_ach_added'), 'success')
       load()
     } catch {
-      toast(t('pf_ach_need_title'), 'error')
+      toast(t('pf_ach_file_err'), 'error')
     }
   }
 
@@ -111,12 +172,44 @@ export default function Portfolio() {
           <Medal className="text-amber-500"/>{t('pf_title')}
         </h1>
         {canAdd && people.length > 0 && (
-          <select value={user} onChange={e => pick(e.target.value)}
-            data-testid="pf-pick-student"
-            className="px-3 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white text-sm">
-            <option value="">{t('pf_pick_student')}</option>
-            {people.map(p => <option key={p.id} value={p.username}>{p.first_name || p.username}{p.classes?.length ? ` (${p.classes.join(', ')})` : ''}</option>)}
-          </select>
+          <div className="relative" data-testid="pf-pick-student">
+            {selUser && !sOpen ? (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white text-sm">
+                <span className="font-medium">{selUser.first_name || selUser.username}</span>
+                {selUser.classes?.length ? <span className="text-xs text-slate-400">{selUser.classes.join(', ')}</span> : null}
+                <button onClick={() => { setSOpen(true); setSq(''); setSRes([]) }} data-testid="pf-change-student"
+                  className="p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" aria-label={t('pf_pick_student')}>
+                  <X size={14}/>
+                </button>
+              </div>
+            ) : (
+              <div>
+                <input value={sq}
+                  onChange={e => onSqChange(e.target.value)}
+                  onFocus={() => { if (sqBlur.current) window.clearTimeout(sqBlur.current); if (sq.trim().length >= 2 && sRes.length) setSOpen(true) }}
+                  onBlur={() => { sqBlur.current = window.setTimeout(() => setSOpen(false), 150) }}
+                  onKeyDown={e => { if (e.key === 'Escape') closeSearch() }}
+                  placeholder={t('pf_search_nick')}
+                  data-testid="pf-search-input"
+                  className="w-52 px-3 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white text-sm outline-none focus:border-indigo-400"/>
+                {sOpen && (
+                  <div className="absolute z-20 left-0 mt-1 w-64 max-h-60 overflow-auto rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg">
+                    {sRes.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-slate-400">{sq.trim().length >= 2 ? t('pf_search_no') : t('pf_search_nick')}</div>
+                    ) : sRes.map(p => (
+                      <button key={p.id} data-testid="pf-search-option"
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => chooseStudent(p)}
+                        className="w-full text-left px-3 py-2 text-sm dark:text-white hover:bg-indigo-50 dark:hover:bg-slate-800">
+                        <b>{p.first_name || p.username}</b> <span className="text-xs text-slate-400">@{p.username}</span>
+                        {p.classes?.length ? <span className="text-xs text-slate-400"> · {p.classes.join(', ')}</span> : null}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
         {kids.length > 1 && (
           <select value={user} onChange={e => pick(e.target.value)}
@@ -182,10 +275,33 @@ export default function Portfolio() {
             </div>
             <textarea value={ndesc} onChange={e => setNdesc(e.target.value)} rows={2} placeholder={t('pf_ach_desc_ph')}
               data-testid="pf-ach-desc" className="w-full px-3 py-2 rounded-xl border dark:border-slate-600 bg-white dark:bg-slate-900 dark:text-white text-sm"/>
+            <div>
+              <input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden"
+                onChange={e => onPickFile(e.target.files?.[0] || null)} data-testid="pf-ach-file-input"/>
+              <button onClick={() => fileRef.current?.click()} data-testid="pf-ach-file-btn"
+                className="px-3 py-1.5 rounded-xl border dark:border-slate-600 text-sm dark:text-slate-200 flex items-center gap-1.5 bg-white dark:bg-slate-900 hover:border-indigo-400">
+                <Paperclip size={14}/>{t('pf_ach_file')}
+              </button>
+              {nfile && (
+                <div className="mt-2 flex items-center gap-2" data-testid="pf-ach-file-preview">
+                  {nfileUrl ? (
+                    <img src={nfileUrl} alt={nfile.name} className="w-10 h-10 rounded-lg object-cover border dark:border-slate-700"/>
+                  ) : (
+                    <span className="w-10 h-10 rounded-lg border dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                      <FileText size={18}/>
+                    </span>
+                  )}
+                  <span className="text-xs text-slate-500 dark:text-slate-300 truncate max-w-56">{nfile.name}</span>
+                  <button onClick={clearFile} data-testid="pf-ach-file-clear" className="p-0.5 text-slate-400 hover:text-red-500" aria-label="clear">
+                    <X size={14}/>
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="flex gap-2">
               <button onClick={addAch} data-testid="pf-ach-save"
                 className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">{t('pf_save')}</button>
-              <button onClick={() => setAdding(false)} className="px-4 py-2 rounded-xl border dark:border-slate-600 text-sm dark:text-white">{t('pf_cancel')}</button>
+              <button onClick={() => { clearFile(); setAdding(false) }} className="px-4 py-2 rounded-xl border dark:border-slate-600 text-sm dark:text-white">{t('pf_cancel')}</button>
             </div>
           </div>
         )}
@@ -200,6 +316,23 @@ export default function Portfolio() {
                   <div className="font-semibold text-sm dark:text-white">{a.title}</div>
                   <div className="text-xs text-slate-500">{meta.label}{a.event_date ? ` · ${new Date(a.event_date).toLocaleDateString()}` : ''}{a.description ? ` · ${a.description}` : ''}</div>
                 </div>
+                {a.file && (() => {
+                  const isImg = a.is_image != null ? a.is_image : /\.(jpe?g|png|webp|gif)$/i.test(a.file as string)
+                  const fileName = (() => { try { return decodeURIComponent((a.file as string).split('/media/')[1]?.split('/').pop() || '') } catch { return a.file as string } })()
+                  return (
+                    <a href={a.file} target="_blank" rel="noreferrer" data-testid={`pf-ach-file-${a.id}`}
+                      className={`shrink-0 ${isImg ? '' : 'flex flex-col items-center gap-0.5 text-slate-500 hover:text-indigo-600 dark:text-slate-300'}`} title={isImg ? '' : fileName}>
+                      {isImg ? (
+                        <img src={a.file} alt={a.title} className="w-14 h-14 rounded-lg object-cover border border-amber-200 dark:border-amber-900/40"/>
+                      ) : (
+                        <>
+                          <FileText size={22}/>
+                          <span className="text-[10px] max-w-24 truncate">{fileName}</span>
+                        </>
+                      )}
+                    </a>
+                  )
+                })()}
                 {canAdd && a.added_by_name && (
                   <button onClick={() => delAch(a.id)} data-testid={`pf-ach-del-${a.id}`} className="p-1.5 text-slate-300 hover:text-red-500 print:hidden" aria-label="Удалить достижении">
                     <Trash2 size={14}/>
