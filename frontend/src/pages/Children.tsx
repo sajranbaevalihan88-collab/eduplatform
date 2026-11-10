@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import client from '../api/client'
-import { BookOpenCheck, GraduationCap, Clock, Users, TrendingUp, CalendarCheck } from 'lucide-react'
+import { BookOpenCheck, GraduationCap, Clock, Users, TrendingUp, CalendarCheck, ChevronDown } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
 
@@ -31,6 +31,8 @@ export default function Children(){
   const [filter,setFilter]=useState<number|null>(null)
   const [attendance,setAttendance]=useState<any>(null)
   const [progress,setProgress]=useState<any>(null)
+  // Журнал оценок: какие карточки-классы раскрыты (по умолчанию — первые две)
+  const [jrOpen,setJrOpen]=useState<Record<number,boolean>>({})
 
   useEffect(()=>{
     client.get('/auth/children/')
@@ -58,11 +60,42 @@ export default function Children(){
     return filter==null? diary.rows : diary.rows.filter(r=>r.classroom_id===filter)
   },[diary,filter])
 
+  // Журнал: при смене ребёнка/подгрузке дневника раскрываем первые 2 карточки классов
+  useEffect(()=>{
+    if(!diary){ setJrOpen({}); return }
+    const o:Record<number,boolean>={}
+    ;(diary.classes||[]).slice(0,2).forEach((c:any)=>o[c.classroom_id]=true)
+    setJrOpen(o)
+  },[diary])
+
   const scoreCls=(s:number, max?:number)=>{
     const pct = max && max>0 ? (s/max)*100 : s
     if(pct>=85) return 'bg-emerald-50 text-emerald-700 border-emerald-200'
     if(pct>=70) return 'bg-amber-50 text-amber-700 border-amber-200'
     return 'bg-red-50 text-red-600 border-red-200'
+  }
+
+  // Журнал: оценки одного класса — по дате, свежие сверху
+  const jrRows=(cid:number)=> (diary?.rows||[])
+    .filter(r=>r.classroom_id===cid)
+    .slice()
+    .sort((a,b)=> new Date(b.date).getTime()-new Date(a.date).getTime())
+  // дата «дд.мм»
+  const jrDate=(d:string)=>{ try{ const x=new Date(d); return `${String(x.getDate()).padStart(2,'0')}.${String(x.getMonth()+1).padStart(2,'0')}` }catch{ return d } }
+  // бейдж значения: текстовая отметка ИЛИ балл (+ мелко «X из max», если шкала не 5/10)
+  const jrVal=(r:DiaryRow)=>{
+    if(r.mark) return (
+      <span className="px-2.5 py-1 rounded-xl border font-bold text-sm shrink-0 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700">{r.mark}</span>
+    )
+    if(r.score!=null) return (
+      <span className={`px-2.5 py-1 rounded-xl border font-bold text-sm shrink-0 ${scoreCls(r.score, r.max_score ?? undefined)}`}>
+        {r.score}
+        {r.max_score!=null && r.max_score!==5 && r.max_score!==10 && (
+          <span className="text-[10px] font-medium opacity-60 ml-0.5">({r.score} {t('jr_of')} {r.max_score})</span>
+        )}
+      </span>
+    )
+    return <span className="px-2.5 py-1 rounded-xl border bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 text-xs font-semibold shrink-0">—</span>
   }
 
   if(kids===null) return <div className="p-8 text-center"><div className="skeleton h-32 rounded-2xl max-w-2xl mx-auto"/></div>
@@ -137,6 +170,53 @@ export default function Children(){
               {c.avg!=null && <span className={`ml-1 px-1.5 py-0.5 rounded-md ${filter===c.classroom_id?'bg-white/20':'bg-slate-100 dark:bg-slate-800'}`}>{c.avg}</span>}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Журнал оценок: карточки по классам (subject, если задан, иначе название класса) */}
+      {diary && diary.classes.length>0 && (
+        <div className="space-y-2">
+          <h2 className="font-bold flex items-center gap-2 dark:text-white" data-testid="jr-title">
+            <BookOpenCheck size={17} className="text-indigo-600"/>{t('jr_title')}
+          </h2>
+          {diary.classes.map((c:any)=>{
+            const open=!!jrOpen[c.classroom_id]
+            const list=jrRows(c.classroom_id)
+            const subj=typeof c.subject==='string'? c.subject : ''
+            return (
+              <div key={c.classroom_id} data-testid={`jr-card-${c.classroom_id}`}
+                className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 overflow-hidden">
+                <button onClick={()=>setJrOpen(m=>({...m,[c.classroom_id]:!open}))}
+                  className="w-full flex items-center gap-3 p-4 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
+                  <span className="w-1.5 self-stretch min-h-[36px] rounded-full shrink-0" style={{backgroundColor:c.color||'#818cf8'}}/>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold dark:text-white truncate">{subj||c.title}</div>
+                    {subj && c.title && <div className="text-[11px] text-slate-400 truncate">{c.title}</div>}
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('jr_marks')}: {c.graded ?? 0}</div>
+                  </div>
+                  <div className="text-center shrink-0">
+                    <div className="text-2xl font-bold dark:text-white">{c.avg!=null? c.avg : '—'}</div>
+                    <div className="text-[10px] text-slate-400">{t('jr_avg')}</div>
+                  </div>
+                  <ChevronDown size={18} className={`shrink-0 text-slate-400 transition-transform ${open?'rotate-180':''}`}/>
+                </button>
+                {open && (
+                  <div className="border-t dark:border-slate-700 p-3 space-y-1.5">
+                    {list.length===0 && <div className="text-center text-slate-400 py-4 text-sm">{t('jr_empty')}</div>}
+                    {list.map((r,i)=>(
+                      <div key={`${r.assignment_id}-${i}`} data-testid="jr-row"
+                        className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 dark:bg-slate-800">
+                        {jrVal(r)}
+                        <div className="flex-1 min-w-0 text-sm font-medium dark:text-slate-100 truncate">{r.title}</div>
+                        {!subj && <span className="text-[11px] text-slate-400 truncate max-w-[120px] hidden sm:inline">{r.classroom_title}</span>}
+                        <span className="text-xs text-slate-400 whitespace-nowrap shrink-0">{jrDate(r.date)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 

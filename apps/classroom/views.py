@@ -359,7 +359,7 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
             raise ValidationError({'score': f'Не больше {a.max_score}'})
         sub, _ = Submission.objects.update_or_create(
             assignment=a, student=e.student,
-            defaults={'status': 'submitted', 'score': score})
+            defaults={'status': 'submitted', 'score': score, 'mark': ''})
         return Response(SubmissionSerializer(sub).data)
 
     @action(detail=True, methods=['get'])
@@ -409,7 +409,7 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
             student = u
         subs = (Submission.objects
                 .filter(student=student, status__in=['submitted', 'late'])
-                .select_related('assignment__classroom', 'assignment__lesson', 'assignment__test')
+                .select_related('assignment__classroom', 'assignment__classroom__subject', 'assignment__lesson', 'assignment__test')
                 .order_by('-updated_at'))
         rows = []
         per_class = {}
@@ -422,12 +422,16 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
                     continue  # платный класс без доступа — из дневника прячем
             rows.append({
                 'classroom_id': room.id, 'classroom_title': room.title, 'classroom_color': room.color,
+                'subject': room.subject.name if room.subject_id else '', 'subject_id': room.subject_id,
                 'assignment_id': a.id, 'title': a.title, 'kind': a.kind,
                 'score': s.score, 'mark': s.mark, 'status': s.status,
                 'max_score': a.max_score, 'deadline': a.deadline,
                 'date': s.updated_at, 'has_answer': bool(s.answer),
             })
-            c = per_class.setdefault(room.id, {'title': room.title, 'color': room.color, 'scores': [], 'graded': 0, 'total': 0})
+            c = per_class.setdefault(room.id, {'title': room.title, 'color': room.color,
+                                               'subject': room.subject.name if room.subject_id else '',
+                                               'subject_id': room.subject_id,
+                                               'scores': [], 'graded': 0, 'total': 0})
             if s.score is not None:
                 c['scores'].append(s.score)
                 c['graded'] += 1
@@ -435,7 +439,10 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
         classes = []
         for cid, c in per_class.items():
             avg = round(sum(c['scores']) / len(c['scores']), 1) if c['scores'] else None
-            classes.append({'classroom_id': cid, 'title': c['title'], 'color': c['color'], 'avg': avg, 'graded': c['graded'], 'total': c['total']})
+            c_subject, c_subject_id = c['subject'], c['subject_id']
+            classes.append({'classroom_id': cid, 'title': c['title'], 'color': c['color'],
+                            'subject': c_subject, 'subject_id': c_subject_id,
+                            'avg': avg, 'graded': c['graded'], 'total': c['total']})
         return Response({'rows': rows, 'classes': classes})
 
     @action(detail=True, methods=['post'])

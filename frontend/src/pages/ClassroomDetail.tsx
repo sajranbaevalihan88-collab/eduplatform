@@ -372,6 +372,13 @@ export default function ClassroomDetail(){
       ? String(x.username||'').localeCompare(String(y.username||''))
       : (gb.avg_student?.[String(y.id)] ?? -1) - (gb.avg_student?.[String(x.id)] ?? -1))
 
+  // Журнал: общая средняя класса — среднее всех avg_student (считается один раз на рендер)
+  const gbAvgAll = (()=>{
+    if(!gb) return null
+    const av=(gb.students||[]).map((s:any)=>gb.avg_student?.[String(s.id)]).filter((v:any)=>v!=null)
+    return av.length? Math.round(av.reduce((p:number,c:number)=>p+c,0)/av.length*10)/10 : null
+  })()
+
   const avgColor = (v:number|null|undefined)=> v==null? 'text-slate-400'
     : v>=85? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
     : v>=70? 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300'
@@ -857,6 +864,12 @@ export default function ClassroomDetail(){
                     {gbSort==='name'? 'А→Я' : '🎯 По успеваемости'}
                   </button>
                 )}
+                {isOwner && gb && gbAvgAll!=null && (
+                  <span data-testid="gb-avg-all" title={t('cls_g_avg_class')}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-sm font-bold ${avgColor(gbAvgAll)}`}>
+                    <BarChart3 size={14}/> {t('cls_g_avg_class')}: {gbAvgAll}
+                  </span>
+                )}
                 {isOwner && (
                   <button onClick={()=>setColOpen(o=>!o)} data-testid="cls-addcol"
                     className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 font-semibold text-sm hover:bg-indigo-50 dark:hover:bg-slate-700 flex items-center gap-1">
@@ -931,6 +944,15 @@ export default function ClassroomDetail(){
                                   else if(e.key==='Escape') setEditCell(null)
                                 }}
                                 className="w-16 px-1 py-1 rounded-lg border-2 border-blue-500 text-center text-xs bg-white dark:bg-slate-800 dark:text-white"/>
+                              {/* Быстрая оценка 2–5 сразу как число: onMouseDown не даёт input'у blur'нуться, чтобы не было двойного POST */}
+                              <div className="mt-1 flex justify-center gap-1" data-testid={`gb-quick-${s.id}-${a.id}`}>
+                                {[2,3,4,5].map(n=>(
+                                  <button key={n} type="button" onMouseDown={e=>e.preventDefault()}
+                                    onClick={()=>saveCell(a.id,s.id,String(n))}
+                                    className="px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white text-[11px] font-bold hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition"
+                                    aria-label={`${t('cls_g_saved')}: ${n}`}>{n}</button>
+                                ))}
+                              </div>
                               {a.kind==='write' && c?.answer && (
                                 <div className="mt-1 max-w-[230px] text-left text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-1.5 whitespace-pre-wrap" title={t('cls_g_answer')}>
                                   <span className="font-semibold">{t('cls_g_answer')}: </span>{c.answer}

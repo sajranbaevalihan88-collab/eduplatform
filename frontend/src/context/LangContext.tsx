@@ -169,6 +169,7 @@ const dict:Record<Lang,Record<string,string>>={
     pf_works_title:'Лучшие работы', pf_works_empty:'Оценённых работ пока нет',
     pf_knowledge:'Карта знаний', pf_gaps_tip:'Пробелы для подтягивания:',
     pf_diags_title:'Диагностики', pf_diags_empty:'Диагностик не проходил',
+    jr_title:'Журнал оценок', jr_avg:'средний', jr_marks:'оценок', jr_empty:'Оценок пока нет', jr_of:'из',
     // __I18N_A__
     tb_new_test:'Новый тест', tb_gen_prompt_min:'Напиши что сделать — хотя бы тему (от 10 символов)', tb_gen_fail:'Не получилось сгенерировать', tb_saved:'Тест сохранён ✓',
     tb_saved_short:'Сохранено ✓', tb_save_fail:'Не сохранилось — проверь связь', tb_title:'Конструктор теста', tb_back_lesson:'← Вернуться к уроку',
@@ -900,6 +901,7 @@ const dict:Record<Lang,Record<string,string>>={
     pf_works_title:'Best works', pf_works_empty:'No graded works yet',
     pf_knowledge:'Knowledge map', pf_gaps_tip:'Topics to improve:',
     pf_diags_title:'Diagnostics', pf_diags_empty:'No diagnostics taken',
+    jr_title:'Gradebook', jr_avg:'average', jr_marks:'marks', jr_empty:'No marks yet', jr_of:'of',
     // __I18N_B__
     // __I18N_C__
     arkan_answering:'Answering:',
@@ -1894,6 +1896,7 @@ const dict:Record<Lang,Record<string,string>>={
     pf_works_title:'Мыкты иштер', pf_works_empty:'Бааланган иш жок',
     pf_knowledge:'Билим картасы', pf_gaps_tip:'Толуктоо үчүн темалар:',
     pf_diags_title:'Диагностикалар', pf_diags_empty:'Диагностика өткөрүлгөн жок',
+    jr_title:'Баа журналы', jr_avg:'ортоңку', jr_marks:'баа', jr_empty:'Баа жок эле', jr_of:'из',
     // __I18N_B__
     // __I18N_C__
   }
