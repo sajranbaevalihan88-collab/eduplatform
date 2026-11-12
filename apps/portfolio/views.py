@@ -41,10 +41,11 @@ def _who(request):
 
 
 def _best_works(student, limit=12):
-    """Лучшие сдачи по (% от максимума): задания + тесты ученика."""
+    """Лучшие сдачи по (% от максимума): задания + тесты + письменные проекты ученика."""
     from apps.classroom.models import Submission
     subs = (Submission.objects.filter(student=student, status__in=['submitted', 'late'],
-                                      score__isnull=False, assignment__isnull=False)
+                                      assignment__isnull=False)
+            .filter(models.Q(score__isnull=False) | ~models.Q(answer=''))
             .select_related('assignment__classroom', 'assignment__topic')
             .order_by('-created_at'))
     works = []
@@ -52,7 +53,7 @@ def _best_works(student, limit=12):
     for s in subs:
         a = s.assignment
         mx = a.max_score or 100
-        pct = round((s.score or 0) / mx * 100, 1)
+        pct = round((s.score or 0) / mx * 100, 1) if s.score is not None else 100.0
         key = (a.id,)
         # одна работа на задание — хранить лучшую попытку
         if key in seen:
@@ -62,9 +63,11 @@ def _best_works(student, limit=12):
             'assignment_id': a.id, 'title': a.title, 'kind': a.kind,
             'classroom': a.classroom.title, 'topic': a.topic.title if a.topic else '',
             'score': s.score, 'max_score': mx, 'pct': pct,
+            'answer': (s.answer or '')[:400],
+            'url': a.url or '',
             'submitted_at': s.created_at,
         })
-    works.sort(key=lambda w: w['pct'], reverse=True)
+    works.sort(key=lambda w: (w['score'] is not None, w['pct']), reverse=True)
     return works[:limit]
 
 
@@ -137,32 +140,37 @@ class AchievementCreateView(APIView):
 
     def post(self, request):
         u = request.user
-        if not (u.is_staff or getattr(u, 'role', '') in ('teacher', 'admin')):
-            raise PermissionDenied('Только для учителя и админа')
         nick = (request.data.get('user') or '').strip()
-        stu = get_user_model().objects.filter(username__iexact=nick).first()
-        if not stu:
-            return Response({'error': 'Ученик не найден'}, status=status.HTTP_404_NOT_FOUND)
-        if not (u.is_staff or getattr(u, 'role', '') == 'admin'):
-            from apps.classroom.models import Enrollment
-            if not Enrollment.objects.filter(classroom__owner=u, student=stu).exists():
-                raise PermissionDenied('Ученик не в вашем классе')
+        is_teacher_or_admin = bool(u.is_staff or getattr(u, 'role', '') in ('teacher', 'admin'))
+        if not is_teacher_or_admin:
+            # Ученик может добавить свой собственный проект/работу в своё портфолио
+            if getattr(u, 'role', '') == 'student' and (not nick or nick.lower() == u.username.lower()):
+                stu = u
+            else:
+                raise PermissionDenied('Только для учителя и админа (или ученик в своё портфолио)')
+        else:
+            stu = get_user_model().objects.filter(username__iexact=nick).first() if nick else u
+            if not stu:
+                return Response({'error': 'Ученик не найден'}, status=status.HTTP_404_NOT_FOUND)
+            if not (u.is_staff or getattr(u, 'role', '') == 'admin') and stu.id != u.id:
+                from apps.classroom.models import Enrollment
+                if not Enrollment.objects.filter(classroom__owner=u, student=stu).exists():
+                    raise PermissionDenied('Ученик не в вашем классе')
         title = (request.data.get('title') or '').strip()
         if not title:
             return Response({'title': 'Введите название'}, status=status.HTTP_400_BAD_REQUEST)
         kind = request.data.get('kind') or 'gramota'
         if kind not in dict(Achievement.KIND_CHOICES):
             kind = 'gramota'
-        # файл: расширение jpg/jpeg/png/webp/gif/pdf, размер до 8 МБ
+        # файл: расширение jpg/jpeg/png/webp/gif/pdf, размер до 8 МБ с проверкой сигнатуры
         f = request.FILES.get('file')
         if f is not None:
             ext = f.name.rsplit('.', 1)[-1].lower() if '.' in f.name else ''
             if ext not in ALLOWED_EXTENSIONS:
                 return Response({'file': 'Можно только jpg, jpeg, png, webp, gif, pdf'},
                                 status=status.HTTP_400_BAD_REQUEST)
-            if f.size > FILE_MAX_MB * 1024 * 1024:
-                return Response({'file': f'Файл больше {FILE_MAX_MB} МБ'},
-                                status=status.HTTP_400_BAD_REQUEST)
+            from apps.common.safety import validate_portfolio_file
+            validate_portfolio_file(f, max_mb=FILE_MAX_MB)
         a = Achievement.objects.create(
             student=stu, title=title, kind=kind,
             description=(request.data.get('description') or '').strip(),

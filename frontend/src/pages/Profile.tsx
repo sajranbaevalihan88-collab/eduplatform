@@ -242,13 +242,15 @@ export default function Profile(){
   }
   useEffect(()=>{load()},[])
   const student = me?.role === 'student'
-  // ученику вкладки создания не показываем — перекидываем на заметки
+  const isParent = me?.role === 'parent'
+  const hideTeacherTools = student || isParent
+  // ученику и родителю вкладки создания не показываем — перекидываем на заметки
   useEffect(()=>{
-    if(student && (tab==='lessons'||tab==='presentations'||tab==='tests'||tab==='draft'||tab==='games')){
+    if(hideTeacherTools && (tab==='lessons'||tab==='presentations'||tab==='tests'||tab==='draft'||tab==='games')){
       setTab('notes')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[student])
+  },[hideTeacherTools])
 
   const [saveError,setSaveError]=useState<string|null>(null)
   const save=async()=>{
@@ -349,18 +351,20 @@ export default function Profile(){
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="bg-indigo-600 rounded-[24px] p-8 text-white relative overflow-hidden">
-        <div className="flex gap-6 items-center relative">
-          <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center text-3xl font-bold">{(me.username||'U')[0].toUpperCase()}</div>
-          <div className="flex-1">
-            <h1 className="text-2xl font-display font-bold flex items-center gap-2">{me.username}</h1>
-            <div className="text-white/80 flex flex-wrap gap-3 mt-1 text-sm">
-              <span className="flex items-center gap-1"><Mail size={14}/>{me.email||t('prof_no_email')}</span>
-              <span className="flex items-center gap-1"><User size={14}/>ID {me.id}</span>
+      <div className="bg-indigo-600 rounded-[24px] p-5 sm:p-8 text-white relative overflow-hidden">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 relative">
+          <div className="flex items-center gap-4 sm:gap-6 flex-1 min-w-0 w-full sm:w-auto">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center text-2xl sm:text-3xl font-bold shrink-0">{(me.username||'U')[0].toUpperCase()}</div>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl sm:text-2xl font-display font-bold flex items-center gap-2 truncate">{me.username}</h1>
+              <div className="text-white/80 flex flex-wrap gap-x-3 gap-y-1 mt-1 text-sm">
+                <span className="flex items-center gap-1 break-all sm:break-normal"><Mail size={14} className="shrink-0"/>{me.email||t('prof_no_email')}</span>
+                <span className="flex items-center gap-1 shrink-0"><User size={14}/>ID {me.id}</span>
+              </div>
+              {me.bio && <p className="mt-2 text-white/90 bg-white/10 rounded-xl p-2.5 sm:p-3 text-sm">{me.bio}</p>}
             </div>
-            {me.bio && <p className="mt-3 text-white/90 bg-white/10 rounded-xl p-3 text-sm">{me.bio}</p>}
           </div>
-          <button onClick={logout} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-indigo-700 font-semibold"><LogOut size={16}/> {t('logout')}</button>
+          <button onClick={logout} className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-xl bg-white text-indigo-700 font-semibold w-full sm:w-auto shrink-0 shadow-sm"><LogOut size={16}/> {t('logout')}</button>
         </div>
       </div>
 
@@ -536,7 +540,55 @@ export default function Profile(){
         </div>
       )}
 
-      {!student && (
+      {!hideTeacherTools && (
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-800 p-5 space-y-3" data-testid="deployment-readiness-card">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-bold text-base flex items-center gap-2 dark:text-white">🚀 Готовность к внедрению: Резервные копии и Обучение сотрудников</h3>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={async()=>{
+              try{
+                const r = await client.get('/classrooms/backup_data/', { responseType: 'blob' })
+                const url = URL.createObjectURL(new Blob([r.data], { type: 'application/json' }))
+                const a = document.createElement('a'); a.href = url; a.download = 'eduplatform-backup.json'; a.click()
+                URL.revokeObjectURL(url)
+                toast('Резервная копия скачана','success')
+              }catch{ toast('Ошибка скачивания резервной копии','error') }
+            }} className="px-3.5 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700">
+              💾 Скачать резервную копию (JSON)
+            </button>
+            <label className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-slate-200 border dark:border-slate-700 text-xs font-semibold cursor-pointer hover:bg-slate-200">
+              📥 Восстановить из копии
+              <input type="file" accept=".json" className="hidden" onChange={async e=>{
+                const f = e.target.files?.[0]; e.target.value=''
+                if(!f) return
+                try{
+                  const txt = await f.text()
+                  const data = JSON.parse(txt)
+                  const r = await client.post('/classrooms/restore_backup/', data)
+                  toast(`Восстановлено тем учебной программы: ${r.data.restored_topics}`, 'success')
+                }catch{ toast('Некорректный файл резервной копии','error') }
+              }}/>
+            </label>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3 text-xs text-slate-600 dark:text-slate-300">
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border dark:border-slate-700">
+            <div className="font-bold dark:text-white mb-1">1. Простой перенос (за 5 минут)</div>
+            Учебная программа КР загружается в 1 клик в разделе <Link to="/programs" className="text-indigo-600 underline">Учебная программа</Link>. Списки учеников и расписание вставляются прямо из Excel/CSV внутри класса.
+          </div>
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border dark:border-slate-700">
+            <div className="font-bold dark:text-white mb-1">2. ИИ-помощник и аналитика</div>
+            В разделе <Link to="/ai-assistant" className="text-indigo-600 underline">ИИ-помощник</Link> учитель видит оценки каждого ученика, кого нужно подтянуть, советы и генерирует черновики заданий (итоговую оценку всегда ставит учитель).
+          </div>
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border dark:border-slate-700">
+            <div className="font-bold dark:text-white mb-1">3. Работа при слабом интернете</div>
+            Платформа адаптирована под телефоны (крупные кнопки, нижнее меню) и автоматически сохраняет загруженные страницы в память устройства при перебоях со связью.
+          </div>
+        </div>
+      </div>
+      )}
+
+      {!hideTeacherTools && (
       <div className="grid sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-2xl border p-5 text-center">
           <Layers className="mx-auto text-indigo-600" size={24}/>
@@ -619,32 +671,32 @@ export default function Profile(){
       </div>
 
       <div ref={tabsRef} className="bg-white rounded-2xl border overflow-hidden scroll-mt-4">
-        <div className="flex border-b">
-          {!student && (<>
-          <button onClick={()=>setTab('lessons')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='lessons'?'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600':'text-slate-500 hover:bg-slate-50'}`}><BookOpen size={16}/> {t('prof_tab_lessons')} ({myLessons.length})</button>
-          <button onClick={()=>setTab('presentations')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='presentations'?'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600':'text-slate-500 hover:bg-slate-50'}`}><Presentation size={16}/> {t('prof_tab_pres')} ({myPres.length})</button>
-          <button onClick={()=>setTab('tests')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='tests'?'bg-rose-50 text-rose-700 border-b-2 border-rose-500':'text-slate-500 hover:bg-slate-50'}`}><FlaskConical size={16}/> {t('prof_tab_tests')} ({myTests.length})</button>
-          <button onClick={()=>setTab('draft')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='draft'?'bg-amber-50 text-amber-700 border-b-2 border-amber-500':'text-slate-500 hover:bg-slate-50'}`}>📝 {t('prof_tab_draft')} {(draft || myPresDrafts.length) ? `• ${myPresDrafts.length + (draft?1:0)}` : ''}</button>
+        <div className="flex border-b overflow-x-auto tab-scroll">
+          {!hideTeacherTools && (<>
+          <button onClick={()=>setTab('lessons')} className={`shrink-0 px-4 py-3 whitespace-nowrap text-sm font-semibold flex items-center justify-center gap-2 ${tab==='lessons'?'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600':'text-slate-500 hover:bg-slate-50'}`}><BookOpen size={16}/> {t('prof_tab_lessons')} ({myLessons.length})</button>
+          <button onClick={()=>setTab('presentations')} className={`shrink-0 px-4 py-3 whitespace-nowrap text-sm font-semibold flex items-center justify-center gap-2 ${tab==='presentations'?'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600':'text-slate-500 hover:bg-slate-50'}`}><Presentation size={16}/> {t('prof_tab_pres')} ({myPres.length})</button>
+          <button onClick={()=>setTab('tests')} className={`shrink-0 px-4 py-3 whitespace-nowrap text-sm font-semibold flex items-center justify-center gap-2 ${tab==='tests'?'bg-rose-50 text-rose-700 border-b-2 border-rose-500':'text-slate-500 hover:bg-slate-50'}`}><FlaskConical size={16}/> {t('prof_tab_tests')} ({myTests.length})</button>
+          <button onClick={()=>setTab('draft')} className={`shrink-0 px-4 py-3 whitespace-nowrap text-sm font-semibold flex items-center justify-center gap-2 ${tab==='draft'?'bg-amber-50 text-amber-700 border-b-2 border-amber-500':'text-slate-500 hover:bg-slate-50'}`}>📝 {t('prof_tab_draft')} {(draft || myPresDrafts.length) ? `• ${myPresDrafts.length + (draft?1:0)}` : ''}</button>
           </>)}
-          <button onClick={()=>setTab('notes')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='notes'?'bg-emerald-50 text-emerald-700 border-b-2 border-emerald-500':'text-slate-500 hover:bg-slate-50'}`}><StickyNote size={16}/> {t('prof_tab_notes')}</button>
-          {!student && (
-          <button onClick={()=>setTab('games')} className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${tab==='games'?'bg-indigo-50 text-indigo-700 border-b-2 border-blue-500':'text-slate-500 hover:bg-slate-50'}`}><Gamepad2 size={16}/> {t('prof_tab_games')} ({myTests.length})</button>
+          <button onClick={()=>setTab('notes')} className={`shrink-0 px-4 py-3 whitespace-nowrap text-sm font-semibold flex items-center justify-center gap-2 ${tab==='notes'?'bg-emerald-50 text-emerald-700 border-b-2 border-emerald-500':'text-slate-500 hover:bg-slate-50'}`}><StickyNote size={16}/> {t('prof_tab_notes')}</button>
+          {!hideTeacherTools && (
+          <button onClick={()=>setTab('games')} className={`shrink-0 px-4 py-3 whitespace-nowrap text-sm font-semibold flex items-center justify-center gap-2 ${tab==='games'?'bg-indigo-50 text-indigo-700 border-b-2 border-blue-500':'text-slate-500 hover:bg-slate-50'}`}><Gamepad2 size={16}/> {t('prof_tab_games')} ({myTests.length})</button>
           )}
         </div>
 
         {(tab==='lessons'||tab==='presentations'||tab==='tests'||tab==='draft') && (
         <div className="p-4 flex flex-wrap gap-2 items-center bg-slate-50 border-b">
-          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-            <Search size={14} className="text-slate-400"/>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={tab==='lessons'?t('prof_search_lessons'):tab==='presentations'?t('prof_search_pres'):tab==='tests'?t('prof_search_tests'):t('prof_search_all')} className="flex-1 px-3 py-1.5 rounded-lg border bg-white text-sm"/>
+          <div className="flex items-center gap-2 flex-1 min-w-[180px] w-full sm:w-auto">
+            <Search size={14} className="text-slate-400 shrink-0"/>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={tab==='lessons'?t('prof_search_lessons'):tab==='presentations'?t('prof_search_pres'):tab==='tests'?t('prof_search_tests'):t('prof_search_all')} className="flex-1 min-w-0 px-3 py-1.5 rounded-lg border bg-white text-sm"/>
           </div>
-          <div className="flex items-center gap-2">
-            <Filter size={14} className="text-slate-400"/>
-            <select value={filterSubject} onChange={e=>setFilterSubject(e.target.value)} className="px-3 py-1.5 rounded-lg border bg-white text-sm">
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
+            <Filter size={14} className="text-slate-400 shrink-0"/>
+            <select value={filterSubject} onChange={e=>setFilterSubject(e.target.value)} className="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg border bg-white text-sm min-w-0">
               <option value="">{t('prof_all_subjects')}</option>
               {subjects.map((s:any)=><option key={s.id} value={String(s.id)}>{s.icon} {s.name}</option>)}
             </select>
-            <select value={sort} onChange={e=>setSort(e.target.value as any)} className="px-3 py-1.5 rounded-lg border bg-white text-sm">
+            <select value={sort} onChange={e=>setSort(e.target.value as any)} className="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg border bg-white text-sm min-w-0">
               <option value="new">{t('prof_new')}</option>
               <option value="old">{t('prof_old')}</option>
               <option value="title">{t('prof_by_title')}</option>

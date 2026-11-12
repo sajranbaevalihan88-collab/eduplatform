@@ -8,6 +8,7 @@ from apps.accounts.permissions import IsTeacherOrAdmin
 from django.contrib.auth import get_user_model
 from .models import Classroom, Enrollment, Assignment, Submission, Announcement, AnnouncementComment
 from apps.school.views import SchoolMixin
+from backend.pagination import DefaultPagination
 
 User = get_user_model()
 from .serializers import (ClassroomSerializer, EnrollmentSerializer, AssignmentSerializer,
@@ -28,6 +29,8 @@ def _visible_classrooms(user):
         return qs.none()
     if _is_admin(user):
         return qs
+    if getattr(user, 'role', None) == 'parent':
+        return qs.filter(enrollments__student__child_links__parent=user).distinct()
     return qs.filter(Q(owner=user) | Q(enrollments__student=user)).distinct()
 
 
@@ -46,17 +49,38 @@ def _pay_qr_data_uri(room):
     return 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
 
 
+class ClassroomPagination(DefaultPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 200
+
+
 class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
     serializer_class = ClassroomSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = ClassroomPagination
 
     def get_queryset(self):
-        qs = _visible_classrooms(self.request.user)
+        qs = _visible_classrooms(self.request.user).prefetch_related('enrollments__student')
         mine = self.request.query_params.get('mine')
         if mine == 'teach':
             qs = qs.filter(owner=self.request.user)
         elif mine == 'study':
             qs = qs.filter(enrollments__student=self.request.user)
+
+        search = (self.request.query_params.get('search') or
+                  self.request.query_params.get('q') or
+                  self.request.query_params.get('nickname') or '').strip()
+        if search:
+            qs = qs.filter(
+                Q(owner__username__icontains=search) |
+                Q(owner__first_name__icontains=search) |
+                Q(owner__last_name__icontains=search) |
+                Q(enrollments__student__username__icontains=search) |
+                Q(enrollments__student__first_name__icontains=search) |
+                Q(enrollments__student__last_name__icontains=search) |
+                Q(title__icontains=search)
+            ).distinct()
         return qs
 
     def perform_create(self, serializer):
@@ -86,6 +110,8 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
     def join(self, request):
         """Вход по коду. Нормализуем дефисы (ABC-1234 -> ABC1234) и
         ограничиваем перебор: не больше 15 попыток в час на пользователя."""
+        if getattr(request.user, 'role', None) == 'parent':
+            raise PermissionDenied('Родители видят классы своих детей автоматически в разделе «Мои дети»')
         from django.core.cache import cache
         key = f'cls-join:{request.user.id}'
         used = cache.get(key, 0)
@@ -148,7 +174,14 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
             raise NotFound(f'Пользователь {username} не найден')
         if user.id == room.owner_id:
             raise ValidationError({'username': 'Это владелец класса'})
-        # владелец добавляет сам — сразу с доступом
+        if getattr(user, 'role', None) != 'student':
+            raise ValidationError({'username': 'В класс можно добавлять только учеников'})
+        # Безопасность: чужого ученика не может принудительно зачислить учитель (иначе утекают оценки/портфолио).
+        # Зачисление доступно администратору либо если ученик уже учится у этого учителя в другом классе.
+        is_admin = _is_admin(request.user)
+        my_students = set(Enrollment.objects.filter(classroom__owner=room.owner_id).values_list('student_id', flat=True))
+        if not is_admin and user.id not in my_students:
+            raise PermissionDenied('Аккаунт уже существует — пусть ученик вступит по коду класса')
         Enrollment.objects.update_or_create(classroom=room, student=user,
                                             defaults={'status': 'active', 'access_granted': True})
         return Response({'ok': True, 'username': user.username})
@@ -189,10 +222,8 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
         f = request.FILES.get('file')
         if not f:
             raise ValidationError({'file': 'Приложи скрин чека'})
-        if f.size > 5 * 1024 * 1024:
-            raise ValidationError({'file': 'Файл больше 5 МБ'})
-        if not str(f.content_type or '').startswith('image/'):
-            raise ValidationError({'file': 'Нужна картинка (скрин чека)'})
+        from apps.common.safety import validate_image_file
+        validate_image_file(f, max_mb=5)
         if e.receipt:
             e.receipt.delete(save=False)
         e.receipt = f
@@ -213,10 +244,8 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
         f = request.FILES.get('file')
         if not f:
             raise ValidationError({'file': 'Приложи изображение QR'})
-        if f.size > 5 * 1024 * 1024:
-            raise ValidationError({'file': 'Файл больше 5 МБ'})
-        if not str(f.content_type or '').startswith('image/'):
-            raise ValidationError({'file': 'Нужна картинка (скрин QR)'})
+        from apps.common.safety import validate_image_file
+        validate_image_file(f, max_mb=5)
         if room.payment_qr:
             room.payment_qr.delete(save=False)
         room.payment_qr = f
@@ -364,18 +393,32 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def my_tasks(self, request, pk=None):
-        """Задания класса со статусом текущего ученика. Персональные (assigned_to) — только себе."""
+        """Задания класса со статусом текущего ученика (или ребёнка родителя: ?student=<ник>).
+        Персональные (assigned_to) — только себе/своему ребёнку."""
         room = self.get_object()
         if not room.has_access(request.user):
             raise PermissionDenied('Ты не участник класса')
         assignments = list(room.assignments.exclude(kind='manual').order_by('deadline', '-created_at', 'id'))
-        # персональное задание другого ученика в 'моих задачах' не всплывает
         u = request.user
         role = getattr(u, 'role', None)
+        target_student = u
+        if role == 'parent':
+            from apps.accounts.models import ParentLink
+            nick = (request.query_params.get('student') or '').strip()
+            if nick:
+                stu = User.objects.filter(username__iexact=nick).first()
+                if not stu or not ParentLink.objects.filter(parent=u, student=stu).exists():
+                    raise PermissionDenied('Этот ученик не привязан к вашему аккаунту')
+                target_student = stu
+            else:
+                # первый привязанный ребёнок, состоящий в этом классе
+                link = ParentLink.objects.filter(parent=u, student__enrollments__classroom=room).select_related('student').first()
+                if link:
+                    target_student = link.student
         if role not in ('teacher', 'admin') and not getattr(u, 'is_staff', False):
-            assignments = [a for a in assignments if not a.assigned_to_id or a.assigned_to_id == u.id]
+            assignments = [a for a in assignments if not a.assigned_to_id or a.assigned_to_id == target_student.id]
         sub_map = {s.assignment_id: s for s in Submission.objects.filter(
-            assignment__in=assignments, student=request.user)}
+            assignment__in=assignments, student=target_student)}
         now = timezone.now()
         out = []
         for a in assignments:
@@ -490,34 +533,60 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
                                    'recent_attempts': ps['attempts']})
         stats = {'classroom': room.title, 'students_count': len(students),
                  'assignments_count': len(assignments), 'students': stats_students}
+        from apps.school.views import _build_teacher_student_analysis
+        analysis = _build_teacher_student_analysis(request.user, classroom_id=room.id)
+        stats['analysis'] = analysis
         from django.conf import settings as _dj
         from apps.assessments.services.gemini_text import generate_text
         import json as _json
-        facts = _json.dumps(stats, ensure_ascii=False)
+        facts = _json.dumps({
+            'classroom': room.title,
+            'students': [{
+                'username': s['username'],
+                'first_name': s['first_name'],
+                'avg_pct': s['avg_pct'],
+                'kr_grade': s['kr_grade'],
+                'grades': [f"{g['title']}: {g['score']}/{g['max_score']}" for g in s['grades'] if g['score'] is not None],
+                'gaps': [g['title'] for g in s['gap_topics']],
+                'missed': s['missed_count'],
+                'absent': s['attendance']['absent'],
+                'needs_pull_up': s['needs_pull_up'],
+            } for s in analysis['students']],
+        }, ensure_ascii=False)
         prompt = (
-            "Ты — ассистент учителя. Собери КОРОТКИЙ живой отчёт по классу из данных JSON. "
+            "Ты — ассистент учителя. Собери живой аналитический отчёт по классу из данных JSON. "
             "Формат: markdown-lite текст с эмодзи, строго такие секции:\n"
-            "🏆 Лидеры (2-3 имени + причина)\n⚠️ Нужна помощь (кто отстаёт: средний балл низкий/много пропусков)\n"
-            "📚 Что повторить (темы по названиям заданий, где средний балл < 60% или много провалов)\n"
-            "✅ Действия на следующую неделю (2-3 конкретных шага)\n"
-            "Правила: только реальные имена/цифры из данных, БЕЗ выдумок; дружелюбно и по делу; не длиннее ~15 строк.\n\nДАННЫЕ:\n" + facts
+            "🏆 Кто как учится и лидеры (имена, у кого какие оценки и средний балл)\n"
+            "⚠️ Кого нужно подтянуть (кто отстаёт, у кого низкие оценки/пропуски и по каким темам)\n"
+            "💡 Советы учителю (персональные рекомендации по ученикам и темам для повторения)\n"
+            "✅ План действий на следующую неделю (2-3 конкретных шага)\n"
+            "Правила: только реальные имена/цифры из данных, БЕЗ выдумок; дружелюбно и по делу.\n\nДАННЫЕ:\n" + facts
         )
         text, used = generate_text(prompt, getattr(_dj, 'GEMINI_API_KEY', ''), getattr(_dj, 'GEMINI_MODEL', ''))
         if text:
             return Response({'report': text[:6000], 'source': f'gemini:{used}', 'stats': stats})
-        # офлайн-фолбэк: честные числа, без выдумок
-        with_score = [s for s in stats_students if s['avg'] is not None]
-        leaders = sorted(with_score, key=lambda s: s['avg'], reverse=True)[:3]
-        risky = [s for s in stats_students if (s['avg'] or 0) < 60 or s.get('missed', 0) > 0]
+        # офлайн-фолбэк: честные числа, оценки каждого ученика, кого подтянуть и советы
+        a_students = analysis['students']
+        leaders = [s for s in a_students if s['status_level'] == 'leader']
+        pull_up = [s for s in a_students if s['needs_pull_up']]
         lines = [f"📊 Класс «{room.title}»: {len(students)} учеников, заданий {len(assignments)}"]
         if leaders:
-            lines.append('🏆 Лидеры: ' + ', '.join(f"{s['username']} (средний {s['avg']})" for s in leaders))
-        if risky:
-            lines.append('⚠️ Нужна помощь: ' + ', '.join(f"{s['username']}" + (f" (средний {s['avg']})" if s['avg'] else '') for s in risky[:5]))
+            lines.append('🏆 Отличники и лидеры: ' + ', '.join(
+                f"{s['first_name'] or s['username']} (ср. {s['avg_pct']}%, оценка «{s['kr_grade']}»)" for s in leaders[:5]
+            ))
+        if pull_up:
+            lines.append('⚠️ Кого нужно подтянуть:')
+            for s in pull_up[:8]:
+                gr_str = ', '.join(f"{g['title']}: {g['score']}/{g['max_score']}" for g in s['grades'] if g['score'] is not None)[:100]
+                lines.append(
+                    f"  • {s['first_name'] or s['username']} (@{s['username']}) — "
+                    f"ср. {s['avg_pct'] if s['avg_pct'] is not None else 'нет оценок'}% (оценка КР «{s['kr_grade'] or '—'}»). "
+                    f"Оценки: {gr_str or 'нет сданных'}. Совет: {s['advice']}"
+                )
         late_total = sum(s.get('late', 0) for s in stats_students)
         missed_total = sum(s.get('missed', 0) for s in stats_students)
         lines.append(f"⏰ Сдали с опозданием: {late_total} • пропустили дедлайн: {missed_total}")
-        lines.append('✅ Действия: индивидуальные разборы со списком «Нужна помощь»; повторные попытки тестов с низким средним.')
+        lines.append('💡 Советы учителю: назначьте персональные задания ученикам из списка «Кого нужно подтянуть» и разберите темы с пробелами (<50%).')
         return Response({'report': '\n'.join(lines), 'source': 'offline', 'stats': stats})
 
 
@@ -549,9 +618,12 @@ class AssignmentViewSet(viewsets.ModelViewSet):
                 filter=Q(submissions__status__in=['submitted', 'late'], submissions__score__isnull=False),
                 distinct=True),
         )
-        # персональные задания (assigned_to): ученик видит общее + личное себе. Учителя/админы видят всё.
+        # персональные задания (assigned_to): ученик видит общее + личное себе, родитель — общее + личное своим детям. Учителя/админы видят всё.
         u = self.request.user
-        if getattr(u, 'role', None) not in ('teacher', 'admin') and not getattr(u, 'is_staff', False):
+        role = getattr(u, 'role', None)
+        if role == 'parent':
+            qs = qs.filter(Q(assigned_to__isnull=True) | Q(assigned_to__child_links__parent=u)).distinct()
+        elif role not in ('teacher', 'admin') and not getattr(u, 'is_staff', False):
             qs = qs.filter(Q(assigned_to__isnull=True) | Q(assigned_to=u))
         kind = self.request.query_params.get('kind')
         if kind:

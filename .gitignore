@@ -16,3 +16,5 @@ frontend/vite.config.ts.timestamp-*.mjs
 # local dev scripts (kept locally, not in repo)
 start-backend.bat
 start-frontend.bat
+
+scratch/

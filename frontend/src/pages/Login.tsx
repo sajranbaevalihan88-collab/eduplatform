@@ -37,7 +37,7 @@ export default function Login(){
         const me = await client.get('/auth/me/', {headers:{Authorization:`Bearer ${r.data.access}`}})
         localStorage.setItem('user',JSON.stringify(me.data))
         window.dispatchEvent(new Event('auth-change'))
-        nav('/')
+        nav(me.data?.role === 'parent' ? '/children' : '/')
       }
     }catch(err:any){ 
       const data = err.response?.data

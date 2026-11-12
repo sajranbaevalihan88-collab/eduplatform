@@ -26,9 +26,12 @@ def _extract_text(data):
 
 def generate_text(prompt, api_key='', preferred_model='', expect_json=False):
     """prompt -> свободный текст модели. expect_json=True -> распарсенный JSON"""
-    if not api_key:
+    if not api_key or not str(api_key).startswith('AIza'):
         return None, None
-    models = [m for m in [preferred_model] + MODEL_FALLBACKS if m]
+    models = []
+    for m in [preferred_model] + MODEL_FALLBACKS:
+        if m and m not in models:
+            models.append(m)
     last_err = None
     for model_name in models:
         try:
@@ -36,9 +39,9 @@ def generate_text(prompt, api_key='', preferred_model='', expect_json=False):
                 _API_URL.format(m=model_name, k=api_key),
                 json={
                     'contents': [{'parts': [{'text': prompt}]}],
-                    'generationConfig': {'temperature': 0.6, 'maxOutputTokens': 8192},
+                    'generationConfig': {'temperature': 0.6, 'maxOutputTokens': 4096},
                 },
-                timeout=45,
+                timeout=(3, 12),
             )
             if r.ok:
                 raw = _extract_text(r.json())
@@ -49,8 +52,11 @@ def generate_text(prompt, api_key='', preferred_model='', expect_json=False):
                 last_err = 'empty response'
             else:
                 last_err = f'HTTP {r.status_code}: {str(r.text)[:180]}'
+                if r.status_code in (400, 401, 403):
+                    break
         except Exception as e:
             last_err = f'{type(e).__name__}: {e}'
+            break
         continue
     print(f'[gemini-text] all models failed: {str(last_err)[:200]}')
     return None, None

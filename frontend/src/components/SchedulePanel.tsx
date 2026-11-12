@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import client from '../api/client'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
-import { CalendarDays, Repeat2 } from 'lucide-react'
+import { CalendarDays, Repeat2, Upload, Trash2 } from 'lucide-react'
 
 const WD = ['', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
 
@@ -22,7 +22,9 @@ export default function SchedulePanel({ classId, isOwner }:{ classId:number|any,
   const [date, setDate] = useState(todayStr())
   const [day, setDay] = useState<any>(null)
   const [busy, setBusy] = useState(false)
-  const [subForm, setSubForm] = useState({ date: todayStr(), num: 1, subject: '' })
+  const [subForm, setSubForm] = useState({ date: todayStr(), num: 1, subject: '', note: '' })
+  const [impOpen, setImpOpen] = useState(false)
+  const [impText, setImpText] = useState('')
 
   const load = ()=>{
     client.get(`/classrooms/${classId}/schedule_grid/`).then(r=>setSlots(Array.isArray(r.data)?r.data:r.data.results||[])).catch(()=>{})
@@ -57,19 +59,58 @@ export default function SchedulePanel({ classId, isOwner }:{ classId:number|any,
       await client.post(`/classrooms/${classId}/substitutions/`, {
         date: subForm.date, num: subForm.num,
         subject: subForm.subject || null,
+        note: subForm.note.trim(),
       })
+      setSubForm(f=>({...f, note: ''}))
       load(); toast('Замена добавлена','success')
     }catch(e:any){ toast(e?.response?.data?.detail||JSON.stringify(e?.response?.data||'err'),'error') }
     setBusy(false)
   }
 
-  const maxNum = Math.max(1, ...slots.map((s:any)=>s.num))
+  const delSub = async (subId:number)=>{
+    if(!isOwner) return
+    try{
+      await client.post(`/classrooms/${classId}/delete_substitution/`, { id: subId })
+      load(); toast('Замена удалена','success')
+    }catch{}
+  }
+
+  const importSchedule = async ()=>{
+    if(!impText.trim()){ toast('Вставь строки расписания','error'); return }
+    setBusy(true)
+    try{
+      const r = await client.post(`/classrooms/${classId}/import_schedule_csv/`, { text: impText })
+      toast(`Импортировано уроков: ${r.data.imported}`, 'success')
+      setImpOpen(false); setImpText(''); load()
+    }catch(e:any){ toast(e?.response?.data?.detail||'Ошибка импорта','error') }
+    setBusy(false)
+  }
+
+  const maxNum = Math.max(6, ...slots.map((s:any)=>s.num))
   const rows = Array.from({length: maxNum}, (_, i)=>i+1)
 
   return (
     <div className="space-y-5">
       <div className="space-y-2">
-        <div className="text-xs text-slate-400">{t('sc_set_hint')}</div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs text-slate-400">{t('sc_set_hint')}</div>
+          {isOwner && (
+            <button onClick={()=>setImpOpen(v=>!v)} className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold flex items-center gap-1 dark:text-slate-200 hover:bg-slate-200">
+              <Upload size={13}/> Быстрый перенос расписания (CSV/текст)
+            </button>
+          )}
+        </div>
+        {isOwner && impOpen && (
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border dark:border-slate-700 space-y-2">
+            <div className="text-xs text-slate-500">Вставь строки в формате: <code className="font-mono">день_недели;номер_урока;предмет;кабинет</code> (например: <code className="font-mono">Пн;1;Математика;204</code>)</div>
+            <textarea value={impText} onChange={e=>setImpText(e.target.value)} rows={3} placeholder={"Пн;1;Математика;204\nПн;2;Физика;301\nВт;1;Информатика;105"}
+              className="w-full px-3 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white text-xs font-mono"/>
+            <div className="flex gap-2">
+              <button onClick={importSchedule} disabled={busy} className="px-4 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold">Импортировать</button>
+              <button onClick={()=>setImpOpen(false)} className="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs font-semibold dark:text-white">Отмена</button>
+            </div>
+          </div>
+        )}
         <div className="overflow-auto">
           <table className="w-full text-sm min-w-[600px] dark:text-slate-100">
             <thead><tr className="text-xs text-slate-400">
@@ -132,6 +173,12 @@ export default function SchedulePanel({ classId, isOwner }:{ classId:number|any,
           <div key={s.id} className="flex items-center gap-2 text-sm p-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50" data-testid={`sub-row-${s.id}`}>
             <b>{s.date} · урок {s.num}</b>
             <span className="text-slate-500 dark:text-slate-300">{s.subject_name||'урока не будет'}</span>
+            {s.note && <span className="text-xs text-amber-700 dark:text-amber-300">({s.note})</span>}
+            {isOwner && (
+              <button onClick={()=>delSub(s.id)} className="ml-auto p-1 text-slate-400 hover:text-red-500" title="Удалить замену">
+                <Trash2 size={14}/>
+              </button>
+            )}
           </div>
         ))}
         {subs.length===0 && <div className="text-sm text-slate-400">Замен пока нет</div>}
@@ -148,6 +195,8 @@ export default function SchedulePanel({ classId, isOwner }:{ classId:number|any,
               <option value="">урока не будет</option>
               {subjects.map((su:any)=><option key={su.id} value={su.id}>{su.icon||''} {su.name}</option>)}
             </select>
+            <input value={subForm.note} onChange={e=>setSubForm(f=>({...f,note:e.target.value}))} placeholder="Комментарий (каб., учитель)…"
+              className="px-3 py-2 min-h-[40px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white text-sm"/>
             <button onClick={addSub} disabled={busy} data-testid="sub-add"
               className="px-4 py-2 min-h-[40px] rounded-xl bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50">
               {t('sc_sub_add')}

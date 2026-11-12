@@ -11,7 +11,7 @@ from apps.board.views import BoardViewSet
 from apps.classroom.views import ClassroomViewSet, AssignmentViewSet, SubmissionViewSet, AnnouncementViewSet, AnnouncementCommentViewSet
 from apps.notes.views import NoteViewSet
 from apps.word.views import WordDocumentViewSet
-from apps.school.views import TopicViewSet
+from apps.school.views import TopicViewSet, TeacherAIAssistantView
 from apps.messages.views import MessageViewSet
 from apps.portfolio.views import PortfolioView, PortfolioStudentsView, AchievementCreateView, AchievementDeleteView
 
@@ -62,5 +62,6 @@ urlpatterns = [
     path('shared/', SharedCodeView.as_view(), name='shared-create'),
     path('shared/<str:token>/', SharedCodeView.as_view(), name='shared-detail'),
     path('ai/words/', WordGenView.as_view(), name='ai-words'),
+    path('ai/teacher-assistant/', TeacherAIAssistantView.as_view(), name='ai-teacher-assistant'),
     path('', include(router.urls)),
 ]

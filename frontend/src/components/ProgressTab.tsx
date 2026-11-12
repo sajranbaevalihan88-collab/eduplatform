@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import client from '../api/client'
 import { toast } from '../context/UIContext'
-import { TrendingUp, Target, AlertTriangle } from 'lucide-react'
+import { TrendingUp, Target, AlertTriangle, Sparkles } from 'lucide-react'
 
 /**
  * Аналитика пути обучения класса (только владелец):
@@ -23,7 +24,7 @@ export default function ProgressTab({ classId }:{ classId:number|any }){
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 font-semibold dark:text-slate-200">
           Учеников: {rows.length}
         </span>
@@ -33,6 +34,9 @@ export default function ProgressTab({ classId }:{ classId:number|any }){
         <span className="px-3 py-1.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-semibold">
           Не проверены: {notTested.length}
         </span>
+        <Link to="/ai-assistant" className="ml-auto px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-semibold flex items-center gap-1 hover:bg-indigo-700">
+          <Sparkles size={13}/> ИИ-разбор оценок и персональные задания
+        </Link>
       </div>
 
       {laggards.length>0 && (
@@ -55,12 +59,12 @@ export default function ProgressTab({ classId }:{ classId:number|any }){
         <table className="w-full text-sm min-w-[520px] dark:text-slate-100">
           <thead><tr className="text-left text-xs text-slate-400">
             <th className="p-2">Ученик</th><th className="p-2">Средний %</th><th className="p-2">Тем проверено</th>
-            <th className="p-2">Диагностик</th><th className="p-2">Пробелы</th>
+            <th className="p-2">Диагностик</th><th className="p-2">Что уже умеет (≥80%)</th><th className="p-2">Пробелы (&lt;50%)</th>
           </tr></thead>
           <tbody>
             {rows.map((r:any)=>(
               <tr key={r.student} className="border-t dark:border-slate-700" data-testid={`prog-st-${r.student}`}>
-                <td className="p-2 font-semibold">{r.username}</td>
+                <td className="p-2 font-semibold">{r.first_name || r.username}</td>
                 <td className="p-2">
                   {r.avg!=null
                     ? <span className={`font-bold ${r.avg>=80?'text-emerald-600': r.avg>=50?'text-sky-600':'text-red-600'}`}>{r.avg}%</span>
@@ -70,6 +74,12 @@ export default function ProgressTab({ classId }:{ classId:number|any }){
                 <td className="p-2">{r.diagnostics_taken}</td>
                 <td className="p-2">
                   <div className="flex flex-wrap gap-1">
+                    {(r.mastered_topics||[]).map((m:string)=><span key={m} className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">{m}</span>)}
+                    {(!r.mastered_topics || r.mastered_topics.length===0) && <span className="text-slate-400">—</span>}
+                  </div>
+                </td>
+                <td className="p-2">
+                  <div className="flex flex-wrap gap-1">
                     {r.gaps.map((g:string)=><span key={g} className="text-[11px] px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300">{g}</span>)}
                     {r.gaps.length===0 && <span className="text-slate-400">—</span>}
                   </div>
@@ -77,7 +87,7 @@ export default function ProgressTab({ classId }:{ classId:number|any }){
               </tr>
             ))}
             {rows.length===0 && (
-              <tr><td colSpan={5} className="p-4 text-center text-slate-400">В классе нет учеников</td></tr>
+              <tr><td colSpan={6} className="p-4 text-center text-slate-400">В классе нет учеников</td></tr>
             )}
           </tbody>
         </table>

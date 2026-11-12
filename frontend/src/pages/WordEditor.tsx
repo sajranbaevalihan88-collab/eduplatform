@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import client from '../api/client'
 import { useAccessibility, toast } from '../context/UIContext'
+import { sanitizeWordHtml as sanitize } from '../utils/sanitize'
 import {
   Bold, Italic, Underline, Strikethrough, List, ListOrdered,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Link2, ImagePlus, Table as TableIcon, Eraser, Save,
   Upload, Download, Printer, Plus, Trash2, FileText,
   Undo2, Redo2, X, Maximize2, Minimize2, Scissors, Move,
-  IndentIncrease, IndentDecrease,
+  IndentIncrease, IndentDecrease, ChevronDown,
 } from 'lucide-react'
 
 type Doc = {
@@ -41,13 +42,13 @@ const FONT_SIZES: Array<{ pt: string; label: string }> = [
 ]
 const SHEET_PAD = 40 // отступ листа, совпадает с p-10
 const SHEET_VIEW_OFFSET = 90 // лист останавливается ниже шапки, а не вплотную к краю экрана
-const CELL_STYLE = 'border:1px solid #94a3b8;padding:6px;min-width:40px;'
+const CELL_STYLE = 'border:1px solid #94a3b8;padding:6px;min-width:24px;word-break:break-word;'
 
 /** Группа инструментов ленты: кнопки сверху, подпись снизу — как в Word. */
 function RibbonGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col justify-between gap-1 px-2 py-0.5 min-w-0 shrink-0" role="group" aria-label={label || undefined}>
-      <div className="flex flex-wrap items-center justify-start gap-1">{children}</div>
+      <div className="flex flex-nowrap items-center justify-start gap-1 shrink-0">{children}</div>
       {label && (
         <span className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 text-center leading-[14px] select-none whitespace-nowrap">
           {label}
@@ -71,33 +72,6 @@ function loadLocal(): Doc[] {
   } catch { return [] }
 }
 
-/** Чистим HTML редактора: без скриптов и on*-обработчиков.
- *  div.page-break (разрыв страницы) сохраняем, остальные div — разворачиваем. */
-function sanitize(html: string): string {
-  try {
-    const tpl = document.createElement('template')
-    tpl.innerHTML = String(html || '')
-    tpl.content.querySelectorAll('script,style,iframe,object,embed,link,meta').forEach(n => n.remove())
-    const walk = (el: Element) => {
-      for (const a of Array.from(el.attributes)) {
-        if (a.name.startsWith('on') || a.name === 'srcdoc') el.removeAttribute(a.name)
-        if (a.name === 'href' && /^\s*javascript:/i.test(a.value)) el.removeAttribute(a.name)
-        if (a.name === 'class' && /\bsel\b/.test(a.value)) el.removeAttribute('class')
-      }
-      Array.from(el.children).forEach(walk)
-    }
-    Array.from(tpl.content.children).forEach(walk)
-    // вытаскиваем содержимое обычных div, но храним разрывы страниц
-    tpl.content.querySelectorAll('div:not(.page-break)').forEach(d => {
-      const parent = d.parentNode
-      if (!parent) return
-      while (d.firstChild) parent.insertBefore(d.firstChild, d)
-      parent.removeChild(d)
-    })
-    return tpl.innerHTML
-  } catch { return '' }
-}
-
 const hasDocumentContent = (body: string) =>
   body.replace(/<[^>]+>/g, '').replace(/ /g, ' ').trim().length > 0 || /<img\b[^>]*\bsrc=/i.test(body)
 
@@ -119,6 +93,7 @@ export default function WordEditor() {
     stashDraft()
   }
   const [docs, setDocs] = useState<Doc[]>([])
+  const [docsOpen, setDocsOpen] = useState(false)
   const [currentId, setCurrentId] = useState<number | string | null>(null)
   const [title, setTitle] = useState('Новый документ')
   const [dirty, setDirty] = useState(false)
@@ -146,7 +121,7 @@ export default function WordEditor() {
   // Ref не даёт обработчикам beforeunload/cleanup захватить устаревшие title/pageSize.
   const latestRef = useRef({ title, pageSize, dirty })
   latestRef.current = { title, pageSize, dirty }
-  const saveRef = useRef<() => void>(() => {})
+  const saveRef = useRef<() => void>(() => { })
   // пагинация: реальные границы листов — стыки между абзацами (top — y внутри листа-контейнера, slot — величина естественного зазора)
   const [layout, setLayout] = useState<{ tops: Array<{ top: number; slot: number }>; bottom: number }>({
     tops: [{ top: 0, slot: 12 }],
@@ -180,7 +155,7 @@ export default function WordEditor() {
         strikeThrough: q('strikeThrough'),
         insertUnorderedList: q('insertUnorderedList'), insertOrderedList: q('insertOrderedList'),
       })
-    } catch {}
+    } catch { }
   }
 
   // --- выделение: запоминаем Range, чтобы кнопки тулбара не теряли его ---
@@ -190,7 +165,7 @@ export default function WordEditor() {
       if (sel && sel.rangeCount > 0 && editRef.current?.contains(sel.anchorNode)) {
         savedRange.current = sel.getRangeAt(0).cloneRange()
       }
-    } catch {}
+    } catch { }
   }
   const restoreSelection = () => {
     try {
@@ -202,21 +177,21 @@ export default function WordEditor() {
         sel.removeAllRanges()
         sel.addRange(savedRange.current)
       }
-    } catch {}
+    } catch { }
   }
 
   const cmd = (command: string, value?: string) => {
     restoreSelection()
     try {
       // styleWithCSS — команды дают <span style="…">, а не старые <font>/<b> — так Word-образнее
-      try { document.execCommand('styleWithCSS', false, 'true') } catch {}
+      try { document.execCommand('styleWithCSS', false, 'true') } catch { }
       if (command === 'formatBlock' && value && !value.startsWith('<')) {
         try { document.execCommand(command, false, value) }
         catch { document.execCommand(command, false, `<${value}>`) }
       } else {
         document.execCommand(command, false, value)
       }
-    } catch {}
+    } catch { }
     saveSelection()
     setDirty(true)
     refreshCounts()
@@ -229,7 +204,7 @@ export default function WordEditor() {
     try {
       document.execCommand('styleWithCSS', false, 'true')
       document.execCommand('fontSize', false, '7')
-    } catch {}
+    } catch { }
     requestAnimationFrame(() => {
       try {
         const ed = editRef.current
@@ -240,7 +215,7 @@ export default function WordEditor() {
             el.removeAttribute('size')
           }
         })
-      } catch {}
+      } catch { }
     })
     saveSelection()
     setDirty(true)
@@ -263,7 +238,7 @@ export default function WordEditor() {
       if (!ed.contains(range.commonAncestorContainer)) return
       const blocks = ed.querySelectorAll<HTMLElement>('p,h1,h2,h3,h4,h5,h6,li,td,th,blockquote,pre,div:not(.page-break)')
       blocks.forEach(b => { if (range.intersectsNode(b)) b.style.lineHeight = m })
-    } catch {}
+    } catch { }
     setDirty(true)
   }
 
@@ -284,14 +259,14 @@ export default function WordEditor() {
         const base = editRef.current?.clientWidth || 1
         setImgW(Math.max(5, Math.min(100, Math.round((ir.width / base) * 100))))
       }
-    } catch {}
+    } catch { }
   }
 
   const markSelImg = (img: HTMLImageElement | null) => {
     try {
       editRef.current?.querySelectorAll('img.sel').forEach(i => i.classList.remove('sel'))
       if (img) img.classList.add('sel')
-    } catch {}
+    } catch { }
     selImgRef.current = img
     setSelImg(img)
     if (img) requestAnimationFrame(placeHandle)
@@ -520,7 +495,7 @@ export default function WordEditor() {
           for (const c of Array.from(first.cells)) { c.style.width = w }
         }
       }
-    } catch {}
+    } catch { }
   }
 
   // ——— оверлей живой таблицы: рамка, ручка «передвинуть», ширины колонок, высоты строк ———
@@ -674,7 +649,7 @@ export default function WordEditor() {
       try {
         if (atEnd) ed.appendChild(t)
         else if (dropBefore) ed.insertBefore(t, dropBefore)
-      } catch {}
+      } catch { }
       lastTable.current = t
       setDirty(true)
       requestAnimationFrame(placeTblOverlay)
@@ -690,14 +665,14 @@ export default function WordEditor() {
     const R = Math.max(1, Math.min(10, rows ?? tblRows ?? 3))
     const C = Math.max(1, Math.min(6, cols ?? tblCols ?? 3))
     restoreSelection()
-    let t = '<table style="border-collapse:collapse;width:100%;margin:8px 0">'
+    let t = '<table style="border-collapse:collapse;width:100%;max-width:100%;margin:8px 0">'
     for (let i = 0; i < R; i++) {
       t += '<tr>'
       for (let j = 0; j < C; j++) t += `<td style="${CELL_STYLE}"> </td>`
       t += '</tr>'
     }
     t += '</table><p></p>'
-    try { document.execCommand('insertHTML', false, t) } catch {}
+    try { document.execCommand('insertHTML', false, t) } catch { }
     saveSelection()
     setDirty(true)
     setInTable(true)
@@ -706,7 +681,7 @@ export default function WordEditor() {
       const tables = editRef.current?.querySelectorAll('table')
       const last = tables?.[tables.length - 1] as HTMLTableElement | undefined
       if (last) lastTable.current = last
-    } catch {}
+    } catch { }
   }
 
   const tableAddRow = () => {
@@ -742,7 +717,7 @@ export default function WordEditor() {
       const row = el?.closest?.('tr')
       const idx = row ? row.rowIndex : t.rows.length - 1
       if (t.rows.length <= 1) { t.remove(); setInTable(false) } else t.deleteRow(idx)
-    } catch {}
+    } catch { }
     setDirty(true)
     requestAnimationFrame(placeTblOverlay)
   }
@@ -756,8 +731,8 @@ export default function WordEditor() {
       const cell = el?.closest?.('td,th') as HTMLTableCellElement | null
       const idx = cell ? cell.cellIndex : (t.rows[0]?.cells.length || 1) - 1
       if ((t.rows[0]?.cells.length || 1) <= 1) { t.remove(); setInTable(false); return }
-      for (const r of Array.from(t.rows)) { try { r.deleteCell(idx) } catch {} }
-    } catch {}
+      for (const r of Array.from(t.rows)) { try { r.deleteCell(idx) } catch { } }
+    } catch { }
     setDirty(true)
     requestAnimationFrame(placeTblOverlay)
   }
@@ -834,7 +809,7 @@ export default function WordEditor() {
       sel?.addRange(r)
       editRef.current?.focus()
       saveSelection()
-    } catch {}
+    } catch { }
   }
 
   // Tab / Shift+Tab между ячейками как в Word; Tab в последней — новая строка
@@ -911,7 +886,7 @@ export default function WordEditor() {
       sel?.removeAllRanges()
       sel?.addRange(r)
       saveSelection()
-    } catch {}
+    } catch { }
     insertPageBreak() // маркер + каретка на новый лист + релокация хвостов (внутри)
     window.setTimeout(() => {
       updateCurPage()
@@ -934,7 +909,7 @@ export default function WordEditor() {
     client.get('/word-docs/').then(r => {
       const arr = Array.isArray(r.data) ? r.data : r.data.results || []
       setDocs(arr)
-      try { localStorage.setItem(LS_KEY, JSON.stringify(arr.slice(0, 30))) } catch {}
+      try { localStorage.setItem(LS_KEY, JSON.stringify(arr.slice(0, 30))) } catch { }
       setOnline(true)
     }).catch(() => {
       setDocs(loadLocal())
@@ -977,21 +952,21 @@ export default function WordEditor() {
     try {
       ro = new ResizeObserver(() => measureSoon())
       if (editRef.current) ro.observe(editRef.current)
-    } catch {}
+    } catch { }
     requestAnimationFrame(() => {
       measurePages()
-      try { settleMarkers() } catch {}
+      try { settleMarkers() } catch { }
       updateCurPage()
       // картинки дорисовываются после вставки — их загрузка меняет высоты, переизмеряем
       try {
         editRef.current?.querySelectorAll('img').forEach(img => {
           const el = img as HTMLImageElement
           if (!(el as any).__mBound) {
-            ;(el as any).__mBound = 1
+            ; (el as any).__mBound = 1
             el.addEventListener('load', measureSoon)
           }
         })
-      } catch {}
+      } catch { }
     })
     return () => {
       backupDirty()
@@ -1003,13 +978,13 @@ export default function WordEditor() {
       window.removeEventListener('scroll', onScrollResize, true)
       window.removeEventListener('resize', onScrollResize)
       window.removeEventListener('resize', measureSoon)
-      try { ro?.disconnect() } catch {}
+      try { ro?.disconnect() } catch { }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const persistLocal = (arr: Doc[]) => {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(arr.slice(0, 30))) } catch {}
+    try { localStorage.setItem(LS_KEY, JSON.stringify(arr.slice(0, 30))) } catch { }
   }
 
   // черновик: ничего не теряется при кнопке «Новый»
@@ -1023,20 +998,21 @@ export default function WordEditor() {
         title: current.title, body_html: body, page_size: current.pageSize, savedAt: Date.now(),
       }))
       setHasDraft(true)
-    } catch {}
+    } catch { }
   }
 
   const openDoc = (d: Doc) => {
     if (dirty && !confirm('Открыть другой документ? Несохранённое уедет в черновик и не пропадёт.')) return
     if (dirty) stashDraft()
+    setDocsOpen(false)
     setCurrentId(d.id)
     setTitle(d.title)
     markSelImg(null)
     const ps = (d as any).page_size
-    if (ps && PAGE_SIZES[ps]) { setPageSize(ps); try { localStorage.setItem(LS_PAGE, ps) } catch {} }
+    if (ps && PAGE_SIZES[ps]) { setPageSize(ps); try { localStorage.setItem(LS_PAGE, ps) } catch { } }
     if (editRef.current) editRef.current.innerHTML = sanitize(d.body_html)
     mergeRedundantBreaks(true)
-    try { measurePages(); settleMarkers() } catch {}
+    try { measurePages(); settleMarkers() } catch { }
     setDirty(false)
     refreshCounts()
     measureSoon()
@@ -1049,6 +1025,7 @@ export default function WordEditor() {
     // как у слайдов/досок: «Новый» ничего не удаляет — только спрашивает при несохранённом
     if (dirty && !confirm('Создать новый документ? Текущий не удалится — несохранённое уедет в черновик.')) return
     if (dirty) stashDraft()
+    setDocsOpen(false)
     setCurrentId(null)
     setTitle('Новый документ')
     markSelImg(null)
@@ -1064,16 +1041,17 @@ export default function WordEditor() {
       const raw = localStorage.getItem(LS_DRAFT)
       if (!raw) return
       const d = JSON.parse(raw)
+      setDocsOpen(false)
       setCurrentId(null)
       setTitle(d.title || 'Черновик')
       if (d.page_size && PAGE_SIZES[d.page_size]) setPageSize(d.page_size)
       if (editRef.current) editRef.current.innerHTML = sanitize(d.body_html || '')
       mergeRedundantBreaks(true)
-      try { measurePages(); settleMarkers() } catch {}
+      try { measurePages(); settleMarkers() } catch { }
       setDirty(true)
       refreshCounts()
       measureSoon()
-    } catch {}
+    } catch { }
   }
 
   const save = async () => {
@@ -1091,7 +1069,7 @@ export default function WordEditor() {
         setDocs(ns => { const n = [{ ...r.data }, ...ns.filter(d => d.id !== currentId)]; persistLocal(n); return n })
       }
       setDirty(false)
-      try { localStorage.removeItem(LS_DRAFT) } catch {}
+      try { localStorage.removeItem(LS_DRAFT) } catch { }
       setHasDraft(false)
       toast('Документ сохранён', 'success')
     } catch {
@@ -1113,7 +1091,7 @@ export default function WordEditor() {
     if (!confirm('Удалить документ?')) return
     setDocs(ns => { const n = ns.filter(d => d.id !== id); persistLocal(n); return n })
     if (currentId === id) newDoc()
-    if (typeof id === 'number') { try { await client.delete(`/word-docs/${id}/`) } catch {} }
+    if (typeof id === 'number') { try { await client.delete(`/word-docs/${id}/`) } catch { } }
   }
 
   const onImport = async (e: any) => {
@@ -1132,7 +1110,7 @@ export default function WordEditor() {
       setTitle(String(r.data.title || file.name.replace(/\.docx$/i, '').slice(0, 200)))
       if (editRef.current) editRef.current.innerHTML = sanitize(r.data.body_html)
       mergeRedundantBreaks(true)
-      try { measurePages(); settleMarkers() } catch {}
+      try { measurePages(); settleMarkers() } catch { }
       setCurrentId(null)
       setDirty(true)
       refreshCounts()
@@ -1202,7 +1180,7 @@ export default function WordEditor() {
           el.draggable = true
           el.setAttribute('data-sized', '1')
         })
-      } catch {}
+      } catch { }
       saveSelection()
       setDirty(true)
       measureSoon()
@@ -1219,7 +1197,7 @@ export default function WordEditor() {
     try {
       if (!sel) document.execCommand('insertHTML', false, `<a href="${url}">${url}</a>`)
       else document.execCommand('createLink', false, url)
-    } catch {}
+    } catch { }
     saveSelection()
     setDirty(true)
   }
@@ -1242,7 +1220,7 @@ export default function WordEditor() {
   const pickPage = (p: string) => {
     if (!PAGE_SIZES[p]) return
     setPageSize(p)
-    try { localStorage.setItem(LS_PAGE, p) } catch {}
+    try { localStorage.setItem(LS_PAGE, p) } catch { }
     setDirty(true)
     requestAnimationFrame(() => { measurePages(); updateCurPage() })
   }
@@ -1338,12 +1316,12 @@ export default function WordEditor() {
       const nl = { tops, bottom }
       layoutRef.current = nl
       if (!same) setLayout(nl)
-    } catch {}
+    } catch { }
   }
   const measureTimer = useRef<number | undefined>(undefined)
   const measureSoon = () => {
     window.clearTimeout(measureTimer.current)
-    measureTimer.current = window.setTimeout(() => { measurePages(); try { settleMarkers() } catch {}; updateCurPage() }, 90)
+    measureTimer.current = window.setTimeout(() => { measurePages(); try { settleMarkers() } catch { }; updateCurPage() }, 90)
   }
 
   const updateCurPage = () => {
@@ -1358,12 +1336,12 @@ export default function WordEditor() {
         else break
       }
       setCurPage(prev => (n === prev ? prev : n))
-    } catch {}
+    } catch { }
   }
 
   // при смене размера/формата/полного экрана/масштаба для слабовидящих — переизмерить
   useEffect(() => {
-    requestAnimationFrame(() => { measurePages(); try { settleMarkers() } catch {}; updateCurPage() })
+    requestAnimationFrame(() => { measurePages(); try { settleMarkers() } catch { }; updateCurPage() })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageSize, full, poor])
 
@@ -1398,7 +1376,7 @@ export default function WordEditor() {
           }
         }
       }
-    } catch {}
+    } catch { }
   }
 
   // Подряд идущие разрывы страницы без контента между ними схлопываем в один —
@@ -1432,7 +1410,7 @@ export default function WordEditor() {
           if (afterBreak && el.style.marginTop) el.style.marginTop = ''
         }
       }
-    } catch {}
+    } catch { }
   }
 
   // разрыв страницы в позиции каретки (лента) / в конце (кн. «+ Лист»):
@@ -1445,7 +1423,7 @@ export default function WordEditor() {
     mk.setAttribute('contenteditable', 'false')
     mk.setAttribute('aria-hidden', 'true')
     mk.setAttribute('data-fresh', '1')
-    window.setTimeout(() => { try { delete mk.dataset.fresh } catch {} }, 1500)
+    window.setTimeout(() => { try { delete mk.dataset.fresh } catch { } }, 1500)
     const blank = document.createElement('p')
     blank.appendChild(document.createElement('br'))
     try {
@@ -1458,7 +1436,7 @@ export default function WordEditor() {
           sel?.addRange(savedRange.current)
         }
         if (sel && sel.rangeCount > 0 && ed.contains(sel.getRangeAt(0).startContainer)) r0 = sel.getRangeAt(0).cloneRange()
-      } catch {}
+      } catch { }
       // верхнеуровневый блок ed, содержащий каретку
       let anchor: HTMLElement | null = null
       if (r0) {
@@ -1479,7 +1457,7 @@ export default function WordEditor() {
           probe.setStart(anchor, 0)
           probe.setEnd(r0!.startContainer, r0!.startOffset)
           atStart = (probe.toString() || '').trim() === ''
-        } catch {}
+        } catch { }
         if (atStart) {
           ed.insertBefore(mk, anchor)
           caretTo = anchor // блок уходит на новый лист, каретка на нём же
@@ -1487,7 +1465,7 @@ export default function WordEditor() {
           // каретка внутри текста — Word-splitting: всё после каретки переезжает на новый лист
           const right = document.createRange()
           right.selectNodeContents(anchor)
-          try { right.setStart(r0!.startContainer, r0!.startOffset) } catch {}
+          try { right.setStart(r0!.startContainer, r0!.startOffset) } catch { }
           const frag = right.extractContents()
           ed.insertBefore(mk, anchor.nextSibling)
           let rightBlock: HTMLElement | null = null
@@ -1511,13 +1489,13 @@ export default function WordEditor() {
       ed.focus()
       saveSelection()
     } catch {
-      try { ed.appendChild(mk) } catch {}
-      try { ed.appendChild(blank) } catch {}
+      try { ed.appendChild(mk) } catch { }
+      try { ed.appendChild(blank) } catch { }
     }
     saveSelection()
     setDirty(true)
     refreshCounts()
-    try { measurePages(); settleMarkers() } catch {}
+    try { measurePages(); settleMarkers() } catch { }
     requestAnimationFrame(() => { measurePages(); updateCurPage() })
   }
 
@@ -1534,7 +1512,7 @@ export default function WordEditor() {
       sel?.removeAllRanges()
       sel?.addRange(range)
       saveSelection()
-    } catch {}
+    } catch { }
   }
 
   const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[c])
@@ -1548,406 +1526,459 @@ export default function WordEditor() {
 
   return (
     <div className="word-editor max-w-6xl mx-auto space-y-4 page-enter">
-      <div className="flex flex-wrap items-center gap-3 animate-fadeIn">
+      <div className="flex flex-wrap items-center justify-between gap-3 animate-fadeIn">
         {/* счётчик — вне h1: из h1 собирается заголовок вкладки браузера («Word 0» смотрелся как баг) */}
-        <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-indigo-600 text-white"><FileText size={20}/></span> Word</h1>
-        <span className="text-sm font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-300 px-2.5 py-1 rounded-full" aria-label="Количество документов">{docs.length}</span>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-indigo-600 text-white"><FileText size={20} /></span> Word</h1>
+          <span className="text-sm font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-300 px-2.5 py-1 rounded-full" aria-label="Количество документов">{docs.length}</span>
+        </div>
+        <button
+          onClick={() => setDocsOpen(v => !v)}
+          aria-expanded={docsOpen}
+          aria-label="Переключить список документов"
+          className="lg:hidden flex items-center gap-2 px-3 py-2 min-h-[40px] rounded-xl bg-white dark:bg-slate-800 border dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
+        >
+          <FileText size={16} className="text-indigo-600 shrink-0" />
+          <span>Документы ({docs.length})</span>
+          <ChevronDown size={16} className={`transition-transform duration-200 text-slate-400 ${docsOpen ? 'rotate-180' : ''}`} />
+        </button>
       </div>
       <div className="flex flex-col lg:flex-row gap-4">
-      {/* список документов */}
-      <aside className="lg:w-64 shrink-0 bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-3 h-fit" aria-label="Мои документы">
-        <button onClick={newDoc} title="Чистый лист: начать новый документ. Текущий не удаляется — несохранённое уедет в черновик."
-          aria-label="Создать новый документ"
-          className="w-full px-3 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold flex items-center justify-center gap-2">
-          <Plus size={16} /> Новый
-        </button>
-        {hasDraft && (
-          <button onClick={restoreDraft} title="Вернуть несохранённый черновик" className="mt-2 w-full px-3 py-2 rounded-xl bg-amber-100 text-amber-800 text-sm font-semibold">
-            Черновик • восстановить
+        {/* список документов */}
+        <aside className={`${docsOpen ? 'block' : 'hidden'} lg:block lg:w-64 shrink-0 bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-3 h-fit`} aria-label="Мои документы">
+          <button onClick={newDoc} title="Чистый лист: начать новый документ. Текущий не удаляется — несохранённое уедет в черновик."
+            aria-label="Создать новый документ"
+            className="w-full px-3 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold flex items-center justify-center gap-2">
+            <Plus size={16} /> Новый
           </button>
-        )}
-        {/* Файл: открыть .docx / сохранить в .docx — как в Word файловые операции */}
-        <div className="mt-2 grid grid-cols-2 gap-2" role="group" aria-label="Файл">
-          <button onClick={() => fileRef.current?.click()} disabled={busy} title="Открыть .docx (до 20МБ)"
-            className="px-2 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
-            <Upload size={13} /> Импорт
-          </button>
-          <button onClick={onExport} disabled={busy} title="Сохранить документ как .docx"
-            className="min-h-[44px] px-2 py-2.5 rounded-xl bg-white border dark:bg-slate-700 dark:text-white dark:border-slate-600 text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
-            <Download size={13} /> Скачать
-          </button>
-        </div>
-        <input ref={fileRef} type="file" accept=".docx" className="hidden" onChange={onImport} />
-        <div className="mt-3 space-y-1 max-h-40 lg:max-h-[50vh] overflow-auto overscroll-contain">
-          {docs.length === 0 && <div className="text-xs text-slate-400 text-center py-4">Пока пусто</div>}
-          {docs.map(d => (
-            <div key={d.id} className={`group flex items-center gap-2 px-2 py-2 rounded-xl text-sm ${currentId === d.id ? 'bg-indigo-50 dark:bg-indigo-900/30 font-semibold' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
-              <button onClick={() => openDoc(d)} className="flex-1 flex items-center gap-2 min-w-0 text-left dark:text-white" title={d.title}>
-                <FileText size={15} className="shrink-0 text-indigo-600" />
-                <span className="truncate">{d.title}{dirty && currentId === d.id ? ' •' : ''}</span>
-              </button>
-              <button onClick={() => remove(d.id)} aria-label={`Удалить ${d.title}`}
-                className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 bg-red-50 text-red-600"><Trash2 size={14} /></button>
-            </div>
-          ))}
-        </div>
-      </aside>
-
-      {/* редактор */}
-      <div ref={sheetScrollRef} onScroll={updateCurPage} className={`flex-1 min-w-0 space-y-3 pb-28 lg:pb-0 scroll-mt-20 ${full ? 'fixed inset-0 z-50 overflow-auto overscroll-contain bg-slate-100 dark:bg-slate-900 p-3 sm:p-6' : ''}`}>
-        {/* Быстрый доступ — как у Word сверху: сохранение, отмена/возврат, печать */}
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 px-1.5 py-1 flex flex-wrap sm:flex-nowrap items-center gap-1">
-          <button onClick={save} disabled={busy} title="Сохранить" aria-label="Сохранить документ"
-            className="flex items-center gap-2 px-3 h-11 sm:h-10 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm shrink-0 disabled:opacity-50">
-            <Save size={15} /> {busy ? '…' : 'Сохранить'}
-          </button>
-          <span className="w-px h-6 bg-slate-200 dark:bg-slate-600 mx-0.5 shrink-0" />
-          <button onMouseDown={keepFocus} onClick={() => cmd('undo')} title="Отменить (Ctrl+Z)" aria-label="Отменить"
-            className="p-2.5 h-11 w-11 sm:h-10 sm:w-10 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white shrink-0 flex items-center justify-center"><Undo2 size={16} /></button>
-          <button onMouseDown={keepFocus} onClick={() => cmd('redo')} title="Вернуть (Ctrl+Y)" aria-label="Вернуть"
-            className="p-2.5 h-11 w-11 sm:h-10 sm:w-10 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white shrink-0 flex items-center justify-center"><Redo2 size={16} /></button>
-          <button onClick={doPrint} title="Печать" aria-label="Печать документа"
-            className="p-2.5 h-11 w-11 sm:h-10 sm:w-10 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white shrink-0 flex items-center justify-center"><Printer size={16} /></button>
-          {!online && <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 shrink-0">офлайн</span>}
-          <input value={title} onChange={e => { setTitle(e.target.value); setDirty(true) }}
-            aria-label="Название документа" placeholder="Название документа"
-            className="order-first sm:order-none basis-full sm:basis-auto flex-1 min-w-0 px-3 h-11 sm:h-10 rounded-xl border bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 font-bold text-base sm:text-sm" />
-          <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400 px-2 font-mono whitespace-nowrap sm:hidden lg:block sm:text-[11px] lg:text-xs" aria-live="polite">Стр. {curPage}/{pages}</span>
-          <button onClick={() => setFull(f => !f)} title={full ? 'Выйти из полного экрана (Esc)' : 'Во весь экран'}
-            aria-label={full ? 'Выйти из полного экрана' : 'Полный экран'}
-            className="p-2.5 h-11 w-11 sm:h-10 sm:w-10 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white shrink-0 flex items-center justify-center">
-            {full ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-          </button>
-        </div>
-
-        {/* Лента как в Word: табы Главная/Вставка, группы с подписями. В режиме
-            слабовидящих лента заменена на простые крупные кнопки — без вкладок и
-            вставок, только самое нужное. */}
-        {poor ? (
-          <div role="toolbar" aria-label="Простые инструменты" className="flex flex-wrap items-center gap-1.5 bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-2">
-            <button onMouseDown={keepFocus} onClick={() => cmd('bold')} aria-pressed={!!active.bold} title="Жирный (Ctrl+B)" aria-label="Жирный" className={`h-11 min-w-[52px] px-3 rounded-xl border text-lg font-bold ${!!active.bold ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>Ж</button>
-            <button onMouseDown={keepFocus} onClick={() => cmd('italic')} aria-pressed={!!active.italic} title="Курсив (Ctrl+I)" aria-label="Курсив" className={`h-11 min-w-[52px] px-3 rounded-xl border text-lg italic ${!!active.italic ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>К</button>
-            <button onMouseDown={keepFocus} onClick={() => cmd('underline')} aria-pressed={!!active.underline} title="Подчёркнутый (Ctrl+U)" aria-label="Подчёркнутый" className={`h-11 min-w-[52px] px-3 rounded-xl border text-lg underline ${!!active.underline ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>Ч</button>
-            <span className="w-px self-stretch bg-slate-200 dark:bg-slate-600 mx-1" />
-            <select onChange={e => { setFontSizePt(e.target.value); e.currentTarget.selectedIndex = 0 }} title="Размер шрифта" aria-label="Размер шрифта"
-              className="h-11 px-2 rounded-xl border bg-white dark:bg-slate-700 dark:text-white text-base cursor-pointer">
-              <option value="">Крупность</option>
-              {FONT_SIZES.map(s => <option key={s.pt} value={s.pt}>{s.label}</option>)}
-            </select>
-            <span className="w-px self-stretch bg-slate-200 dark:bg-slate-600 mx-1" />
-            <button onMouseDown={keepFocus} onClick={() => cmd('insertUnorderedList')} aria-pressed={!!active.insertUnorderedList} title="Список с точками" aria-label="Маркированный список"
-              className={`h-11 min-w-[48px] px-3 rounded-xl border ${!!active.insertUnorderedList ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}><List size={18} /></button>
-            <button onMouseDown={keepFocus} onClick={() => cmd('insertOrderedList')} aria-pressed={!!active.insertOrderedList} title="Список с номерами" aria-label="Нумерованный список"
-              className={`h-11 min-w-[48px] px-3 rounded-xl border ${!!active.insertOrderedList ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}><ListOrdered size={18} /></button>
-            <span className="w-px self-stretch bg-slate-200 dark:bg-slate-600 mx-1" />
-            <button onMouseDown={keepFocus} onClick={() => cmd('justifyLeft')} title="Текст слева" aria-label="По левому краю" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignLeft size={18} /></button>
-            <button onMouseDown={keepFocus} onClick={() => cmd('justifyCenter')} title="Текст по центру" aria-label="По центру" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignCenter size={18} /></button>
-            <button onMouseDown={keepFocus} onClick={() => cmd('justifyRight')} title="Текст справа" aria-label="По правому краю" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignRight size={18} /></button>
-            {/* В poor ленты нет, поэтому панель картинки нужна отдельно — иначе не удалить фото */}
-            {selImg && (
-              <div role="toolbar" aria-label="Выбранная картинка" className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-200 dark:border-slate-700">
-                <span className="px-1 text-sm font-bold dark:text-white">Картинка:</span>
-                <button onClick={imgFree} title="Открепить от текста" aria-label="Картинка свободно" className={`h-11 px-3 rounded-xl border text-sm font-bold ${isFree(selImg) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>Свободно</button>
-                <button onClick={imgInline} title="Вернуть в текст" aria-label="Картинка в текст" className={`h-11 px-3 rounded-xl border text-sm font-bold ${!isFree(selImg) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>В текст</button>
-                {[25, 50, 100].map(p => (
-                  <button key={p} onClick={() => imgSetWidth(p)} aria-label={`Размер ${p} процентов`} className={`h-11 w-16 rounded-xl border text-sm font-bold ${imgW === p ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>{p}%</button>
-                ))}
-                <button onClick={() => imgAlign('left')} title="Слева" aria-label="Картинка слева" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignLeft size={18} /></button>
-                <button onClick={() => imgAlign('center')} title="По центру" aria-label="Картинка по центру" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignCenter size={18} /></button>
-                <button onClick={() => imgAlign('right')} title="Справа" aria-label="Картинка справа" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignRight size={18} /></button>
-                <button onClick={imgDelete} title="Удалить картинку" aria-label="Удалить картинку" className="h-11 px-4 rounded-xl bg-red-600 text-white text-sm font-bold ml-auto">Удалить</button>
-              </div>
-            )}
-            {/* и панель таблицы — крупно, минимум кнопок */}
-            {inTable && !selImg && (
-              <div role="toolbar" aria-label="Выбранная таблица" className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-200 dark:border-slate-700">
-                <span className="px-1 text-sm font-bold dark:text-white">Таблица:</span>
-                <button onMouseDown={keepFocus} onClick={tableAddRow} title="Добавить строку" className="h-11 px-3 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 text-sm font-bold">+ Строка</button>
-                <button onMouseDown={keepFocus} onClick={tableDelRow} title="Удалить последнюю строку" className="h-11 px-3 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 text-sm font-bold">− Строка</button>
-                <button onMouseDown={keepFocus} onClick={tableAddCol} title="Добавить столбец" className="h-11 px-3 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 text-sm font-bold">+ Столбец</button>
-                <button onMouseDown={keepFocus} onClick={tableDelCol} title="Удалить последний столбец" className="h-11 px-3 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 text-sm font-bold">− Столбец</button>
-                <button onMouseDown={keepFocus} onClick={tableDelete} title="Удалить таблицу целиком" aria-label="Удалить таблицу" className="h-11 px-4 rounded-xl bg-red-600 text-white text-sm font-bold ml-auto">Удалить</button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="word-ribbon bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 overflow-hidden">
-            {/* табы ленты */}
-            <div role="tablist" aria-label="Вкладки ленты" className="flex items-center gap-1 px-2 pt-1 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 overflow-x-auto">
-              <button role="tab" aria-selected={tab === 'home'} onClick={() => setTab('home')}
-                className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'home' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Главная</button>
-              <button role="tab" aria-selected={tab === 'insert'} onClick={() => setTab('insert')}
-                className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'insert' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Вставка</button>
-              {selImg && (
-                <button role="tab" aria-selected={tab === 'img'} onClick={() => setTab('img')}
-                  className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'img' ? 'bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-amber-600 dark:text-amber-400/80 hover:text-amber-800'}`}>Картинка</button>
-              )}
-              {(inTable && !selImg) && (
-                <button role="tab" aria-selected={tab === 'tbl'} onClick={() => setTab('tbl')}
-                  className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'tbl' ? 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-emerald-600 dark:text-emerald-400/80 hover:text-emerald-800'}`}>Таблица</button>
-              )}
-            </div>
-
-            {/* тело главной вкладки: Шрифт | Абзац | Стили — порядок как у Word */}
-            {tab === 'home' && (
-              <div role="toolbar" aria-label="Главная" className="flex flex-nowrap sm:flex-wrap items-stretch gap-0 p-1.5 overflow-x-auto sm:overflow-visible scrollbar-thin">
-                <RibbonGroup label="Шрифт">
-                  <select onChange={e => { setFontFamily(e.target.value); e.currentTarget.selectedIndex = 0 }} title="Шрифт" aria-label="Шрифт"
-                    className="h-9 px-2 rounded-lg border bg-white dark:bg-slate-700 dark:text-white text-sm max-w-[130px] cursor-pointer">
-                    <option value="">Шрифт</option>
-                    {FONT_FAMILIES.map(f => <option key={f} value={f} style={{ fontFamily: `'${f}'` }}>{f}</option>)}
-                  </select>
-                  <select onChange={e => { setFontSizePt(e.target.value); e.currentTarget.selectedIndex = 0 }} title="Размер шрифта (кегль, пункты)" aria-label="Размер шрифта"
-                    className="h-9 w-[72px] shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white text-sm cursor-pointer">
-                    <option value="">Кегль</option>
-                    {FONT_SIZES.map(s => <option key={s.pt} value={s.pt}>{s.label}</option>)}
-                  </select>
-                  <button onMouseDown={keepFocus} onClick={() => cmd('bold')} aria-pressed={!!active.bold} title="Жирный (Ctrl+B)" aria-label="Жирный" className={rbBtn(!!active.bold)}><Bold size={16} /></button>
-                  <button onMouseDown={keepFocus} onClick={() => cmd('italic')} aria-pressed={!!active.italic} title="Курсив (Ctrl+I)" aria-label="Курсив" className={rbBtn(!!active.italic)}><Italic size={16} /></button>
-                  <button onMouseDown={keepFocus} onClick={() => cmd('underline')} aria-pressed={!!active.underline} title="Подчёркнутый (Ctrl+U)" aria-label="Подчёркнутый" className={rbBtn(!!active.underline)}><Underline size={16} /></button>
-                  <button onMouseDown={keepFocus} onClick={() => cmd('strikeThrough')} aria-pressed={!!active.strikeThrough} title="Зачёркнутый" aria-label="Зачёркнутый" className={rbBtn(!!active.strikeThrough)}><Strikethrough size={16} /></button>
-                  <button onMouseDown={keepFocus} onClick={() => cmd('subscript')} title="Нижний индекс" aria-label="Нижний индекс" className={rbBtn(false)}><span className="text-sm font-bold leading-none">x₂</span></button>
-                  <button onMouseDown={keepFocus} onClick={() => cmd('superscript')} title="Верхний индекс" aria-label="Верхний индекс" className={rbBtn(false)}><span className="text-sm font-bold leading-none">x²</span></button>
-                  <label className="h-9 w-9 shrink-0 rounded-lg hover:bg-indigo-50 dark:hover:bg-slate-600 dark:text-white cursor-pointer flex flex-col items-center justify-center" title="Цвет текста">
-                    <span className="text-sm font-bold leading-none">A</span>
-                    <span className="block w-4 h-1 rounded-sm bg-red-600" />
-                    <input type="color" className="sr-only" aria-label="Цвет текста" onChange={e => cmd('foreColor', e.target.value)} />
-                  </label>
-                  <label className="h-9 w-9 shrink-0 rounded-lg hover:bg-indigo-50 dark:hover:bg-slate-600 dark:text-white cursor-pointer flex flex-col items-center justify-center" title="Выделить маркером">
-                    <span className="text-sm font-bold leading-none">A</span>
-                    <span className="block w-4 h-1 rounded-sm bg-yellow-300" />
-                    <input type="color" defaultValue="#ffff00" className="sr-only" aria-label="Цвет выделения маркером" onChange={e => cmd('hiliteColor', e.target.value)} />
-                  </label>
-                  <button onMouseDown={keepFocus} onClick={() => cmd('removeFormat')} title="Очистить всё форматирование" aria-label="Очистить форматирование" className={rbBtn(false)}><Eraser size={16} /></button>
-                </RibbonGroup>
-                <RibbonSep />
-                <RibbonGroup label="Абзац">
-                  <button onMouseDown={keepFocus} onClick={() => cmd('insertUnorderedList')} aria-pressed={!!active.insertUnorderedList} title="Список с точками" aria-label="Маркированный список" className={rbBtn(!!active.insertUnorderedList)}><List size={16} /></button>
-                  <button onMouseDown={keepFocus} onClick={() => cmd('insertOrderedList')} aria-pressed={!!active.insertOrderedList} title="Список с номерами" aria-label="Нумерованный список" className={rbBtn(!!active.insertOrderedList)}><ListOrdered size={16} /></button>
-                  <button onMouseDown={keepFocus} onClick={() => cmd('justifyLeft')} title="По левому краю" aria-label="По левому краю" className={rbBtn(false)}><AlignLeft size={16} /></button>
-                  <button onMouseDown={keepFocus} onClick={() => cmd('justifyCenter')} title="По центру" aria-label="По центру" className={rbBtn(false)}><AlignCenter size={16} /></button>
-                  <button onMouseDown={keepFocus} onClick={() => cmd('justifyRight')} title="По правому краю" aria-label="По правому краю" className={rbBtn(false)}><AlignRight size={16} /></button>
-                  <button onMouseDown={keepFocus} onClick={() => cmd('justifyFull')} title="По ширине страницы" aria-label="По ширине" className={rbBtn(false)}><AlignJustify size={16} /></button>
-                  <select onChange={e => { setLineSpacing(e.target.value); e.currentTarget.selectedIndex = 0 }} title="Межстрочный интервал" aria-label="Межстрочный интервал"
-                    className="h-9 w-[64px] shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white text-xs cursor-pointer">
-                    <option value="" title="Интервал">1.0</option>
-                    <option value="1.15">1.15</option>
-                    <option value="1.5">1.5</option>
-                    <option value="2.0">2.0</option>
-                    <option value="3.0">3.0</option>
-                  </select>
-                  <button onMouseDown={keepFocus} onClick={() => cmd('indent')} title="Увеличить отступ" aria-label="Увеличить отступ" className={rbBtn(false)}><IndentIncrease size={16} /></button>
-                  <button onMouseDown={keepFocus} onClick={() => cmd('outdent')} title="Уменьшить отступ" aria-label="Уменьшить отступ" className={rbBtn(false)}><IndentDecrease size={16} /></button>
-                </RibbonGroup>
-                <RibbonSep />
-                <RibbonGroup label="Стили">
-                  <select onChange={e => cmd('formatBlock', e.target.value)} defaultValue="p" title="Стиль абзаца" aria-label="Стиль абзаца"
-                    className="h-9 px-2 rounded-lg border bg-white dark:bg-slate-700 dark:text-white text-sm max-w-[150px] cursor-pointer">
-                    <option value="p">Обычный текст</option>
-                    <option value="h1">Заголовок 1</option>
-                    <option value="h2">Заголовок 2</option>
-                    <option value="h3">Заголовок 3</option>
-                  </select>
-                </RibbonGroup>
-              </div>
-            )}
-
-            {/* Вставка: Ссылки | Иллюстрации | Таблицы | Страница — как у Word */}
-            {tab === 'insert' && (
-              <div role="toolbar" aria-label="Вставка" className="flex flex-nowrap sm:flex-wrap items-stretch gap-0 p-1.5 overflow-x-auto sm:overflow-visible scrollbar-thin">
-                <RibbonGroup label="Ссылки">
-                  <button onClick={insertLink} title="Вставить ссылку" aria-label="Вставить ссылку" className={rbBtn(false)}><Link2 size={16} /></button>
-                </RibbonGroup>
-                <RibbonSep />
-                <RibbonGroup label="Иллюстрации">
-                  <button onClick={() => imgRef.current?.click()} title="Вставить картинку (до 2МБ)" aria-label="Вставить картинку" className={rbBtn(false)}><ImagePlus size={16} /></button>
-                </RibbonGroup>
-                <RibbonSep />
-                <RibbonGroup label="Таблицы">
-                  <button onClick={() => setShowTblPicker(v => !v)} title="Вставить таблицу: выбрать строки и столбцы" aria-label="Вставить таблицу" aria-expanded={showTblPicker}
-                    className={`${rbBtn(false)} ${showTblPicker ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}><TableIcon size={16} /></button>
-                  {showTblPicker && (
-                    <span className="flex items-center gap-1.5 h-9 px-1">
-                      <input type="number" min={1} max={10} value={tblRows} onChange={e => setTblRows(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
-                        aria-label="Строк в таблице" className="w-12 h-9 px-1 rounded-lg border dark:bg-slate-700 dark:text-white text-center" />
-                      <span className="text-slate-400 dark:text-slate-500">×</span>
-                      <input type="number" min={1} max={6} value={tblCols} onChange={e => setTblCols(Math.max(1, Math.min(6, parseInt(e.target.value) || 1)))}
-                        aria-label="Столбцов в таблице" className="w-12 h-9 px-1 rounded-lg border dark:bg-slate-700 dark:text-white text-center" />
-                      <button onMouseDown={keepFocus} onClick={() => { insertTable(); }} className="h-9 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold">Вставить {tblRows}×{tblCols}</button>
-                    </span>
-                  )}
-                </RibbonGroup>
-                <RibbonSep />
-                <RibbonGroup label="Страница">
-                  <button onClick={insertPageBreak} title="Разрыв страницы — начать новый лист" aria-label="Разрыв страницы" className={rbBtn(false)}><Scissors size={16} /></button>
-                  <label className="flex items-center gap-1.5 text-xs font-semibold dark:text-white pl-1" title="Размер листа">
-                    Лист:
-                    <select value={pageSize} onChange={e => pickPage(e.target.value)} aria-label="Размер листа"
-                      className="h-9 px-1.5 rounded-lg border bg-white text-slate-900 dark:bg-slate-700 dark:text-white dark:[color-scheme:dark] text-xs cursor-pointer">
-                      {Object.entries(PAGE_SIZES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                    </select>
-                  </label>
-                </RibbonGroup>
-              </div>
-            )}
-
-            {/* контекстная вкладка Картинка — как «Средства рисования» у Word */}
-            {tab === 'img' && selImg && (
-              <div role="toolbar" aria-label="Настройки картинки" className="flex flex-nowrap sm:flex-wrap items-stretch gap-0 p-1.5 overflow-x-auto sm:overflow-visible scrollbar-thin">
-                <RibbonGroup label="Режим">
-                  <button onClick={imgFree} title="Открепить от текста — таскать мышью"
-                    className={`h-9 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 ${isFree(selImg) ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}><Move size={13} /> Свободно</button>
-                  <button onClick={imgInline} title="Вернуть в текст"
-                    className={`h-9 px-2.5 rounded-lg text-xs font-bold ${!isFree(selImg) ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}>В текст</button>
-                </RibbonGroup>
-                <RibbonSep />
-                <RibbonGroup label="Размер">
-                  {[25, 50, 75, 100].map(p => (
-                    <button key={p} onClick={() => imgSetWidth(p)} className={`h-9 px-2 rounded-lg text-xs font-bold ${imgW === p && !isFree(selImg) ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}>{p}%</button>
-                  ))}
-                  <input type="range" min={isFree(selImg) ? 30 : 10} max={isFree(selImg) ? 1200 : 100} step={isFree(selImg) ? 10 : 5} value={imgW}
-                    onChange={e => imgSizeChange(parseInt(e.target.value))} aria-label="Размер картинки" className="w-24 sm:w-32" />
-                </RibbonGroup>
-                <RibbonSep />
-                <RibbonGroup label="Положение в тексте">
-                  <button onClick={() => imgAlign('left')} title="Слева, текст обтекает" aria-label="Картинка слева" className="h-9 w-9 shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignLeft size={15} /></button>
-                  <button onClick={() => imgAlign('center')} title="По центру" aria-label="Картинка по центру" className="h-9 w-9 shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignCenter size={15} /></button>
-                  <button onClick={() => imgAlign('right')} title="Справа, текст обтекает" aria-label="Картинка справа" className="h-9 w-9 shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignRight size={15} /></button>
-                </RibbonGroup>
-                <RibbonSep />
-                <RibbonGroup label="Упорядочение">
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 hidden xl:flex items-center">{isFree(selImg) ? 'тяни фото мышью + уголок — размер' : 'уголок у фото — размер'}</span>
-                  <button onClick={imgDelete} className="ml-auto h-9 px-3 rounded-lg bg-red-50 text-red-600 font-bold text-xs flex items-center gap-1" title="Удалить картинку" aria-label="Удалить картинку"><X size={14} /> Удалить</button>
-                </RibbonGroup>
-              </div>
-            )}
-
-            {/* контекстная вкладка Таблица — как «Макет» у Word */}
-            {tab === 'tbl' && !selImg && (
-              <div role="toolbar" aria-label="Настройки таблицы" className="flex flex-nowrap sm:flex-wrap items-stretch gap-0 p-1.5 overflow-x-auto sm:overflow-visible scrollbar-thin">
-                <RibbonGroup label="Строки и столбцы">
-                  <button onMouseDown={keepFocus} onClick={tableAddRow} title="Добавить строку ниже" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">+ Строка</button>
-                  <button onMouseDown={keepFocus} onClick={tableAddCol} title="Добавить столбец справа" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">+ Столбец</button>
-                  <button onMouseDown={keepFocus} onClick={tableDelRow} title="Удалить строку" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">− Строка</button>
-                  <button onMouseDown={keepFocus} onClick={tableDelCol} title="Удалить столбец" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">− Столбец</button>
-                </RibbonGroup>
-                <RibbonSep />
-                <RibbonGroup label="Данные">
-                  <button onMouseDown={keepFocus} onClick={() => tblHeader()} title="Первая строка — шапка или обычная" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">Шапка</button>
-                </RibbonGroup>
-                <RibbonSep />
-                <RibbonGroup label="Ячейка">
-                  <button onMouseDown={keepFocus} onClick={() => tblCellAlign('left')} title="Текст ячейки слева" className="h-9 w-9 shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignLeft size={14} /></button>
-                  <button onMouseDown={keepFocus} onClick={() => tblCellAlign('center')} title="Текст ячейки по центру" className="h-9 w-9 shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignCenter size={14} /></button>
-                  <button onMouseDown={keepFocus} onClick={() => tblCellAlign('right')} title="Текст ячейки справа" className="h-9 w-9 shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignRight size={14} /></button>
-                  <label className="h-9 px-1.5 rounded-lg border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 cursor-pointer flex items-center gap-1 text-xs font-bold" title="Фон ячейки">
-                    Фон
-                    <input type="color" onChange={e => tblCellBg(e.target.value)} className="w-6 h-6 rounded cursor-pointer bg-transparent border-0 p-0" aria-label="Фон ячейки" />
-                  </label>
-                </RibbonGroup>
-                <RibbonSep />
-                <RibbonGroup label="Положение таблицы">
-                  <button onMouseDown={keepFocus} onClick={() => tblAlign('center')} title="Таблица по центру" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">Центр</button>
-                  <button onMouseDown={keepFocus} onClick={() => tblFloat('left')} title="Текст обтекает слева" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">Слева</button>
-                  <button onMouseDown={keepFocus} onClick={() => tblFloat('right')} title="Текст обтекает справа" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">Справа</button>
-                  <button onMouseDown={keepFocus} onClick={() => tblFloat('')} title="Вернуть в полную ширину" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">В строку</button>
-                </RibbonGroup>
-                <RibbonSep />
-                <RibbonGroup label="">
-                  <button onMouseDown={keepFocus} onClick={tableDelete} className="ml-auto h-9 px-3 rounded-lg bg-red-50 text-red-600 font-bold text-xs flex items-center gap-1" title="Удалить таблицу" aria-label="Удалить таблицу"><Trash2 size={14} /> Удалить</button>
-                </RibbonGroup>
-              </div>
-            )}
-          </div>
-        )}
-        <input ref={imgRef} type="file" accept="image/*" className="hidden" onChange={onImage} />
-
-        {/* На телефоне панель листов всегда над нижним меню; на десктопе остаётся в потоке. */}
-        <div className={`fixed inset-x-3 z-20 lg:static lg:z-auto ${full ? 'bottom-[calc(12px+env(safe-area-inset-bottom))]' : 'bottom-[calc(64px+env(safe-area-inset-bottom))]'}`}>
-          <div className="flex items-center gap-1.5 rounded-2xl border bg-white/95 dark:bg-slate-800/95 dark:border-slate-600 p-1.5 shadow-xl backdrop-blur-xl lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none dark:lg:bg-transparent">
-            <span className="shrink-0 px-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 lg:hidden" aria-live="polite">
-              Стр. {curPage}/{pages}
-            </span>
-            <div className="flex flex-1 lg:flex-none gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Листы документа">
-              {Array.from({ length: Math.max(1, pages) }, (_, k) => (
-                <button
-                  key={k}
-                  role="tab"
-                  aria-selected={curPage === k + 1}
-                  aria-label={`Перейти к листу ${k + 1}`}
-                  onClick={() => gotoSheet(k + 1)}
-                  title={`Перейти к листу ${k + 1}`}
-                  className={`min-w-[44px] min-h-[44px] shrink-0 px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${curPage === k + 1 ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 hover:bg-indigo-50 dark:hover:bg-slate-600'}`}
-                >
-                  <span className="hidden sm:inline">Лист </span>{k + 1}
-                </button>
-              ))}
-            </div>
-            <button onClick={addPage} className="min-h-[44px] shrink-0 px-3 py-2 rounded-xl text-xs font-bold border border-dashed bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 hover:bg-indigo-50 dark:hover:bg-slate-600" title="Добавить лист в конец">
-              + Лист
+          {hasDraft && (
+            <button onClick={restoreDraft} title="Вернуть несохранённый черновик" className="mt-2 w-full px-3 py-2 rounded-xl bg-amber-100 text-amber-800 text-sm font-semibold">
+              Черновик • восстановить
+            </button>
+          )}
+          {/* Файл: открыть .docx / сохранить в .docx — как в Word файловые операции */}
+          <div className="mt-2 grid grid-cols-2 gap-2" role="group" aria-label="Файл">
+            <button onClick={() => fileRef.current?.click()} disabled={busy} title="Открыть .docx (до 20МБ)"
+              className="px-2 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+              <Upload size={13} /> Импорт
+            </button>
+            <button onClick={onExport} disabled={busy} title="Сохранить документ как .docx"
+              className="min-h-[44px] px-2 py-2.5 rounded-xl bg-white border dark:bg-slate-700 dark:text-white dark:border-slate-600 text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+              <Download size={13} /> Скачать
             </button>
           </div>
-        </div>
+          <input ref={fileRef} type="file" accept=".docx" className="hidden" onChange={onImport} />
+          <div className="mt-3 space-y-1 max-h-40 lg:max-h-[50vh] overflow-auto overscroll-contain">
+            {docs.length === 0 && <div className="text-xs text-slate-400 text-center py-4">Пока пусто</div>}
+            {docs.map(d => (
+              <div key={d.id} className={`group flex items-center gap-2 px-2 py-2 rounded-xl text-sm ${currentId === d.id ? 'bg-indigo-50 dark:bg-indigo-900/30 font-semibold' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+                <button onClick={() => openDoc(d)} className="flex-1 flex items-center gap-2 min-w-0 text-left dark:text-white" title={d.title}>
+                  <FileText size={15} className="shrink-0 text-indigo-600" />
+                  <span className="truncate">{d.title}{dirty && currentId === d.id ? ' •' : ''}</span>
+                </button>
+                <button onClick={() => remove(d.id)} aria-label={`Удалить ${d.title}`}
+                  className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 bg-red-50 text-red-600"><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </div>
+        </aside>
 
-        {/* страница */}
-        <div className="bg-slate-100 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 p-2 sm:p-4 overflow-hidden"
-          onClick={e => { if (e.target === e.currentTarget) focusEnd() }}>
-          <div className="relative mx-auto" ref={wrapRef} style={{ maxWidth: page.maxW, minHeight: layout.bottom }}>
-            {/* визуальные листы: границы по реальным стыкам абзацев, разрез — только в зазоре */}
-            <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-              {layout.tops.map((t, k) => {
-                const nx = layout.tops[k + 1]
-                // полоса-шов рисуется только если зазор >= 8px; иначе листы бесшовные (граница и чип работают)
-                const sliceH = nx && nx.slot >= 8 ? Math.max(6, Math.min(24, nx.slot - 2)) : 0
-                const top = k === 0 ? 0 : t.top + sliceH / 2
-                const bottom = nx ? nx.top - sliceH / 2 : layout.bottom
-                return (
-                  <div key={k} className="word-sheet" style={{ top, height: Math.max(40, bottom - top) }}>
-                    <span>Стр. {k + 1}</span>
-                  </div>
-                )
-              })}
-              {layout.tops.slice(1).map((t, i) => {
-                if (t.slot < 8) return null
-                const sliceH = Math.max(6, Math.min(24, t.slot - 2))
-                return (
-                  <div key={`gap-${i}`} className="word-sheet-gap"
-                    style={{ top: t.top - sliceH / 2, height: sliceH }} />
-                )
-              })}
+        {/* редактор */}
+        <div ref={sheetScrollRef} onScroll={updateCurPage} className={`flex-1 min-w-0 space-y-3 pb-28 lg:pb-0 scroll-mt-20 ${full ? 'fixed inset-0 z-50 overflow-auto overscroll-contain bg-slate-100 dark:bg-slate-900 p-3 sm:p-6' : ''}`}>
+          {/* Быстрый доступ — как у Word сверху: сохранение, отмена/возврат, печать */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-1.5 flex flex-col sm:flex-row sm:items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <input value={title} onChange={e => { setTitle(e.target.value); setDirty(true) }}
+                aria-label="Название документа" placeholder="Название документа"
+                className="flex-1 min-w-0 px-3 h-10 sm:h-10 rounded-xl border bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 font-bold text-sm" />
+              <button onClick={save} disabled={busy} title="Сохранить" aria-label="Сохранить документ"
+                className="flex items-center justify-center gap-1.5 px-3.5 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm shrink-0 disabled:opacity-50 min-h-[40px] transition-colors">
+                <Save size={16} /> <span>{busy ? '…' : 'Сохранить'}</span>
+              </button>
             </div>
-            <div
-              ref={editRef}
-              contentEditable
-              suppressContentEditableWarning
-              role="textbox"
-              aria-multiline="true"
-              aria-label="Текст документа Word"
-              onInput={() => { saveSelection(); setDirty(true); refreshCounts(); autoStash(); mergeRedundantBreaks(); measureSoon(); placeHandle(); requestAnimationFrame(placeTblOverlay) }}
-              onMouseUp={() => { saveSelection(); refreshCounts() }}
-              onKeyUp={() => { saveSelection(); refreshCounts(); measureSoon() }}
-              onKeyDown={onEditorKeyDown}
-              onClick={onEditorClick}
-              onPointerDown={onFreeMouseDown}
-              className="word-page relative z-10 min-h-[350px] bg-transparent text-slate-900 focus:outline-none focus:ring-0 prose-sm"
-              style={{ lineHeight: 1.7, minHeight: 350 }}
-            />
-            <div ref={tblOverlayRef} className="absolute inset-0 pointer-events-none z-[6]" aria-hidden="true" />
-            {selImg && handle && (
-              <div className="img-handle" style={{ left: handle.x, top: handle.y }}
-                onPointerDown={startResize} title="Тяни — размер фото" />
-            )}
+            <div className="flex items-center justify-between sm:justify-end gap-1 shrink-0">
+              <div className="flex items-center gap-1">
+                <button onMouseDown={keepFocus} onClick={() => cmd('undo')} title="Отменить (Ctrl+Z)" aria-label="Отменить"
+                  className="h-10 w-10 min-h-[40px] min-w-[40px] rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white shrink-0 flex items-center justify-center"><Undo2 size={16} /></button>
+                <button onMouseDown={keepFocus} onClick={() => cmd('redo')} title="Вернуть (Ctrl+Y)" aria-label="Вернуть"
+                  className="h-10 w-10 min-h-[40px] min-w-[40px] rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white shrink-0 flex items-center justify-center"><Redo2 size={16} /></button>
+                <button onClick={doPrint} title="Печать" aria-label="Печать документа"
+                  className="h-10 w-10 min-h-[40px] min-w-[40px] rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white shrink-0 flex items-center justify-center"><Printer size={16} /></button>
+                {!online && <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 shrink-0">офлайн</span>}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400 px-2 font-mono whitespace-nowrap" aria-live="polite">Стр. {curPage}/{pages}</span>
+                <button onClick={() => setFull(f => !f)} title={full ? 'Выйти из полного экрана (Esc)' : 'Во весь экран'}
+                  aria-label={full ? 'Выйти из полного экрана' : 'Полный экран'}
+                  className="h-10 w-10 min-h-[40px] min-w-[40px] rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white shrink-0 flex items-center justify-center">
+                  {full ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Лента как в Word: табы Главная/Вставка, группы с подписями. В режиме
+            слабовидящих лента заменена на простые крупные кнопки — без вкладок и
+            вставок, только самое нужное. */}
+          {poor ? (
+            <div role="toolbar" aria-label="Простые инструменты" className="flex flex-wrap items-center gap-1.5 bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-2">
+              <button onMouseDown={keepFocus} onClick={() => cmd('bold')} aria-pressed={!!active.bold} title="Жирный (Ctrl+B)" aria-label="Жирный" className={`h-11 min-w-[52px] px-3 rounded-xl border text-lg font-bold ${!!active.bold ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>Ж</button>
+              <button onMouseDown={keepFocus} onClick={() => cmd('italic')} aria-pressed={!!active.italic} title="Курсив (Ctrl+I)" aria-label="Курсив" className={`h-11 min-w-[52px] px-3 rounded-xl border text-lg italic ${!!active.italic ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>К</button>
+              <button onMouseDown={keepFocus} onClick={() => cmd('underline')} aria-pressed={!!active.underline} title="Подчёркнутый (Ctrl+U)" aria-label="Подчёркнутый" className={`h-11 min-w-[52px] px-3 rounded-xl border text-lg underline ${!!active.underline ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>Ч</button>
+              <span className="w-px self-stretch bg-slate-200 dark:bg-slate-600 mx-1" />
+              <select onChange={e => { setFontSizePt(e.target.value); e.currentTarget.selectedIndex = 0 }} title="Размер шрифта" aria-label="Размер шрифта"
+                className="h-11 px-2 rounded-xl border bg-white dark:bg-slate-700 dark:text-white text-base cursor-pointer">
+                <option value="">Крупность</option>
+                {FONT_SIZES.map(s => <option key={s.pt} value={s.pt}>{s.label}</option>)}
+              </select>
+              <span className="w-px self-stretch bg-slate-200 dark:bg-slate-600 mx-1" />
+              <button onMouseDown={keepFocus} onClick={() => cmd('insertUnorderedList')} aria-pressed={!!active.insertUnorderedList} title="Список с точками" aria-label="Маркированный список"
+                className={`h-11 min-w-[48px] px-3 rounded-xl border ${!!active.insertUnorderedList ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}><List size={18} /></button>
+              <button onMouseDown={keepFocus} onClick={() => cmd('insertOrderedList')} aria-pressed={!!active.insertOrderedList} title="Список с номерами" aria-label="Нумерованный список"
+                className={`h-11 min-w-[48px] px-3 rounded-xl border ${!!active.insertOrderedList ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}><ListOrdered size={18} /></button>
+              <span className="w-px self-stretch bg-slate-200 dark:bg-slate-600 mx-1" />
+              <button onMouseDown={keepFocus} onClick={() => cmd('justifyLeft')} title="Текст слева" aria-label="По левому краю" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignLeft size={18} /></button>
+              <button onMouseDown={keepFocus} onClick={() => cmd('justifyCenter')} title="Текст по центру" aria-label="По центру" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignCenter size={18} /></button>
+              <button onMouseDown={keepFocus} onClick={() => cmd('justifyRight')} title="Текст справа" aria-label="По правому краю" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignRight size={18} /></button>
+              {/* В poor ленты нет, поэтому панель картинки нужна отдельно — иначе не удалить фото */}
+              {selImg && (
+                <div role="toolbar" aria-label="Выбранная картинка" className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-200 dark:border-slate-700">
+                  <span className="px-1 text-sm font-bold dark:text-white">Картинка:</span>
+                  <button onClick={imgFree} title="Открепить от текста" aria-label="Картинка свободно" className={`h-11 px-3 rounded-xl border text-sm font-bold ${isFree(selImg) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>Свободно</button>
+                  <button onClick={imgInline} title="Вернуть в текст" aria-label="Картинка в текст" className={`h-11 px-3 rounded-xl border text-sm font-bold ${!isFree(selImg) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>В текст</button>
+                  {[25, 50, 100].map(p => (
+                    <button key={p} onClick={() => imgSetWidth(p)} aria-label={`Размер ${p} процентов`} className={`h-11 w-16 rounded-xl border text-sm font-bold ${imgW === p ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}>{p}%</button>
+                  ))}
+                  <button onClick={() => imgAlign('left')} title="Слева" aria-label="Картинка слева" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignLeft size={18} /></button>
+                  <button onClick={() => imgAlign('center')} title="По центру" aria-label="Картинка по центру" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignCenter size={18} /></button>
+                  <button onClick={() => imgAlign('right')} title="Справа" aria-label="Картинка справа" className="h-11 w-11 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignRight size={18} /></button>
+                  <button onClick={imgDelete} title="Удалить картинку" aria-label="Удалить картинку" className="h-11 px-4 rounded-xl bg-red-600 text-white text-sm font-bold ml-auto">Удалить</button>
+                </div>
+              )}
+              {/* и панель таблицы — крупно, минимум кнопок */}
+              {inTable && !selImg && (
+                <div role="toolbar" aria-label="Выбранная таблица" className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-200 dark:border-slate-700">
+                  <span className="px-1 text-sm font-bold dark:text-white">Таблица:</span>
+                  <button onMouseDown={keepFocus} onClick={tableAddRow} title="Добавить строку" className="h-11 px-3 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 text-sm font-bold">+ Строка</button>
+                  <button onMouseDown={keepFocus} onClick={tableDelRow} title="Удалить последнюю строку" className="h-11 px-3 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 text-sm font-bold">− Строка</button>
+                  <button onMouseDown={keepFocus} onClick={tableAddCol} title="Добавить столбец" className="h-11 px-3 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 text-sm font-bold">+ Столбец</button>
+                  <button onMouseDown={keepFocus} onClick={tableDelCol} title="Удалить последний столбец" className="h-11 px-3 rounded-xl border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 text-sm font-bold">− Столбец</button>
+                  <button onMouseDown={keepFocus} onClick={tableDelete} title="Удалить таблицу целиком" aria-label="Удалить таблицу" className="h-11 px-4 rounded-xl bg-red-600 text-white text-sm font-bold ml-auto">Удалить</button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="word-ribbon bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 overflow-hidden">
+              {/* табы ленты */}
+              <div role="tablist" aria-label="Вкладки ленты" className="flex items-center gap-1 px-2 pt-1 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 overflow-x-auto">
+                <button role="tab" aria-selected={tab === 'home'} onClick={() => setTab('home')}
+                  className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'home' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Главная</button>
+                <button role="tab" aria-selected={tab === 'insert'} onClick={() => setTab('insert')}
+                  className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'insert' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Вставка</button>
+                {selImg && (
+                  <button role="tab" aria-selected={tab === 'img'} onClick={() => setTab('img')}
+                    className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'img' ? 'bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-amber-600 dark:text-amber-400/80 hover:text-amber-800'}`}>Картинка</button>
+                )}
+                {(inTable && !selImg) && (
+                  <button role="tab" aria-selected={tab === 'tbl'} onClick={() => setTab('tbl')}
+                    className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'tbl' ? 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-emerald-600 dark:text-emerald-400/80 hover:text-emerald-800'}`}>Таблица</button>
+                )}
+              </div>
+
+              {/* тело главной вкладки: Шрифт | Абзац | Стили — порядок как у Word */}
+              {tab === 'home' && (
+                <div role="toolbar" aria-label="Главная" className="flex flex-nowrap items-stretch gap-0 p-1.5 overflow-x-auto scrollbar-thin">
+                  <RibbonGroup label="Шрифт">
+                    <select onChange={e => { setFontFamily(e.target.value); e.currentTarget.selectedIndex = 0 }} title="Шрифт" aria-label="Шрифт"
+                      className="h-9 px-2 rounded-lg border bg-white dark:bg-slate-700 dark:text-white text-sm max-w-[130px] cursor-pointer">
+                      <option value="">Шрифт</option>
+                      {FONT_FAMILIES.map(f => <option key={f} value={f} style={{ fontFamily: `'${f}'` }}>{f}</option>)}
+                    </select>
+                    <select onChange={e => { setFontSizePt(e.target.value); e.currentTarget.selectedIndex = 0 }} title="Размер шрифта (кегль, пункты)" aria-label="Размер шрифта"
+                      className="h-9 w-[72px] shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white text-sm cursor-pointer">
+                      <option value="">Кегль</option>
+                      {FONT_SIZES.map(s => <option key={s.pt} value={s.pt}>{s.label}</option>)}
+                    </select>
+                    <button onMouseDown={keepFocus} onClick={() => cmd('bold')} aria-pressed={!!active.bold} title="Жирный (Ctrl+B)" aria-label="Жирный" className={rbBtn(!!active.bold)}><Bold size={16} /></button>
+                    <button onMouseDown={keepFocus} onClick={() => cmd('italic')} aria-pressed={!!active.italic} title="Курсив (Ctrl+I)" aria-label="Курсив" className={rbBtn(!!active.italic)}><Italic size={16} /></button>
+                    <button onMouseDown={keepFocus} onClick={() => cmd('underline')} aria-pressed={!!active.underline} title="Подчёркнутый (Ctrl+U)" aria-label="Подчёркнутый" className={rbBtn(!!active.underline)}><Underline size={16} /></button>
+                    <button onMouseDown={keepFocus} onClick={() => cmd('strikeThrough')} aria-pressed={!!active.strikeThrough} title="Зачёркнутый" aria-label="Зачёркнутый" className={rbBtn(!!active.strikeThrough)}><Strikethrough size={16} /></button>
+                    <button onMouseDown={keepFocus} onClick={() => cmd('subscript')} title="Нижний индекс" aria-label="Нижний индекс" className={rbBtn(false)}><span className="text-sm font-bold leading-none">x₂</span></button>
+                    <button onMouseDown={keepFocus} onClick={() => cmd('superscript')} title="Верхний индекс" aria-label="Верхний индекс" className={rbBtn(false)}><span className="text-sm font-bold leading-none">x²</span></button>
+                    <label className="h-9 w-9 shrink-0 rounded-lg hover:bg-indigo-50 dark:hover:bg-slate-600 dark:text-white cursor-pointer flex flex-col items-center justify-center" title="Цвет текста">
+                      <span className="text-sm font-bold leading-none">A</span>
+                      <span className="block w-4 h-1 rounded-sm bg-red-600" />
+                      <input type="color" className="sr-only" aria-label="Цвет текста" onChange={e => cmd('foreColor', e.target.value)} />
+                    </label>
+                    <label className="h-9 w-9 shrink-0 rounded-lg hover:bg-indigo-50 dark:hover:bg-slate-600 dark:text-white cursor-pointer flex flex-col items-center justify-center" title="Выделить маркером">
+                      <span className="text-sm font-bold leading-none">A</span>
+                      <span className="block w-4 h-1 rounded-sm bg-yellow-300" />
+                      <input type="color" defaultValue="#ffff00" className="sr-only" aria-label="Цвет выделения маркером" onChange={e => cmd('hiliteColor', e.target.value)} />
+                    </label>
+                    <button onMouseDown={keepFocus} onClick={() => cmd('removeFormat')} title="Очистить всё форматирование" aria-label="Очистить форматирование" className={rbBtn(false)}><Eraser size={16} /></button>
+                  </RibbonGroup>
+                  <RibbonSep />
+                  <RibbonGroup label="Абзац">
+                    <button onMouseDown={keepFocus} onClick={() => cmd('insertUnorderedList')} aria-pressed={!!active.insertUnorderedList} title="Список с точками" aria-label="Маркированный список" className={rbBtn(!!active.insertUnorderedList)}><List size={16} /></button>
+                    <button onMouseDown={keepFocus} onClick={() => cmd('insertOrderedList')} aria-pressed={!!active.insertOrderedList} title="Список с номерами" aria-label="Нумерованный список" className={rbBtn(!!active.insertOrderedList)}><ListOrdered size={16} /></button>
+                    <button onMouseDown={keepFocus} onClick={() => cmd('justifyLeft')} title="По левому краю" aria-label="По левому краю" className={rbBtn(false)}><AlignLeft size={16} /></button>
+                    <button onMouseDown={keepFocus} onClick={() => cmd('justifyCenter')} title="По центру" aria-label="По центру" className={rbBtn(false)}><AlignCenter size={16} /></button>
+                    <button onMouseDown={keepFocus} onClick={() => cmd('justifyRight')} title="По правому краю" aria-label="По правому краю" className={rbBtn(false)}><AlignRight size={16} /></button>
+                    <button onMouseDown={keepFocus} onClick={() => cmd('justifyFull')} title="По ширине страницы" aria-label="По ширине" className={rbBtn(false)}><AlignJustify size={16} /></button>
+                    <select onChange={e => { setLineSpacing(e.target.value); e.currentTarget.selectedIndex = 0 }} title="Межстрочный интервал" aria-label="Межстрочный интервал"
+                      className="h-9 w-[64px] shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white text-xs cursor-pointer">
+                      <option value="" title="Интервал">1.0</option>
+                      <option value="1.15">1.15</option>
+                      <option value="1.5">1.5</option>
+                      <option value="2.0">2.0</option>
+                      <option value="3.0">3.0</option>
+                    </select>
+                    <button onMouseDown={keepFocus} onClick={() => cmd('indent')} title="Увеличить отступ" aria-label="Увеличить отступ" className={rbBtn(false)}><IndentIncrease size={16} /></button>
+                    <button onMouseDown={keepFocus} onClick={() => cmd('outdent')} title="Уменьшить отступ" aria-label="Уменьшить отступ" className={rbBtn(false)}><IndentDecrease size={16} /></button>
+                  </RibbonGroup>
+                  <RibbonSep />
+                  <RibbonGroup label="Стили">
+                    <select onChange={e => cmd('formatBlock', e.target.value)} defaultValue="p" title="Стиль абзаца" aria-label="Стиль абзаца"
+                      className="h-9 px-2 rounded-lg border bg-white dark:bg-slate-700 dark:text-white text-sm max-w-[150px] cursor-pointer">
+                      <option value="p">Обычный текст</option>
+                      <option value="h1">Заголовок 1</option>
+                      <option value="h2">Заголовок 2</option>
+                      <option value="h3">Заголовок 3</option>
+                    </select>
+                  </RibbonGroup>
+                </div>
+              )}
+
+              {/* Вставка: Ссылки | Иллюстрации | Таблицы | Страница — как у Word */}
+              {tab === 'insert' && (
+                <div role="toolbar" aria-label="Вставка" className="flex flex-nowrap items-stretch gap-0 p-1.5 overflow-x-auto scrollbar-thin">
+                  <RibbonGroup label="Ссылки">
+                    <button onClick={insertLink} title="Вставить ссылку" aria-label="Вставить ссылку" className={rbBtn(false)}><Link2 size={16} /></button>
+                  </RibbonGroup>
+                  <RibbonSep />
+                  <RibbonGroup label="Иллюстрации">
+                    <button onClick={() => imgRef.current?.click()} title="Вставить картинку (до 2МБ)" aria-label="Вставить картинку" className={rbBtn(false)}><ImagePlus size={16} /></button>
+                  </RibbonGroup>
+                  <RibbonSep />
+                  <RibbonGroup label="Таблицы">
+                    <div className="relative">
+                      <button onClick={() => setShowTblPicker(v => !v)} title="Вставить таблицу: выбрать строки и столбцы" aria-label="Вставить таблицу" aria-expanded={showTblPicker}
+                        className={`${rbBtn(false)} ${showTblPicker ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}><TableIcon size={16} /></button>
+                      {showTblPicker && (
+                        <div className="absolute top-full left-0 mt-1.5 z-30 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 p-3 flex flex-col gap-2 min-w-[210px]">
+                          <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">Размер таблицы</div>
+                          <div className="flex items-center gap-2">
+                            <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                              Строк:
+                              <input type="number" min={1} max={10} value={tblRows} onChange={e => setTblRows(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                                aria-label="Строк в таблице" className="w-12 h-8 px-1 rounded-lg border dark:bg-slate-700 dark:text-white text-center font-bold" />
+                            </label>
+                            <span className="text-slate-400">×</span>
+                            <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                              Кол:
+                              <input type="number" min={1} max={6} value={tblCols} onChange={e => setTblCols(Math.max(1, Math.min(6, parseInt(e.target.value) || 1)))}
+                                aria-label="Столбцов в таблице" className="w-12 h-8 px-1 rounded-lg border dark:bg-slate-700 dark:text-white text-center font-bold" />
+                            </label>
+                          </div>
+                          <div className="flex items-center gap-1.5 pt-1">
+                            <button onMouseDown={keepFocus} onClick={() => { insertTable(); setShowTblPicker(false); }} className="flex-1 h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold">
+                              Вставить {tblRows}×{tblCols}
+                            </button>
+                            <button onClick={() => setShowTblPicker(false)} className="h-8 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 text-xs">✕</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </RibbonGroup>
+                  <RibbonSep />
+                  <RibbonGroup label="Страница">
+                    <button onClick={insertPageBreak} title="Разрыв страницы — начать новый лист" aria-label="Разрыв страницы" className={rbBtn(false)}><Scissors size={16} /></button>
+                    <label className="flex items-center gap-1.5 text-xs font-semibold dark:text-white pl-1" title="Размер листа">
+                      Лист:
+                      <select value={pageSize} onChange={e => pickPage(e.target.value)} aria-label="Размер листа"
+                        className="h-9 px-1.5 rounded-lg border bg-white text-slate-900 dark:bg-slate-700 dark:text-white dark:[color-scheme:dark] text-xs cursor-pointer">
+                        {Object.entries(PAGE_SIZES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                      </select>
+                    </label>
+                  </RibbonGroup>
+                </div>
+              )}
+
+              {/* контекстная вкладка Картинка — как «Средства рисования» у Word */}
+              {tab === 'img' && selImg && (
+                <div role="toolbar" aria-label="Настройки картинки" className="flex flex-nowrap items-stretch gap-0 p-1.5 overflow-x-auto scrollbar-thin">
+                  <RibbonGroup label="Режим">
+                    <button onClick={imgFree} title="Открепить от текста — таскать мышью"
+                      className={`h-9 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 ${isFree(selImg) ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}><Move size={13} /> Свободно</button>
+                    <button onClick={imgInline} title="Вернуть в текст"
+                      className={`h-9 px-2.5 rounded-lg text-xs font-bold ${!isFree(selImg) ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}>В текст</button>
+                  </RibbonGroup>
+                  <RibbonSep />
+                  <RibbonGroup label="Размер">
+                    {[25, 50, 75, 100].map(p => (
+                      <button key={p} onClick={() => imgSetWidth(p)} className={`h-9 px-2 rounded-lg text-xs font-bold ${imgW === p && !isFree(selImg) ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600'}`}>{p}%</button>
+                    ))}
+                    <input type="range" min={isFree(selImg) ? 30 : 10} max={isFree(selImg) ? 1200 : 100} step={isFree(selImg) ? 10 : 5} value={imgW}
+                      onChange={e => imgSizeChange(parseInt(e.target.value))} aria-label="Размер картинки" className="w-24 sm:w-32" />
+                  </RibbonGroup>
+                  <RibbonSep />
+                  <RibbonGroup label="Положение в тексте">
+                    <button onClick={() => imgAlign('left')} title="Слева, текст обтекает" aria-label="Картинка слева" className="h-9 w-9 shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignLeft size={15} /></button>
+                    <button onClick={() => imgAlign('center')} title="По центру" aria-label="Картинка по центру" className="h-9 w-9 shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignCenter size={15} /></button>
+                    <button onClick={() => imgAlign('right')} title="Справа, текст обтекает" aria-label="Картинка справа" className="h-9 w-9 shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignRight size={15} /></button>
+                  </RibbonGroup>
+                  <RibbonSep />
+                  <RibbonGroup label="Упорядочение">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 hidden xl:flex items-center">{isFree(selImg) ? 'тяни фото мышью + уголок — размер' : 'уголок у фото — размер'}</span>
+                    <button onClick={imgDelete} className="ml-auto h-9 px-3 rounded-lg bg-red-50 text-red-600 font-bold text-xs flex items-center gap-1" title="Удалить картинку" aria-label="Удалить картинку"><X size={14} /> Удалить</button>
+                  </RibbonGroup>
+                </div>
+              )}
+
+              {/* контекстная вкладка Таблица — как «Макет» у Word */}
+              {tab === 'tbl' && !selImg && (
+                <div role="toolbar" aria-label="Настройки таблицы" className="flex flex-nowrap items-stretch gap-0 p-1.5 overflow-x-auto scrollbar-thin">
+                  <RibbonGroup label="Строки и столбцы">
+                    <button onMouseDown={keepFocus} onClick={tableAddRow} title="Добавить строку ниже" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">+ Строка</button>
+                    <button onMouseDown={keepFocus} onClick={tableAddCol} title="Добавить столбец справа" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">+ Столбец</button>
+                    <button onMouseDown={keepFocus} onClick={tableDelRow} title="Удалить строку" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">− Строка</button>
+                    <button onMouseDown={keepFocus} onClick={tableDelCol} title="Удалить столбец" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">− Столбец</button>
+                  </RibbonGroup>
+                  <RibbonSep />
+                  <RibbonGroup label="Данные">
+                    <button onMouseDown={keepFocus} onClick={() => tblHeader()} title="Первая строка — шапка или обычная" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">Шапка</button>
+                  </RibbonGroup>
+                  <RibbonSep />
+                  <RibbonGroup label="Ячейка">
+                    <button onMouseDown={keepFocus} onClick={() => tblCellAlign('left')} title="Текст ячейки слева" className="h-9 w-9 shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignLeft size={14} /></button>
+                    <button onMouseDown={keepFocus} onClick={() => tblCellAlign('center')} title="Текст ячейки по центру" className="h-9 w-9 shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignCenter size={14} /></button>
+                    <button onMouseDown={keepFocus} onClick={() => tblCellAlign('right')} title="Текст ячейки справа" className="h-9 w-9 shrink-0 rounded-lg border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 flex items-center justify-center"><AlignRight size={14} /></button>
+                    <label className="h-9 px-1.5 rounded-lg border bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 cursor-pointer flex items-center gap-1 text-xs font-bold" title="Фон ячейки">
+                      Фон
+                      <input type="color" onChange={e => tblCellBg(e.target.value)} className="w-6 h-6 rounded cursor-pointer bg-transparent border-0 p-0" aria-label="Фон ячейки" />
+                    </label>
+                  </RibbonGroup>
+                  <RibbonSep />
+                  <RibbonGroup label="Положение таблицы">
+                    <button onMouseDown={keepFocus} onClick={() => tblAlign('center')} title="Таблица по центру" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">Центр</button>
+                    <button onMouseDown={keepFocus} onClick={() => tblFloat('left')} title="Текст обтекает слева" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">Слева</button>
+                    <button onMouseDown={keepFocus} onClick={() => tblFloat('right')} title="Текст обтекает справа" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">Справа</button>
+                    <button onMouseDown={keepFocus} onClick={() => tblFloat('')} title="Вернуть в полную ширину" className="h-9 px-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white border dark:border-slate-600 text-xs font-bold">В строку</button>
+                  </RibbonGroup>
+                  <RibbonSep />
+                  <RibbonGroup label="">
+                    <button onMouseDown={keepFocus} onClick={tableDelete} className="ml-auto h-9 px-3 rounded-lg bg-red-50 text-red-600 font-bold text-xs flex items-center gap-1" title="Удалить таблицу" aria-label="Удалить таблицу"><Trash2 size={14} /> Удалить</button>
+                  </RibbonGroup>
+                </div>
+              )}
+            </div>
+          )}
+          <input ref={imgRef} type="file" accept="image/*" className="hidden" onChange={onImage} />
+
+          {/* На телефоне панель листов всегда над нижним меню; на десктопе остаётся в потоке. */}
+          <div className={`fixed inset-x-3 z-20 lg:static lg:z-auto ${full ? 'bottom-[calc(12px+env(safe-area-inset-bottom))]' : 'bottom-[calc(64px+env(safe-area-inset-bottom))]'}`}>
+            <div className="flex items-center gap-1.5 rounded-2xl border bg-white/95 dark:bg-slate-800/95 dark:border-slate-600 p-1.5 shadow-xl backdrop-blur-xl lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none dark:lg:bg-transparent">
+              <span className="shrink-0 px-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 lg:hidden" aria-live="polite">
+                Стр. {curPage}/{pages}
+              </span>
+              <div className="flex flex-1 lg:flex-none gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Листы документа">
+                {Array.from({ length: Math.max(1, pages) }, (_, k) => (
+                  <button
+                    key={k}
+                    role="tab"
+                    aria-selected={curPage === k + 1}
+                    aria-label={`Перейти к листу ${k + 1}`}
+                    onClick={() => gotoSheet(k + 1)}
+                    title={`Перейти к листу ${k + 1}`}
+                    className={`min-w-[44px] min-h-[44px] shrink-0 px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${curPage === k + 1 ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 hover:bg-indigo-50 dark:hover:bg-slate-600'}`}
+                  >
+                    <span className="hidden sm:inline">Лист </span>{k + 1}
+                  </button>
+                ))}
+              </div>
+              <button onClick={addPage} className="min-h-[44px] shrink-0 px-3 py-2 rounded-xl text-xs font-bold border border-dashed bg-white dark:bg-slate-700 dark:text-white dark:border-slate-600 hover:bg-indigo-50 dark:hover:bg-slate-600" title="Добавить лист в конец">
+                + Лист
+              </button>
+            </div>
+          </div>
+
+          {/* страница */}
+          <div className="bg-slate-100 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 p-2 sm:p-4 overflow-hidden"
+            onClick={e => { if (e.target === e.currentTarget) focusEnd() }}>
+            <style>{`
+            .word-page table {
+              display: block;
+              max-width: 100% !important;
+              overflow-x: auto;
+              -webkit-overflow-scrolling: touch;
+              word-break: break-word;
+            }
+            .word-page table tbody, .word-page table thead {
+              display: table;
+              width: 100%;
+              min-width: 100%;
+            }
+            .word-page td, .word-page th {
+              word-break: break-word;
+              overflow-wrap: break-word;
+            }
+          `}</style>
+            <div className="relative mx-auto" ref={wrapRef} style={{ maxWidth: page.maxW, minHeight: layout.bottom }}>
+              {/* визуальные листы: границы по реальным стыкам абзацев, разрез — только в зазоре */}
+              <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+                {layout.tops.map((t, k) => {
+                  const nx = layout.tops[k + 1]
+                  // полоса-шов рисуется только если зазор >= 8px; иначе листы бесшовные (граница и чип работают)
+                  const sliceH = nx && nx.slot >= 8 ? Math.max(6, Math.min(24, nx.slot - 2)) : 0
+                  const top = k === 0 ? 0 : t.top + sliceH / 2
+                  const bottom = nx ? nx.top - sliceH / 2 : layout.bottom
+                  return (
+                    <div key={k} className="word-sheet" style={{ top, height: Math.max(40, bottom - top) }}>
+                      <span>Стр. {k + 1}</span>
+                    </div>
+                  )
+                })}
+                {layout.tops.slice(1).map((t, i) => {
+                  if (t.slot < 8) return null
+                  const sliceH = Math.max(6, Math.min(24, t.slot - 2))
+                  return (
+                    <div key={`gap-${i}`} className="word-sheet-gap"
+                      style={{ top: t.top - sliceH / 2, height: sliceH }} />
+                  )
+                })}
+              </div>
+              <div
+                ref={editRef}
+                contentEditable
+                suppressContentEditableWarning
+                role="textbox"
+                aria-multiline="true"
+                aria-label="Текст документа Word"
+                onInput={() => { saveSelection(); setDirty(true); refreshCounts(); autoStash(); mergeRedundantBreaks(); measureSoon(); placeHandle(); requestAnimationFrame(placeTblOverlay) }}
+                onMouseUp={() => { saveSelection(); refreshCounts() }}
+                onKeyUp={() => { saveSelection(); refreshCounts(); measureSoon() }}
+                onKeyDown={onEditorKeyDown}
+                onClick={onEditorClick}
+                onPointerDown={onFreeMouseDown}
+                className="word-page relative z-10 min-h-[350px] bg-transparent text-slate-900 focus:outline-none focus:ring-0 prose-sm"
+                style={{ lineHeight: 1.7, minHeight: 350 }}
+              />
+              <div ref={tblOverlayRef} className="absolute inset-0 pointer-events-none z-[6]" aria-hidden="true" />
+              {selImg && handle && (
+                <div className="img-handle" style={{ left: handle.x, top: handle.y }}
+                  onPointerDown={startResize} title="Тяни — размер фото" />
+              )}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400" aria-live="polite">
+            <span>Слов: {words}</span>
+            <span aria-label="Количество символов без пробелов">Симв.: {chars}</span>
+            <span>•</span>
+            <span>{dirty ? 'Есть несохранённые изменения' : 'Всё сохранено'}</span>
+            <span>•</span>
+            <span>Импорт .docx до 20МБ</span>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400" aria-live="polite">
-          <span>Слов: {words}</span>
-          <span aria-label="Количество символов без пробелов">Симв.: {chars}</span>
-          <span>•</span>
-          <span>{dirty ? 'Есть несохранённые изменения' : 'Всё сохранено'}</span>
-          <span>•</span>
-          <span>Импорт .docx до 20МБ</span>
-        </div>
-      </div>
       </div>
     </div>
   )

@@ -5,10 +5,10 @@ import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
 import { Medal, FolderKanban, TrendingUp, Star, Printer, Plus, Trash2, User as UserIcon, ChevronRight, X, FileText, Paperclip } from 'lucide-react'
 
-type Work = { assignment_id: number; title: string; kind: string; classroom: string; topic: string; score: number; max_score: number; pct: number; submitted_at: string }
+type Work = { assignment_id: number; title: string; kind: string; classroom: string; topic: string; score: number | null; max_score: number; pct: number; answer?: string; url?: string; submitted_at: string }
 type Ach = { id: number; title: string; kind: string; description: string; event_date: string | null; added_by_name: string; created_at: string; file?: string | null; is_image?: boolean }
 type Student = { id: number; username: string; first_name: string; classes?: string[] }
-type TopicRow = { topic_id: number; title: string; pct: number; status: string }
+type TopicRow = { topic_id: number; title: string; pct: number; status: string; subject_name?: string; grade?: string; criteria?: string; kr_grade?: number }
 type Data = {
   username: string; first_name: string; is_self: boolean; diag_avg: number | null
   progress?: { topics?: TopicRow[]; mastered?: TopicRow[]; gaps?: TopicRow[]; diagnostics?: any[] }
@@ -16,6 +16,8 @@ type Data = {
 }
 
 const KIND_META: Record<string, { emoji: string; label: string }> = {
+  project: { emoji: '💻', label: 'Проект / реальная работа' },
+  skill: { emoji: '🎯', label: 'Освоенный навык' },
   gramota: { emoji: '📜', label: 'Грамота' },
   cubok: { emoji: '🏆', label: 'Кубок/место' },
   blagodarnost: { emoji: '💌', label: 'Благодарность' },
@@ -130,10 +132,11 @@ export default function Portfolio() {
 
   const addAch = async () => {
     const title = ntitle.trim()
-    if (!title || !user) { toast(t('pf_ach_need_title'), 'error'); return }
+    const targetUser = user || data?.username || ''
+    if (!title || !targetUser) { toast(t('pf_ach_need_title'), 'error'); return }
     try {
       const fd = new FormData()
-      fd.append('user', user)
+      fd.append('user', targetUser)
       fd.append('title', title)
       fd.append('kind', nkind)
       fd.append('description', ndesc.trim())
@@ -249,14 +252,14 @@ export default function Portfolio() {
         </div>
       </div>
 
-      {/* Достижения */}
+      {/* Достижения, проекты и навыки */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 p-4">
         <div className="flex items-center gap-2 mb-3">
-          <h2 className="font-bold text-sm dark:text-white flex items-center gap-1.5"><Star size={15} className="text-amber-500"/>{t('pf_ach')}</h2>
-          {canAdd && user && (
+          <h2 className="font-bold text-sm dark:text-white flex items-center gap-1.5"><Star size={15} className="text-amber-500"/>Проекты, достижения и освоенные навыки</h2>
+          {((canAdd && user) || data.is_self) && (
             <button onClick={() => setAdding(v => !v)} data-testid="pf-add-ach-btn"
               className="ml-auto px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold flex items-center gap-1">
-              <Plus size={13}/>{t('pf_ach_add')}
+              <Plus size={13}/>{data.is_self && !canAdd ? 'Добавить свой проект / работу' : t('pf_ach_add')}
             </button>
           )}
         </div>
@@ -345,18 +348,52 @@ export default function Portfolio() {
         </div>
       </div>
 
-      {/* Лучшие работы */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 p-4">
-        <h2 className="font-bold text-sm dark:text-white flex items-center gap-1.5 mb-3"><FolderKanban size={15} className="text-indigo-600"/>{t('pf_works_title')}</h2>
-        <div className="space-y-2">
-          {data.works.map((w, i) => (
-            <div key={w.assignment_id} className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border dark:border-slate-700" data-testid={`pf-work-${w.assignment_id}`}>
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm text-white ${pctCls(w.pct)}`}>{Math.round(w.pct)}</div>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm dark:text-white truncate">{w.title}</div>
-                <div className="text-xs text-slate-400">{w.classroom}{w.topic ? ` · ${w.topic}` : ''} · {new Date(w.submitted_at).toLocaleDateString()}</div>
+      {/* Освоенные навыки по программе КР */}
+      {mastered.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 p-4">
+          <h2 className="font-bold text-sm text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5 mb-2">
+            🎯 Подтверждённые навыки и освоенные темы (≥80%)
+          </h2>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {mastered.map(m => (
+              <div key={m.topic_id} className="p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/40 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <b className="dark:text-white text-sm">{m.title}</b>
+                  <span className="font-bold text-emerald-600">{m.pct}% {m.kr_grade ? `· «${m.kr_grade}»` : ''}</span>
+                </div>
+                {m.subject_name && <div className="text-slate-400">{m.subject_name}{m.grade ? ` · ${m.grade} класс` : ''}</div>}
+                {m.criteria && <div className="text-emerald-700 dark:text-emerald-300 mt-0.5">✓ Навык: {m.criteria}</div>}
               </div>
-              <div className="text-xs font-bold dark:text-white">{w.score}/{w.max_score}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Лучшие и реальные работы */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 p-4">
+        <h2 className="font-bold text-sm dark:text-white flex items-center gap-1.5 mb-3"><FolderKanban size={15} className="text-indigo-600"/>Реальные работы, письменные ответы и проекты ученика</h2>
+        <div className="space-y-2">
+          {data.works.map((w) => (
+            <div key={w.assignment_id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 space-y-1.5" data-testid={`pf-work-${w.assignment_id}`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm text-white shrink-0 ${pctCls(w.pct)}`}>{Math.round(w.pct)}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm dark:text-white truncate">{w.title}</div>
+                  <div className="text-xs text-slate-400">{w.classroom}{w.topic ? ` · тема: ${w.topic}` : ''} · {new Date(w.submitted_at).toLocaleDateString()}</div>
+                </div>
+                {w.score != null && <div className="text-xs font-bold dark:text-white">{w.score}/{w.max_score}</div>}
+              </div>
+              {w.answer && (
+                <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap">
+                  <span className="text-[10px] uppercase font-bold text-indigo-600 block mb-0.5">Работа ученика:</span>
+                  {w.answer}
+                </div>
+              )}
+              {w.url && (
+                <a href={w.url} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-600 underline inline-block">
+                  🔗 Открыть материал / проект
+                </a>
+              )}
             </div>
           ))}
           {data.works.length === 0 && <div className="text-xs text-slate-400 py-2">{t('pf_works_empty')}</div>}

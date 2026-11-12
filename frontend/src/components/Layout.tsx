@@ -16,6 +16,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [showLang,setShowLang]=useState(false)
   const [showA11y,setShowA11y]=useState(false)
   const [sfxOff,setSfxOff]=useState(()=>isSfxMuted())
+  const [isOffline,setIsOffline]=useState(()=>typeof navigator !== 'undefined' && !navigator.onLine)
+  useEffect(()=>{
+    const onOnline=()=>setIsOffline(false)
+    const onOffline=()=>setIsOffline(true)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return ()=>{ window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline) }
+  },[])
   const drawerRef=useRef<HTMLDivElement>(null)
   const menuOpenerRef=useRef<HTMLElement | null>(null)
   const isGameFull = /^\/games\/.+/.test(loc.pathname)
@@ -27,10 +35,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // Родитель: видит только «Мои дети» (успеваемость детей) + главную и игры.
   // Учителю-контенту (уроки, доска, word...) у родителя нет доступа — как у ученика.
   const isParent = me?.role === 'parent'
-  // Админ-аккаунт: только админские фичи + предметы/уроки/тесты/книжки + игры.
-  // Остальное (классы, доска, Word, презентации, код, SQL) — не нужно.
+  // Админ-аккаунт: админские фичи + предметы/уроки/тесты/книжки + классы + игры.
   const adminLimited = me?.role === 'admin'
-  const ADMIN_ALLOWED = new Set(['/', '/dashboard', '/subjects', '/my-lessons', '/games', '/about', '/programs', '/messages', '/portfolio'])
+  const ADMIN_ALLOWED = new Set(['/', '/dashboard', '/subjects', '/classes', '/my-lessons', '/games', '/about', '/programs', '/messages', '/portfolio', '/ai-assistant'])
   const PARENT_ALLOWED = new Set(['/', '/children', '/games', '/about', '/messages', '/portfolio'])
   const items = [
     { to: '/', label: t('home'), icon: Sparkles },
@@ -41,6 +48,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { to: '/presentations', label: t('presentations'), icon: Presentation },
     { to: '/classes', label: t('classes'), icon: GraduationCap },
     ...(!student && !isParent ? [{ to: '/programs', label: 'Учебная программа', icon: ListTree }] : []),
+    ...(!student && !isParent ? [{ to: '/ai-assistant', label: 'ИИ-помощник и аналитика', icon: Sparkles }] : []),
     // Дневник ученика: все оценки по классам в одном месте
     ...(student ? [{ to: '/diary', label: t('diary'), icon: BookOpenCheck }] : []),
     // Путь обучения: диагностика, карта знаний, персональные задания
@@ -59,13 +67,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { to: '/sql', label: t('sql_lab'), icon: Database },
     { to: '/about', label: t('ab_menu'), icon: Info },
   ].filter(it => adminLimited? ADMIN_ALLOWED.has(it.to) : isParent? PARENT_ALLOWED.has(it.to) : true)
-  // Нижняя навигация телефона: 5 самых нужных разделов крупным тапом
-  const bottomItems = [
-    { to: '/dashboard', label: t('dashboard'), icon: LayoutDashboard },
-    { to: '/subjects', label: t('subjects'), icon: BookOpen },
-    { to: '/classes', label: t('classes'), icon: GraduationCap },
-    { to: '/games', label: t('games'), icon: Gamepad2 },
-  ].filter(it => adminLimited? ADMIN_ALLOWED.has(it.to) : isParent? PARENT_ALLOWED.has(it.to) : true)
+  // Нижняя навигация телефона: 4–5 самых нужных разделов крупным тапом
+  const bottomItems = isParent
+    ? [
+        { to: '/children', label: t('children_nav'), icon: UsersRound },
+        { to: '/messages', label: t('msg_t'), icon: MessageSquare },
+        { to: '/portfolio', label: t('pf_title'), icon: Medal },
+        { to: '/games', label: t('games'), icon: Gamepad2 },
+      ]
+    : [
+        { to: '/dashboard', label: t('dashboard'), icon: LayoutDashboard },
+        { to: '/subjects', label: t('subjects'), icon: BookOpen },
+        { to: '/classes', label: t('classes'), icon: GraduationCap },
+        { to: '/games', label: t('games'), icon: Gamepad2 },
+      ].filter(it => adminLimited ? ADMIN_ALLOWED.has(it.to) : true)
   useEffect(()=>{
     const token=localStorage.getItem('token')
     if(token){
@@ -264,18 +279,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       <div className={`flex-1 min-w-0 ${loc.pathname.startsWith('/board') ? 'flex flex-col h-screen' : ''}`}>
         {!loc.pathname.startsWith('/board') && !isGameFull && (
-        <header className="h-[calc(64px+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2 px-4 lg:px-8 sticky top-0 z-40 shadow-sm">
-          <div className="flex items-center gap-3 min-w-0">
+        <header className="h-[calc(64px+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2 px-2.5 sm:px-4 lg:px-8 sticky top-0 z-40 shadow-sm">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button className="lg:hidden shrink-0 p-2 rounded-xl bg-slate-100 hover:bg-white hover:shadow-md transition-all" onClick={()=>setOpen(true)} aria-label={t('open_menu')} aria-expanded={open} aria-controls="mobile-drawer"><Menu size={18}/></button>
-            {/* Логотип в мобильной шапке: раньше его не было вовсе — бренд видно только в меню */}
+            {/* Логотип в мобильной шапке: скрываем текст на узких экранах (< sm), оставляя узнаваемую иконку */}
             <Link to="/" className="md:hidden flex items-center gap-1.5 min-w-0" aria-label="EduPlatform — на главную">
               <img src="/logo.svg" alt="" aria-hidden="true" className="w-9 h-9 shrink-0 drop-shadow-md" />
-              <span className="font-display font-bold text-[15px] leading-none whitespace-nowrap text-slate-900 dark:text-white">EduPlatform</span>
+              <span className="font-display font-bold text-[15px] leading-none whitespace-nowrap text-slate-900 dark:text-white hidden sm:inline">EduPlatform</span>
             </Link>
             <p className="font-display font-bold text-lg hidden md:block truncate text-slate-900 dark:text-slate-100" aria-label={t('platform_title')}>{t('platform_title')}</p>
             {hideSidebar && <button onClick={toggleSidebar} className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-white border border-slate-200 text-xs font-medium btn-hover" aria-label={t('show_tabs')}><PanelLeft size={14}/> {t('menu')}</button>}
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <button onClick={()=>{ const next=!sfxOff; setSfxOff(next); setSfxMuted(next); if(!next) sfx('ui.click') }} aria-label={sfxOff?'Включить звуки интерфейса':'Выключить звуки интерфейса'} title={sfxOff?'Звуки: выкл':'Звуки: вкл'} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 hover:shadow-md transition-all flex items-center justify-center" data-testid="sfx-toggle">{sfxOff?<VolumeX size={16}/>:<Volume2 size={16}/>}</button>
             <button onClick={toggleTheme} aria-label={theme==='dark' ? t('theme_light') : t('theme_dark')} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 hover:shadow-md transition-all flex items-center justify-center" title={theme==='dark'?t('light'):t('dark')}>{theme==='dark'?<Sun size={16}/>:<Moon size={16}/>}</button>
             <div className="relative">
@@ -290,7 +305,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
             <button onClick={()=>setShowA11y(true)} aria-label={t('a11y_settings')} aria-expanded={showA11y} className={`p-2.5 min-w-[44px] min-h-[44px] rounded-xl border flex items-center justify-center gap-1 text-xs font-bold ${poor?'bg-amber-400 border-amber-500 text-slate-900':'bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border-transparent hover:border-slate-200 dark:border-slate-600'}`} title={t('a11y_settings')}><Accessibility size={16}/><span className="hidden lg:inline">{t('a11y')}{poor?' •':' '}</span></button>
             <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"/>
-            {!student && (
+            {!student && !isParent && (
             <Link to="/lessons/new" className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors hidden sm:flex items-center gap-1.5">{t('create_lesson')}</Link>
             )}
             {me ? (
@@ -303,6 +318,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             )}
           </div>
         </header>
+        )}
+        {isOffline && (
+          <div className="bg-amber-500 text-slate-900 text-xs font-semibold px-4 py-1.5 text-center flex items-center justify-center gap-2">
+            <span>📶 Режим слабого интернета / офлайн: показываются сохранённые в памяти телефона/браузера данные.</span>
+          </div>
         )}
         <main id="main-content" tabIndex={-1} key={loc.pathname} className={loc.pathname.startsWith('/board') ? 'flex-1 min-h-0 w-full page-enter' : isGameFull ? 'w-full min-h-screen pb-24 lg:pb-0 page-enter relative' : 'p-4 pb-28 lg:p-8 max-w-[1400px] mx-auto page-enter'}>{children}</main>
         {!loc.pathname.startsWith('/board') && !isGameFull && (

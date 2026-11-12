@@ -1,4 +1,9 @@
-// Продуктовые фиче-флаги. Автогенерация отключена: один общий API key
-// на всех пользователей не масштабируется (квота), поэтому кнопки генерации
-// скрыты из интерфейса. Включить обратно — поставить true.
-export const AI_FEATURES = false
+import { getRole } from './role'
+
+// ИИ-помощник включён ТОЛЬКО для учителей и администрации.
+export const AI_FEATURES = true
+
+export function isTeacherAIAllowed(): boolean {
+  const r = getRole()
+  return r === 'teacher' || r === 'admin'
+}

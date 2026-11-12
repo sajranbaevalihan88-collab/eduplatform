@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import client from '../api/client'
 import { WORD_PACKS, wordsFromText } from '../utils/words'
 import { sfx } from '../utils/sfx'
-import { AI_FEATURES } from '../utils/features'
+import { AI_FEATURES, isTeacherAIAllowed } from '../utils/features'
 import { Sparkles, X, Trash2, Share2, Save, Play } from 'lucide-react'
 import { useAccessibility } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
@@ -184,11 +185,10 @@ export default function Hangman() {
 
   // уроки для «из урока»
   useEffect(() => {
-    import('../api/client').then(({ default: client }) =>
-      client.get('/lessons/?owner=me').then(r => {
-        const d = Array.isArray(r.data) ? r.data : r.data.results || []
-        setLessons(d.slice(0, 40).map((x: any) => ({ id: x.id, title: x.title })))
-      }).catch(() => {}))
+    client.get('/lessons/?owner=me').then(r => {
+      const d = Array.isArray(r.data) ? r.data : r.data.results || []
+      setLessons(d.slice(0, 40).map((x: any) => ({ id: x.id, title: x.title })))
+    }).catch(() => {})
   }, [])
 
   const parseSetInput = (): { words: string[] } | { words: null; err: string } => {
@@ -213,7 +213,6 @@ export default function Hangman() {
     if (aiPrompt.trim().length < 3) { setCErr(t('aiw_need_topic') || 'Напиши тему'); return }
     setAiBusy(true); setCErr('')
     try {
-      const { default: client } = await import('../api/client')
       const r = await client.post('/ai/words/', { prompt: aiPrompt.trim(), count: aiCount })
       const words: string[] = (r.data.words || []).map(String)
       if (!words.length) throw new Error('empty')
@@ -281,7 +280,6 @@ export default function Hangman() {
     if (!lessonId || genBusy) return
     setGenBusy(true); setCErr('')
     try {
-      const { default: client } = await import('../api/client')
       const r = await client.get(`/lessons/${lessonId}/`)
       const parts: string[] = []
       for (const b of (r.data.blocks || [])) {
@@ -589,7 +587,7 @@ export default function Hangman() {
               data-testid="hm-builder-words"
               className="w-full h-24 px-4 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-700 dark:text-white text-sm" />
             {cErr && <div className="text-sm text-rose-600 dark:text-rose-400 font-bold">⚠️ {cErr}</div>}
-            {AI_FEATURES && (
+            {AI_FEATURES && isTeacherAIAllowed() && (
             <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20 p-3 space-y-2" data-testid="hm-ai">
               <button onClick={() => { setAiOpen(v => !v); sfx('ui.click') }}
                 className="px-3 py-2 min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5">

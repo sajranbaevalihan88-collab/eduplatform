@@ -41,13 +41,15 @@ class Classroom(models.Model):
         super().save(*args, **kwargs)
 
     def is_member(self, user):
-        """Видит класс вообще (включая тех, кто ещё не подтвердил оплату)."""
+        """Видит класс вообще (включая тех, кто ещё не подтвердил оплату, и родителей учеников класса)."""
         if not user or not user.is_authenticated:
             return False
         if user.is_staff or getattr(user, 'role', None) == 'admin':
             return True
         if self.owner_id == user.id:
             return True
+        if getattr(user, 'role', None) == 'parent':
+            return self.enrollments.filter(student__child_links__parent=user).exists()
         return self.enrollments.filter(student=user).exists()
 
     def has_access(self, user):
@@ -58,6 +60,11 @@ class Classroom(models.Model):
             return True
         if self.owner_id == user.id:
             return True
+        if getattr(user, 'role', None) == 'parent':
+            qs = self.enrollments.filter(student__child_links__parent=user)
+            if self.is_paid:
+                return qs.filter(access_granted=True).exists()
+            return qs.exists()
         e = self.enrollments.filter(student=user).first()
         if not e:
             return False

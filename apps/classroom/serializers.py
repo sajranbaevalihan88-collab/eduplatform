@@ -4,9 +4,11 @@ from .models import Classroom, Enrollment, Assignment, Submission, Announcement,
 
 class ClassroomSerializer(serializers.ModelSerializer):
     owner_name = serializers.CharField(source='owner.username', read_only=True, default='')
+    owner_username = serializers.CharField(source='owner.username', read_only=True, default='')
     subject_name = serializers.CharField(source='subject.name', read_only=True, default='')
     members_count = serializers.IntegerField(source='enrollments.count', read_only=True)
     assignments_count = serializers.IntegerField(source='assignments.count', read_only=True)
+    students = serializers.SerializerMethodField()
     my_status = serializers.SerializerMethodField()
     pending_count = serializers.SerializerMethodField()
     # код приглашения видит ТОЛЬКО владелец (как в Google Classroom) — SerializerMethodField
@@ -15,7 +17,10 @@ class ClassroomSerializer(serializers.ModelSerializer):
 
     def _is_owner(self, obj):
         u = self.context.get('request').user if self.context.get('request') else None
-        return bool(u and u.is_authenticated and obj.owner_id == u.id)
+        return bool(u and u.is_authenticated and (obj.owner_id == u.id or u.is_staff or getattr(u, 'role', None) == 'admin'))
+
+    def get_students(self, obj):
+        return [e.student.username for e in obj.enrollments.all() if e.student]
 
     def get_invite_code(self, obj):
         return obj.invite_code if self._is_owner(obj) else None
@@ -26,8 +31,9 @@ class ClassroomSerializer(serializers.ModelSerializer):
     class Meta:
         model = Classroom
         fields = ['id', 'title', 'description', 'subject', 'subject_name', 'owner', 'owner_name',
-                  'invite_code', 'code_fmt', 'color', 'created_at', 'members_count', 'assignments_count',
-                  'is_paid', 'price', 'payment_details', 'payment_qr', 'my_status', 'pending_count']
+                  'owner_username', 'students', 'invite_code', 'code_fmt', 'color', 'created_at',
+                  'members_count', 'assignments_count', 'is_paid', 'price', 'payment_details',
+                  'payment_qr', 'my_status', 'pending_count']
         read_only_fields = ['id', 'owner', 'invite_code', 'created_at']
 
     def get_my_status(self, obj):

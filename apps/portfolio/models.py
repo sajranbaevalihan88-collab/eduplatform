@@ -20,6 +20,8 @@ class Achievement(models.Model):
         ('cubok', 'Кубок/место'),
         ('blagodarnost', 'Благодарность'),
         ('olimpiad', 'Олимпиада'),
+        ('project', 'Проект/работа'),
+        ('skill', 'Освоенный навык'),
         ('other', 'Другое'),
     ]
     student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,

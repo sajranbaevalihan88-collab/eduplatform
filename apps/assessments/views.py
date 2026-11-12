@@ -231,11 +231,15 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             'assignments_done': assigned_done
         })
 
-    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated], throttle_classes=[throttling.AnonRateThrottle, throttling.UserRateThrottle])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated], throttle_classes=[throttling.UserRateThrottle])
     def answer(self, request, pk=None):
         """Проверка одного ответа для игр (Аркан): POST {question_id, option_id} -> {correct}.
-        Только для авторизованных: через гостевой перебор option_id восстанавливался ключ ответов."""
+        Защита от перебора ответов: поштучная проверка ЗАПРЕЩЕНА для тестов, которые назначены в классах
+        или являются входной диагностикой (иначе ученик подбирает ключ перед сдачей задания)."""
         test = self.get_object()
+        from apps.classroom.models import Assignment
+        if test.is_diagnostic or Assignment.objects.filter(test=test).exists():
+            return Response({'error': 'Поштучная проверка ответов недоступна для оцениваемых и диагностических тестов'}, status=status.HTTP_403_FORBIDDEN)
         try:
             qid = int(request.data.get('question_id'))
             oid = int(request.data.get('option_id'))
@@ -336,11 +340,14 @@ class AttemptViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class WordGenView(APIView):
-    """Подбор СЛОВ для игр (Найди слово / Виселица): тема -> список слов.
+    """Подбор СЛОВ для игр (Найди слово / Виселица): тема -> список слов. Только для учителей.
     POST /api/ai/words/ {prompt, count} -> {words:[...], source}. Без GEMINI_API_KEY -> 503."""
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        u = request.user
+        if not (u.is_staff or getattr(u, 'role', None) in ('teacher', 'admin')):
+            return Response({'error': 'ИИ-генератор доступен только учителям'}, status=403)
         from django.conf import settings as _dj
         from .services.gemini_text import generate_text
         prompt = str(request.data.get('prompt') or '').strip()[:300]

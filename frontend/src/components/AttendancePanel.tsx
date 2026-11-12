@@ -86,6 +86,13 @@ export default function AttendancePanel({ classId, members, isOwner }:{ classId:
           className="px-3 py-2 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white"/>
         {isOwner && (
           <>
+            <button onClick={()=>{
+              const next:Record<number,string> = {...marks}
+              members.forEach((m:any)=>{ if(!next[m.student]) next[m.student] = 'present' })
+              setMarks(next)
+            }} className="px-3 py-2 min-h-[44px] rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold">
+              ✓ Все «Был»
+            </button>
             <button onClick={save} disabled={busy} data-testid="att-save"
               className="px-4 py-2 min-h-[44px] rounded-xl bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50">
               {busy?'…':t('cls_att_save')}
@@ -96,7 +103,7 @@ export default function AttendancePanel({ classId, members, isOwner }:{ classId:
             </button>
           </>
         )}
-        <div className="text-xs text-slate-500 dark:text-slate-400 ml-auto flex gap-3">
+        <div className="text-xs text-slate-500 dark:text-slate-400 sm:ml-auto flex gap-3 w-full sm:w-auto justify-end">
           <span className="text-emerald-600">✓{counts.present}</span>
           <span className="text-red-600">✕{counts.absent}</span>
           <span className="text-amber-600">⏰{counts.late}</span>
@@ -105,17 +112,19 @@ export default function AttendancePanel({ classId, members, isOwner }:{ classId:
 
       <div className="grid sm:grid-cols-2 gap-2">
         {members.map((m:any)=>(
-          <div key={m.id} className="flex items-center gap-3 p-2.5 rounded-xl border dark:border-slate-700" data-testid={`att-row-${m.student_name}`}>
-            <div className="w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0">{m.student_name?.[0]?.toUpperCase()}</div>
-            <div className="flex-1 min-w-0 font-semibold text-sm dark:text-white truncate">{m.student_name}</div>
-            <div className="flex gap-1">
+          <div key={m.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 p-2.5 rounded-xl border dark:border-slate-700 bg-white/50 dark:bg-slate-900/50" data-testid={`att-row-${m.student_name}`}>
+            <div className="flex items-center gap-2.5 min-w-0 w-full sm:w-auto flex-1">
+              <div className="w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0">{m.student_name?.[0]?.toUpperCase()}</div>
+              <div className="flex-1 min-w-0 font-semibold text-sm dark:text-white truncate">{m.student_name}</div>
+            </div>
+            <div className="flex gap-1 overflow-x-auto tab-scroll w-full sm:w-auto shrink-0 pb-0.5 sm:pb-0">
               {STATUSES.map(s=>(
                 <button key={s.k} onClick={()=>set(m.student, s.k)} disabled={!isOwner}
                   title={s.lbl} aria-label={s.lbl} data-testid={`att-${m.student_name}-${s.k}`}
-                  className={`px-2.5 py-2 min-h-[40px] rounded-lg text-xs font-bold border flex items-center gap-1 transition ${marks[m.student]===s.k
+                  className={`flex-1 sm:flex-initial px-2 sm:px-2.5 py-2 min-h-[40px] rounded-lg text-xs font-bold border flex items-center justify-center gap-1 transition whitespace-nowrap shrink-0 ${marks[m.student]===s.k
                     ? s.cls + ' ring-2 ring-indigo-400'
                     : 'bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700'} ${isOwner?'':'opacity-60'}`}>
-                  <s.icon size={13}/> {s.lbl}
+                  <s.icon size={13} className="shrink-0"/> <span>{s.lbl}</span>
                 </button>
               ))}
             </div>

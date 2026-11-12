@@ -8,7 +8,7 @@ class SubjectViewSet(AdminWriteMixin, viewsets.ModelViewSet):
     queryset = Subject.objects.prefetch_related('courses').annotate(courses_count=Count('courses')).all()
     serializer_class = SubjectSerializer
     lookup_field = 'slug'
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
     # Для деплоя: предметов 6-20, не пагинируем — фронт всегда получает полный список без ?page
     pagination_class = None
 
@@ -41,7 +41,7 @@ class SubjectViewSet(AdminWriteMixin, viewsets.ModelViewSet):
 class CourseViewSet(AdminWriteMixin, viewsets.ModelViewSet):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         qs = super().get_queryset()

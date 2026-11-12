@@ -20,7 +20,17 @@ BLOCKED_PY = [
     'pathlib.Path.write','pathlib.Path.unlink','pathlib.Path.read',
     '.read_text','.write_text','.open_text',
 ]
-BLOCKED_JS = ['require(','process.','fs.','child_process','eval(','Function(','import(']
+BLOCKED_JS = ['require(','process.','fs.','child_process','eval(','Function(','import(','globalThis','.constructor(','["constructor"]',"['constructor']"]
+
+# Модули, импорт которых запрещён всегда (сеть, процессы, низкоуровневый доступ, обход через загрузчики)
+_BLOCKED_MODULES = {'subprocess','socket','ctypes','pickle','importlib','runpy','multiprocessing',
+                    'sqlite3','builtins','marshal','pty','signal','threading','_thread','asyncio',
+                    'urllib','http','ftplib','smtplib','telnetlib','webbrowser','code','codeop','gc','inspect'}
+# «Безопасные» dunder-атрибуты, без которых не работают обычные ученические программы (классы, ООП)
+_ALLOWED_DUNDER = {'__init__','__name__','__str__','__repr__','__len__','__eq__','__lt__','__gt__',
+                   '__le__','__ge__','__add__','__sub__','__mul__','__iter__','__next__','__getitem__',
+                   '__setitem__','__contains__','__enter__','__exit__','__doc__','__hash__','__bool__',
+                   '__call__','__truediv__','__mod__','__neg__','__ne__'}
 
 # Разрешённые импорты для Python (os/sys/pathlib/shutil/django/pygame разрешены)
 ALLOWED_PY_IMPORTS = {'os','sys','pathlib','shutil','re','json','math','random','datetime','collections','itertools','functools','typing','django','flask','pygame','numpy','pandas','requests','io','time','hashlib','copy','string','statistics','decimal','fractions','queue','heapq','bisect','array','enum','dataclasses'}
@@ -184,15 +194,22 @@ def _is_safe_code(code: str, lang: str):
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     for alias in node.names:
-                        if alias.name.split('.')[0] in ['subprocess','socket','ctypes','pickle','importlib','runpy','multiprocessing','sqlite3']:
+                        if alias.name.split('.')[0] in _BLOCKED_MODULES:
                             return False, f"Импорт {alias.name} запрещен"
                 if isinstance(node, ast.ImportFrom):
-                    if node.module.split('.')[0] in ['subprocess','socket','ctypes','pickle','importlib','runpy','multiprocessing','sqlite3']:
-                        return False, f"Импорт из {node.module} запрещен"
+                    # `from . import x` — module=None
+                    if (node.module or '').split('.')[0] in _BLOCKED_MODULES or node.level:
+                        return False, f"Импорт из {node.module or '.'} запрещен"
                 # опасные вызовы: open/eval/exec/compile/__import__ — чтение файлов сервера и обход blacklist
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                    if node.func.id in ('open','eval','exec','compile','__import__','breakpoint','globals','locals','vars'):
+                    if node.func.id in ('open','eval','exec','compile','__import__','breakpoint','globals','locals','vars','getattr','setattr','delattr'):
                         return False, f"Вызов {node.func.id}() запрещен"
+                # побег из песочницы через интроспекцию: ().__class__.__subclasses__(), f.__globals__ и т.п.
+                if isinstance(node, ast.Attribute) and node.attr.startswith('__') and node.attr.endswith('__') \
+                        and node.attr not in _ALLOWED_DUNDER:
+                    return False, f"Доступ к {node.attr} запрещен"
+                if isinstance(node, ast.Name) and node.id in ('__builtins__', '__loader__', '__spec__'):
+                    return False, f"Доступ к {node.id} запрещен"
                 # os.environ — слив секретов через env
                 if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == 'os' and node.attr == 'environ':
                     return False, "Доступ к os.environ запрещен"
@@ -258,7 +275,7 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             raise PermissionDenied("Только владелец")
         instance.delete()
 
-    @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny], throttle_classes=[AnonCodeThrottle, CodeRunThrottle])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated], throttle_classes=[CodeRunThrottle])
     def run(self, request, pk=None):
         task = self.get_object()
         code = request.data.get('code','')
@@ -308,7 +325,7 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             except: pass
         return Response({'output': output[:5000], 'passed': passed})
 
-    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny], throttle_classes=[AnonCodeThrottle, CodeRunThrottle])
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated], throttle_classes=[CodeRunThrottle])
     def run_project(self, request):
         """Запуск мультифайлового проекта (POST /api/code-tasks/run_project/). Гости тоже могут (троттлинг + песочница)."""
         files = request.data.get('files') or request.data.get('files[]') or []
@@ -354,7 +371,7 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             runners[lang] = 'preview'
         return Response({'runners': runners})
 
-    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny], throttle_classes=[AnonCodeThrottle, CodeRunThrottle], url_path='run_code')
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated], throttle_classes=[CodeRunThrottle], url_path='run_code')
     def run_code(self, request):
         """Универсальный раннер для всех языков (POST /api/code-tasks/run_code/). Требует авторизации."""
         code = request.data.get('code', '')

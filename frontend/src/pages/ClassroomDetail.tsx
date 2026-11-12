@@ -10,6 +10,7 @@ import ProgressTab from '../components/ProgressTab'
 import QuizBuilder from '../components/ClassroomQuizBuilder'
 import { playUiSound } from '../utils/sound'
 import { AI_FEATURES } from '../utils/features'
+import { getRole } from '../utils/role'
 
 function fmtDl(s?: string){
   if(!s) return '—'
@@ -100,9 +101,26 @@ export default function ClassroomDetail(){
   // скрин чека от студента
   const [rcptFile,setRcptFile]=useState<File|null>(null)
   const [rcptPreview,setRcptPreview]=useState<string|null>(null)
+  // Массовый перенос учеников (списком / CSV)
+  const [bulkOpen,setBulkOpen]=useState(false)
+  const [bulkText,setBulkText]=useState('')
+  const [bulkBusy,setBulkBusy]=useState(false)
+
+  const importStudents = async ()=>{
+    if(!bulkText.trim()){ toast('Вставь список учеников','error'); return }
+    setBulkBusy(true)
+    try{
+      const r = await client.post(`/classrooms/${id}/import_students/`, { text: bulkText })
+      toast(`Перенесено в класс: +${r.data.added_to_class} (создано новых аккаунтов: ${r.data.created_users})`, 'success')
+      setBulkOpen(false); setBulkText(''); load()
+    }catch(e:any){ toast(e?.response?.data?.detail||'Ошибка импорта','error') }
+    setBulkBusy(false)
+  }
+
+  const isParent = getRole() === 'parent'
 
   const load=()=>{
-    client.get(`/classrooms/${id}/`).then(r=>setRoom(r.data)).catch(()=>nav('/classes'))
+    client.get(`/classrooms/${id}/`).then(r=>setRoom(r.data)).catch(()=>nav(isParent ? '/children' : '/classes'))
     client.get(`/classrooms/${id}/members/`).then(r=>setMembers(r.data.results||r.data||[])).catch(()=>{})
     client.get(`/assignments/?classroom=${id}`).then(r=>setTasks(r.data.results||r.data||[])).catch(()=>{})
     client.get(`/classrooms/${id}/my_tasks/`).then(r=>{
@@ -138,7 +156,7 @@ export default function ClassroomDetail(){
   if(!room) return <div className="p-8 text-center"><div className="skeleton h-32 rounded-2xl max-w-2xl mx-auto"/></div>
   const isOwner = String(room.owner)===String(meId)
   // платный класс и текущий ученик ещё не подтверждён владельцем
-  const needsPay = !isOwner && room.is_paid && room.my_status==='pending'
+  const needsPay = !isOwner && !isParent && room.is_paid && room.my_status==='pending'
 
   const markPaid=async()=>{
     setPBusy(true)
@@ -687,8 +705,8 @@ export default function ClassroomDetail(){
                     {!isOwner && (a.kind==='lesson'||a.kind==='test') && (gone
                       ? <span className="px-3 py-2.5 min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 text-sm font-semibold flex items-center gap-1" title={t('cls_material_gone')}>{t('cls_material_gone')}</span>
                       : <Link to={openTo} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-50 text-indigo-700 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14}/></Link>)}
-                    {!isOwner && st!=='submitted' && st!=='late' && a.kind==='write' && wOpen!==a.id && <button onClick={()=>startWrite(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-amber-500 text-white text-sm font-semibold">{t('cls_write_do')}</button>}
-                    {!isOwner && st!=='submitted' && st!=='late' && a.kind!=='write' && <button onClick={()=>submit(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-semibold">{t('cls_submit')}</button>}
+                    {!isOwner && !isParent && st!=='submitted' && st!=='late' && a.kind==='write' && wOpen!==a.id && <button onClick={()=>startWrite(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-amber-500 text-white text-sm font-semibold">{t('cls_write_do')}</button>}
+                    {!isOwner && !isParent && st!=='submitted' && st!=='late' && a.kind!=='write' && <button onClick={()=>submit(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-semibold">{t('cls_submit')}</button>}
                   </div>
                 )
               })}
@@ -783,9 +801,25 @@ export default function ClassroomDetail(){
                 </div>
               )}
               {isOwner && (
-                <div className="flex gap-2">
-                  <input value={addUser} onChange={e=>setAddUser(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addMember()} placeholder={t('cls_add_ph')} className="flex-1 px-4 py-2.5 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-indigo-400"/>
-                  <button onClick={addMember} className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold flex items-center gap-1"><Plus size={15}/>{t('add')}</button>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <input value={addUser} onChange={e=>setAddUser(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addMember()} placeholder={t('cls_add_ph')} className="flex-1 min-w-[180px] px-4 py-2.5 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-indigo-400"/>
+                    <button onClick={addMember} className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold flex items-center gap-1"><Plus size={15}/>{t('add')}</button>
+                    <button onClick={()=>setBulkOpen(v=>!v)} className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-slate-200 text-xs font-semibold hover:bg-slate-200">
+                      📋 Перенос списка учеников (CSV)
+                    </button>
+                  </div>
+                  {bulkOpen && (
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border dark:border-slate-700 space-y-2">
+                      <div className="text-xs text-slate-500">Вставь список учеников (каждый с новой строки: <code className="font-mono">логин;Имя Фамилия;пароль</code>). Если аккаунта ещё нет — он создастся автоматически!</div>
+                      <textarea value={bulkText} onChange={e=>setBulkText(e.target.value)} rows={4} placeholder={"asanov_a;Асанов Адилет;123456\nbekova_a;Бекова Айдана;123456"}
+                        className="w-full px-3 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white text-xs font-mono"/>
+                      <div className="flex gap-2">
+                        <button onClick={importStudents} disabled={bulkBusy} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold">{bulkBusy?'Импорт…':'Перенести учеников'}</button>
+                        <button onClick={()=>setBulkOpen(false)} className="px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs font-semibold dark:text-white">Отмена</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="divide-y dark:divide-slate-700">
@@ -833,11 +867,14 @@ export default function ClassroomDetail(){
           {tab==='grades' && isOwner && (
             <div className="space-y-4">
               {AI_FEATURES && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button onClick={genReport} disabled={repBusy}
                   className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-2 disabled:opacity-50" data-testid="cls-report">
                   <Sparkles size={17}/> {repBusy? t('cls_report_busy') : t('cls_report')}
                 </button>
+                <Link to="/ai-assistant" className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold flex items-center gap-1.5">
+                  <Sparkles size={15}/> ИИ-помощник: оценки учеников, кого подтянуть и черновики
+                </Link>
                 <span className="text-xs text-slate-400 self-center">{t('cls_report_hint')}</span>
               </div>
               )}

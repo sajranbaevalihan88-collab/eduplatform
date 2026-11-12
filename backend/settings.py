@@ -10,6 +10,18 @@ except ImportError:
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Автозагрузка .env из корня проекта (чтобы DEBUG=True и ключи подхватывались без ручного экспорта)
+_env_file = BASE_DIR / '.env'
+if _env_file.exists():
+    try:
+        for _line in _env_file.read_text(encoding='utf-8').splitlines():
+            _line = _line.strip()
+            if _line and not _line.startswith('#') and '=' in _line:
+                _k, _v = _line.split('=', 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+    except Exception:
+        pass
+
 # --- Security: SECRET_KEY без fallback в проде ---
 _default_secret = 'dev-secret-key-change-in-production-edu-platform-2026'
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', _default_secret)
@@ -153,19 +165,30 @@ if not DATABASE_URL and not USE_SQLITE and not USE_MARIADB:
     pg_host = os.environ.get('POSTGRES_HOST', '127.0.0.1')
     pg_port = os.environ.get('POSTGRES_PORT', '5432')
     if not _is_port_open(pg_host, pg_port):
-        # Postgres нет — используем реальный MariaDB как fallback (тоже не файл)
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.mysql',
-                'NAME': os.environ.get('MARIADB_DB', 'eduplatform'),
-                'USER': os.environ.get('MARIADB_USER', 'edu'),
-                'PASSWORD': os.environ.get('MARIADB_PASSWORD', 'edu_password_change_me'),
-                'HOST': os.environ.get('MARIADB_HOST', '127.0.0.1'),
-                'PORT': os.environ.get('MARIADB_PORT', '3306'),
-                'OPTIONS': {'charset': 'utf8mb4', 'init_command': "SET NAMES 'utf8mb4' COLLATE 'utf8mb4_unicode_ci'", 'use_unicode': True},
-                'CONN_MAX_AGE': 600,
+        maria_host = os.environ.get('MARIADB_HOST', '127.0.0.1')
+        maria_port = os.environ.get('MARIADB_PORT', '3306')
+        if _is_port_open(maria_host, maria_port):
+            # Postgres нет — используем реальный MariaDB как fallback (тоже не файл)
+            DATABASES = {
+                'default': {
+                    'ENGINE': 'django.db.backends.mysql',
+                    'NAME': os.environ.get('MARIADB_DB', 'eduplatform'),
+                    'USER': os.environ.get('MARIADB_USER', 'edu'),
+                    'PASSWORD': os.environ.get('MARIADB_PASSWORD', 'edu_password_change_me'),
+                    'HOST': maria_host,
+                    'PORT': maria_port,
+                    'OPTIONS': {'charset': 'utf8mb4', 'init_command': "SET NAMES 'utf8mb4' COLLATE 'utf8mb4_unicode_ci'", 'use_unicode': True},
+                    'CONN_MAX_AGE': 600,
+                }
             }
-        }
+        else:
+            # Если локально не запущены ни Postgres, ни MariaDB — fallback на SQLite для быстрого старта
+            DATABASES = {
+                'default': {
+                    'ENGINE': 'django.db.backends.sqlite3',
+                    'NAME': BASE_DIR / 'db.sqlite3',
+                }
+            }
 
 # Крутилки нагрузки через env (для замеров и продакшена).
 # PG_CONN_MAX_AGE=0 — закрывать коннект после каждого запроса: при сотнях
@@ -308,7 +331,7 @@ SIMPLE_JWT = {
 # продовая проверка всё равно через ALLOWED_HOSTS / JWT. Для Render/Вашего домена добавь env:
 # CORS_ALLOWED_ORIGINS=https://your-frontend.onrender.com,https://your-api.onrender.com
 CORS_ALLOW_ALL_ORIGINS = False
-_default_cors = 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173,http://localhost:3000'
+_default_cors = 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:4173,http://127.0.0.1:4173,http://localhost:3000'
 CORS_ALLOWED_ORIGINS = [o.strip() for o in os.environ.get('CORS_ALLOWED_ORIGINS', _default_cors).split(',') if o.strip()]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
@@ -321,6 +344,8 @@ CORS_ALLOW_HEADERS = [
 # Security headers
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
 X_FRAME_OPTIONS = 'DENY'
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
@@ -332,7 +357,7 @@ SECURE_HSTS_PRELOAD = not DEBUG
 
 # File upload limits — 100MB для презентаций
 FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024
-DATA_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 # Allowed extensions
 ALLOWED_UPLOAD_EXTENSIONS = ['.pptx','.ppt','.docx','.doc','.pdf','.png','.jpg','.jpeg','.gif','.webp']
 ALLOWED_UPLOAD_MIMES = ['application/vnd.openxmlformats-officedocument.presentationml.presentation','application/vnd.ms-powerpoint','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/msword','application/pdf','image/png','image/jpeg','image/gif','image/webp']

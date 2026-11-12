@@ -65,7 +65,7 @@ export default function Dashboard(){
     {label:t('tests'),value:stats.tests,icon:FlaskConical,color:'bg-rose-600',to:'/tests'},
     {label:t('classes'),value:stats.classes,icon:GraduationCap,color:'bg-violet-600',to:'/classes'},
     {label:t('dash_boards'),value:stats.boards,icon:Cuboid,color:'bg-emerald-600',to:'/board'},
-  ].filter(c=> !adminLimited || ['/subjects','/lessons','/tests'].includes(c.to))
+  ].filter(c=> !adminLimited || ['/subjects','/lessons','/tests','/classes'].includes(c.to))
   return (
     <div className="space-y-6 page-enter">
       <div className="rounded-[24px] bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 p-8 text-white relative overflow-hidden">

@@ -187,19 +187,19 @@ export default function SubjectDetail(){
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[200px] max-w-[320px]">
+        <div className="relative w-full sm:w-auto sm:flex-1 sm:max-w-xs min-w-0">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('lessons_search_ph')} className="pl-9 pr-4 py-2.5 rounded-xl border bg-white w-full focus-ring dark:bg-slate-900 dark:text-white"/>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('lessons_search_ph')} className="pl-9 pr-4 py-2.5 min-h-[44px] rounded-xl border bg-white w-full focus-ring dark:bg-slate-900 dark:text-white text-sm"/>
         </div>
-        {isTeacher && tab==='lessons' && <Link to={`/lessons/new?subject=${slug}`} className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center gap-2"><Plus size={16}/>{t('create')}</Link>}
+        {isTeacher && tab==='lessons' && <Link to={`/lessons/new?subject=${slug}`} className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center justify-center gap-2 shrink-0"><Plus size={16}/>{t('create')}</Link>}
         {isTeacher && tab==='pres' && <>
-          <Link to={`/presentations/new?subject=${slug}`} className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center gap-2"><Plus size={16}/>{t('create')}</Link>
-          <button onClick={()=>fileRef.current?.click()} disabled={uploading} className="px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-50"><Upload size={16}/>{uploading?'...':t('subj_upload')}</button>
+          <Link to={`/presentations/new?subject=${slug}`} className="flex-1 sm:flex-initial px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center justify-center gap-2 shrink-0"><Plus size={16}/>{t('create')}</Link>
+          <button onClick={()=>fileRef.current?.click()} disabled={uploading} className="flex-1 sm:flex-initial px-4 py-2.5 min-h-[44px] rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"><Upload size={16}/>{uploading?'...':t('subj_upload')}</button>
           <input ref={fileRef} type="file" accept=".pptx,.ppt" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f) uploadPres(f); e.target.value=''}}/>
         </>}
-        {isTeacher && tab==='tests' && <Link to={`/tests/new?subject=${slug}`} className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center gap-2"><Plus size={16}/>{t('create')}</Link>}
+        {isTeacher && tab==='tests' && <Link to={`/tests/new?subject=${slug}`} className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center justify-center gap-2 shrink-0"><Plus size={16}/>{t('create')}</Link>}
         {isAdmin && tab==='books' && <>
-          <button onClick={()=>fileRef.current?.click()} disabled={uploading} className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-50"><Upload size={16}/>{uploading?'...':t('subj_upload_book')}</button>
+          <button onClick={()=>fileRef.current?.click()} disabled={uploading} className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"><Upload size={16}/>{uploading?'...':t('subj_upload_book')}</button>
           <input ref={fileRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f){ setPendingBook(f); setBookTitle(f.name.replace(/\.[^/.]+$/,'')) } e.target.value=''}}/>
         </>}
       </div>
@@ -243,8 +243,8 @@ export default function SubjectDetail(){
               {x.description && <p className="text-sm text-slate-500 line-clamp-2 mt-1">{x.description}</p>}
               <div className="mt-3 flex items-center gap-2 text-xs">
                 <span className="text-slate-400">{x.questions_count ?? 0} {t('subj_questions')}</span>
-                {canEdit(x) && <Link to={`/tests/${x.id}/edit`} className="ml-auto px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-semibold text-slate-600 dark:text-slate-300">{t('subj_edit')}</Link>}
-                <Link to={`/tests/${x.id}/take`} className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-semibold">{t('subj_take')}</Link>
+                {canEdit(x) && <Link to={`/tests/${x.id}/edit`} className="ml-auto px-3 py-1.5 min-h-[36px] rounded-lg bg-slate-100 dark:bg-slate-800 font-semibold text-slate-600 dark:text-slate-300 flex items-center justify-center">{t('subj_edit')}</Link>}
+                <Link to={`/tests/${x.id}/take`} className={`${canEdit(x)?'':'ml-auto'} px-3 py-1.5 min-h-[36px] rounded-lg bg-indigo-600 text-white font-semibold flex items-center justify-center`}>{t('subj_take')}</Link>
               </div>
             </div>
           ))}

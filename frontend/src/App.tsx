@@ -65,6 +65,7 @@ import Programs from './pages/Programs'
 import Progress from './pages/Progress'
 import Messages from './pages/Messages'
 import Portfolio from './pages/Portfolio'
+import TeacherAI from './pages/TeacherAI'
 import Diary from './pages/Diary'
 import Children from './pages/Children'
 import TestBuilder from './pages/TestBuilder'
@@ -98,8 +99,8 @@ export default function App() {
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-                <Route path="/subjects" element={<Subjects />} />
-                <Route path="/subjects/:slug" element={<SubjectDetail />} />
+                <Route path="/subjects" element={<PrivateRoute><Subjects /></PrivateRoute>} />
+                <Route path="/subjects/:slug" element={<PrivateRoute><SubjectDetail /></PrivateRoute>} />
                 <Route path="/my-lessons" element={<TeacherRoute><MyLessons /></TeacherRoute>} />
                 <Route path="/lessons" element={<Lessons />} />
                 <Route path="/lessons/new" element={<TeacherRoute><LessonBuilder /></TeacherRoute>} />
@@ -120,6 +121,7 @@ export default function App() {
                 <Route path="/progress" element={<PrivateRoute><Progress /></PrivateRoute>} />
                 <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
                 <Route path="/portfolio" element={<PrivateRoute><Portfolio /></PrivateRoute>} />
+                <Route path="/ai-assistant" element={<TeacherRoute><TeacherAI /></TeacherRoute>} />
                 <Route path="/classes/:id" element={<PrivateRoute><ClassroomDetail /></PrivateRoute>} />
                 <Route path="/diary" element={<PrivateRoute><Diary /></PrivateRoute>} />
 

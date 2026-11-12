@@ -28,6 +28,7 @@ SESSION_TTL = 60          # максимум секунд на один запу
 WAIT_IDLE = 1.2           # тишина без вывода = похоже ждёт ввод
 MAX_OUTPUT = 20000        # лимит вывода на сессию
 MAX_GLOBAL_SESSIONS = 20  # максимум одновременных запусков на процесс
+RUNS_PER_MINUTE = 20      # лимит запусков на пользователя
 
 _global_running = 0
 
@@ -57,13 +58,10 @@ class RunSession:
         self._stop_reader = False
 
     def start(self):
-        env = os.environ.copy()
-        env['PYTHONIOENCODING'] = 'utf-8'
-        env['PYTHONUTF8'] = '1'
-        env['SDL_VIDEODRIVER'] = 'dummy'
-        env['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
-        for k in ('DJANGO_SECRET_KEY', 'DATABASE_URL', 'REDIS_URL'):
-            env.pop(k, None)
+        # Окружение — тот же белый список, что у одноразового раннера:
+        # os.environ.copy() отдавал программе ученика GEMINI_API_KEY, POSTGRES_PASSWORD и т.п.
+        from .services.runner import _get_run_env
+        env = _get_run_env(self.tmpdir)
         if self.language == 'python':
             fname = os.path.join(self.tmpdir, 'main.py')
             with open(fname, 'w', encoding='utf-8') as f:
@@ -165,14 +163,50 @@ class RunSession:
 
 
 class RunConsumer(AsyncWebsocketConsumer):
+    # 4401 — не вошёл / токен истёк; 4403 — локальный запуск выключен (прод); 4429 — лимит
     async def connect(self):
-        global _global_running
+        self.session = None
+        self._pump_task = None
+        self._counted = False
+        user = self.scope.get('user')
+        if not user or not getattr(user, 'is_authenticated', False):
+            await self.close(code=4401)
+            return
+        from django.conf import settings as _s
+        if getattr(_s, 'CODE_USE_PISTON_ONLY', False):
+            # в проде локальный subprocess без изоляции запрещён — интерактива нет
+            await self.close(code=4403)
+            return
         if _global_running >= MAX_GLOBAL_SESSIONS:
             await self.close(code=1013)
             return
         await self.accept()
-        self.session = None
-        self._pump_task = None
+
+    def _rate_ok(self):
+        """Не больше RUNS_PER_MINUTE запусков в минуту и одной живой сессии на пользователя."""
+        from django.core.cache import cache
+        uid = self.scope['user'].id
+        k = f'ws-run-rate:{uid}'
+        n = cache.get(k, 0)
+        if n >= RUNS_PER_MINUTE:
+            return False, f'Слишком часто: не больше {RUNS_PER_MINUTE} запусков в минуту'
+        cache.set(k, n + 1, 60)
+        active_k = f'ws-run-active:{uid}'
+        if cache.get(active_k):
+            return False, 'У тебя уже запущена программа в другой вкладке — останови её'
+        cache.set(active_k, 1, SESSION_TTL + 5)
+        return True, ''
+
+    def _release(self):
+        global _global_running
+        if self._counted:
+            self._counted = False
+            _global_running = max(0, _global_running - 1)
+            try:
+                from django.core.cache import cache
+                cache.delete(f"ws-run-active:{self.scope['user'].id}")
+            except Exception:
+                pass
 
     async def disconnect(self, code):
         if self.session:
@@ -180,6 +214,7 @@ class RunConsumer(AsyncWebsocketConsumer):
             self.session = None
         if self._pump_task:
             self._pump_task.cancel()
+        self._release()
 
     async def receive(self, text_data=None, bytes_data=None):
         global _global_running
@@ -205,23 +240,25 @@ class RunConsumer(AsyncWebsocketConsumer):
             if len(code) > 8000:
                 await self._send({'type': 'error', 'message': 'Код >8000 символов'})
                 return
-            try:
-                from .views import _is_safe_code
-                safe, why = _is_safe_code(code, lang)
-                if not safe:
-                    await self._send({'type': 'error', 'message': f'Блокировка: {why}'})
-                    return
-            except Exception:
-                pass
+            from .views import _is_safe_code
+            safe, why = _is_safe_code(code, lang)
+            if not safe:
+                await self._send({'type': 'error', 'message': f'Блокировка: {why}'})
+                return
+            ok, why = await asyncio.to_thread(self._rate_ok)
+            if not ok:
+                await self._send({'type': 'error', 'message': why})
+                return
             _global_running += 1
+            self._counted = True
             try:
                 self.session = RunSession(lang, code, asyncio.get_running_loop())
                 await asyncio.to_thread(self.session.start)
                 await self._send({'type': 'started'})
                 self._pump_task = asyncio.create_task(self._pump())
             except Exception as e:
-                _global_running -= 1
                 self.session = None
+                self._release()
                 await self._send({'type': 'error', 'message': f'Не запустилось: {e}'})
         elif kind == 'input':
             if not self.session:
@@ -236,7 +273,9 @@ class RunConsumer(AsyncWebsocketConsumer):
                 await self._send({'type': 'done', 'passed': False, 'code': -9, 'stopped': True})
                 self.session.cleanup()
                 self.session = None
-                _global_running = max(0, _global_running - 1)
+                if self._pump_task:
+                    self._pump_task.cancel()
+                self._release()
         else:
             await self._send({'type': 'error', 'message': 'Неизвестная команда'})
 
@@ -284,4 +323,5 @@ class RunConsumer(AsyncWebsocketConsumer):
             if self.session is sess:
                 sess.cleanup()
                 self.session = None
-            _global_running = max(0, _global_running - 1)
+            # счётчик уменьшается ровно один раз (раньше stop + finally уменьшали дважды)
+            self._release()

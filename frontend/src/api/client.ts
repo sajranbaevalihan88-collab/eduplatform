@@ -45,10 +45,45 @@ client.interceptors.request.use(cfg => {
   return cfg
 })
 
+function cacheKeyFor(cfg: any): string | null {
+  if (!cfg || (cfg.method && cfg.method.toLowerCase() !== 'get')) return null
+  if (cfg.responseType === 'blob') return null
+  const u = String(cfg.url || '')
+  const p = cfg.params ? JSON.stringify(cfg.params) : ''
+  return `offline_cache:${u}:${p}`
+}
+
 client.interceptors.response.use(
-  res => res,
+  res => {
+    try {
+      const k = cacheKeyFor(res.config)
+      if (k && res.data !== undefined) {
+        const raw = JSON.stringify(res.data)
+        if (raw.length < 120000) localStorage.setItem(k, raw)
+      }
+    } catch {}
+    return res
+  },
   async err => {
     const original = err.config as any
+    // Работа при слабом интернете / офлайн: если сеть недоступна на GET-запросе, отдаём кеш из памяти браузера
+    if (!err.response && original) {
+      try {
+        const k = cacheKeyFor(original)
+        if (k) {
+          const cached = localStorage.getItem(k)
+          if (cached) {
+            return {
+              data: JSON.parse(cached),
+              status: 200,
+              statusText: 'OK (offline cache)',
+              headers: {},
+              config: original,
+            }
+          }
+        }
+      } catch {}
+    }
     const status = err.response?.status
     const detail = err.response?.data?.detail || err.response?.data?.code || ''
     // Если токен ссылается на несуществующего пользователя (после пересоздания БД) — сразу логаут
