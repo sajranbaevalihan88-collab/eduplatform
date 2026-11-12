@@ -54,9 +54,12 @@ export default function Portfolio() {
 
   const user = params.get('user') || ''
 
+  const [dataErr, setDataErr] = useState(false)
+
   const load = useCallback(() => {
     client.get('/portfolio/', { params: user ? { user } : {} })
-      .then(r => setData(r.data)).catch(() => setData(null))
+      .then(r => { setData(r.data); setDataErr(false) })
+      .catch(() => { setData(null); setDataErr(true) })
   }, [user])
 
   useEffect(() => {
@@ -157,6 +160,16 @@ export default function Portfolio() {
     try { await client.delete(`/portfolio/achievements/${id}/`); load() } catch { /* noop */ }
   }
 
+  if (data === null && dataErr) return (
+    <div className="p-8 text-center max-w-3xl mx-auto">
+      <div className="bg-white dark:bg-slate-800 dark:border-slate-700 border rounded-2xl p-6 flex flex-col items-center gap-3">
+        <div className="text-3xl">📭</div>
+        <h2 className="font-bold text-slate-800 dark:text-white">{t('portfolio_load_err_t')}</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio_load_err_s')}</p>
+        <button onClick={load} className="px-4 py-2.5 min-h-[40px] rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold">{t('retry')}</button>
+      </div>
+    </div>
+  )
   if (data === null) return <div className="p-8 text-center"><div className="skeleton h-40 rounded-2xl max-w-3xl mx-auto"/></div>
 
   const role = (JSON.parse(localStorage.getItem('user') || '{}') as any).role

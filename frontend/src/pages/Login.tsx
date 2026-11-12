@@ -43,7 +43,10 @@ export default function Login(){
       const data = err.response?.data
       let msg = t('error')
       if (data) {
-        if (typeof data === 'string') msg = data
+        if (typeof data === 'string') {
+          // Django вернул HTML-страницу ошибки (500/502) — не показываем сырой HTML
+          msg = /<html|<!doctype|<body/i.test(data) ? t('err_server_unavailable') : data
+        }
         else if (data.detail) msg = data.detail
         else if (data.error) msg = data.error
         else {
