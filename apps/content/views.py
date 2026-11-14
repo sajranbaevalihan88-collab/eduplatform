@@ -1505,566 +1505,582 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                         sw = 9144000
                         sh = 6858000
                     for idx, slide in enumerate(pptx.slides):
-                        blocks = []
-                        bg, bg_type, gradient, bg_image = _extract_slide_background(slide, pptx, scheme)
-                        slide_width = sw
-                        slide_height = sh
-                        # хелпер для геометрии
-                        def _geom(shape):
-                            try:
-                                x = _emu_to_pct(shape.left, slide_width)
-                                y = _emu_to_pct(shape.top, slide_height)
-                                w = _emu_to_pct(shape.width, slide_width)
-                                h = _emu_to_pct(shape.height, slide_height)
-                                # clamp
-                                x = max(0, min(100, x))
-                                y = max(0, min(100, y))
-                                w = max(2, min(100, w))
-                                h = max(2, min(100, h))
-                                rot = 0
+                        try:
+                            blocks = []
+                            bg, bg_type, gradient, bg_image = _extract_slide_background(slide, pptx, scheme)
+                            slide_width = sw
+                            slide_height = sh
+                            # хелпер для геометрии
+                            def _geom(shape):
                                 try:
-                                    rot = float(getattr(shape, 'rotation', 0) or 0)
-                                except:
+                                    x = _emu_to_pct(shape.left, slide_width)
+                                    y = _emu_to_pct(shape.top, slide_height)
+                                    w = _emu_to_pct(shape.width, slide_width)
+                                    h = _emu_to_pct(shape.height, slide_height)
+                                    # clamp
+                                    x = max(0, min(100, x))
+                                    y = max(0, min(100, y))
+                                    w = max(2, min(100, w))
+                                    h = max(2, min(100, h))
                                     rot = 0
-                                return {'x': x, 'y': y, 'w': w, 'h': h, 'rotation': rot, 'unit': '%'}
-                            except:
-                                return {'x': 2, 'y': 2, 'w': 96, 'h': 10, 'unit': '%'}
-
-                        # рекурсивный обход с учётом групп
-                        def _walk_shapes(shapes, z_base=0):
-                            nonlocal blocks
-                            for si, shape in enumerate(shapes):
-                                z = z_base + si
-                                # GROUP
-                                try:
-                                    if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
-                                        try:
-                                            _walk_shapes(shape.shapes, z_base=z*10)
-                                        except:
-                                            pass
-                                        continue
-                                except:
-                                    pass
-                                # PICTURE
-                                is_picture = False
-                                try:
-                                    if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-                                        is_picture = True
-                                except:
-                                    pass
-                                if is_picture:
                                     try:
-                                        blob = shape.image.blob
-                                        img_ext = '.' + (shape.image.ext or 'png')
-                                        # браузеры не показывают EMF/WMF/TIFF/BMP — пробуем конверт через LibreOffice, иначе плейсхолдер
-                                        BROWSER_OK = ['.png','.jpg','.jpeg','.gif','.webp','.svg']
-                                        need_convert = img_ext.lower() not in BROWSER_OK
-                                        conv_blob, conv_ext, unrenderable = blob, img_ext, False
-                                        if need_convert:
-                                            conv_blob, conv_ext = _convert_image_blob(blob, img_ext)
-                                            if conv_blob is None:
-                                                conv_blob, conv_ext, unrenderable = blob, img_ext, True
-                                        if not unrenderable and conv_ext.lower() not in BROWSER_OK + ['.png']:
-                                            conv_ext = '.png'
-                                        fname = f"{uuid.uuid4().hex}{conv_ext}"
-                                        rel = f"pptx_images/{fname}"
-                                        full = os.path.join(media_root, rel)
-                                        with open(full, 'wb') as out:
-                                            out.write(conv_blob)
-                                        store_media_blob(rel, conv_blob)
-                                        url = s.MEDIA_URL + rel
-                                        geom = _geom(shape)
-                                        # crop? PowerPoint stretches to box when no crop -> fill, else cover
-                                        try:
-                                            _sr = shape._element.find('.//{http://schemas.openxmlformats.org/drawingml/2006/main}srcRect')
-                                            _has_crop = _sr is not None and any((_sr.get(k) or '0') != '0' for k in ('l', 't', 'r', 'b'))
-                                        except Exception:
-                                            _has_crop = False
-                                        style = {'borderRadius': 4, 'objectFit': 'cover' if _has_crop else 'contain', 'x': geom['x'], 'y': geom['y'], 'w': geom['w'], 'h': geom['h'], 'rotation': geom.get('rotation',0), 'z': z, 'unit': '%'}
-                                        # если картинка в тексте — сохраняем как image блок с геометрией
-                                        img_block = {'id': uuid.uuid4().hex[:8], 'type':'image','src': url, 'style': style}
-                                        if unrenderable:
-                                            img_block['unrenderable'] = True
-                                            img_block['origExt'] = img_ext
-                                        blocks.append(img_block)
-                                        continue
-                                    except Exception:
-                                        # картинка с битой связью (rId) — оставляем честный
-                                        # плейсхолдер с геометрией, а не дыру
-                                        try:
-                                            _gg = _geom(shape)
-                                            blocks.append({
-                                                'id': uuid.uuid4().hex[:8], 'type': 'image',
-                                                'src': '', 'unrenderable': True, 'brokenLink': True,
-                                                'style': {'borderRadius': 4, 'objectFit': 'contain',
-                                                          'x': _gg['x'], 'y': _gg['y'],
-                                                          'w': _gg['w'], 'h': _gg['h'],
-                                                          'rotation': _gg.get('rotation', 0),
-                                                          'z': z, 'unit': '%'},
-                                            })
-                                        except Exception:
-                                            pass
-                                # TABLE — извлекаем ячейки
-                                try:
-                                    if getattr(shape, 'has_table', False) and shape.has_table:
-                                        tbl = shape.table
-                                        rows = len(tbl.rows)
-                                        cols = len(tbl.columns)
-                                        cells = []
-                                        for r in tbl.rows:
-                                            row_cells = []
-                                            for c in r.cells:
-                                                txt = ''
-                                                try:
-                                                    txt = c.text.strip() if c.text else ''
-                                                except:
-                                                    txt = ''
-                                                # объединённые ячейки: gridSpan/rowSpan + пропуск поглощённых (hMerge/vMerge)
-                                                colspan, rowspan, merged_away = 1, 1, False
-                                                try:
-                                                    _tc_el = c._tc
-                                                    colspan = max(1, int(_tc_el.get('gridSpan') or 1))
-                                                    rowspan = max(1, int(_tc_el.get('rowSpan') or 1))
-                                                    if _tc_el.get('hMerge') == '1' or _tc_el.get('vMerge') == '1':
-                                                        merged_away = True
-                                                except Exception:
-                                                    pass
-                                                # стиль ячейки
-                                                cell_style = {}
-                                                try:
-                                                    if c.fill and c.fill.fore_color is not None:
-                                                        hc = _color_css(c.fill.fore_color, scheme or {})
-                                                        if hc and hc.upper() != '#FFFFFF':
-                                                            cell_style['background'] = hc
-                                                except:
-                                                    pass
-                                                try:
-                                                    # font of first paragraph
-                                                    if c.text_frame and c.text_frame.paragraphs and c.text_frame.paragraphs[0].runs:
-                                                        rr = c.text_frame.paragraphs[0].runs[0]
-                                                        if rr.font.color is not None:
-                                                            hc = _color_css(rr.font.color, scheme or {})
-                                                            if hc:
-                                                                cell_style['color'] = hc
-                                                        if rr.font.bold is not None:
-                                                            cell_style['bold'] = bool(rr.font.bold)
-                                                except:
-                                                    pass
-                                                # границы ячейки tcBdr + вертикальный якорь + отступы
-                                                try:
-                                                    _tcPr = c._tc.find('{http://schemas.openxmlformats.org/drawingml/2006/main}tcPr')
-                                                    if _tcPr is not None:
-                                                        for _side, _css in (('lnL', 'borderLeft'), ('lnR', 'borderRight'), ('lnT', 'borderTop'), ('lnB', 'borderBottom')):
-                                                            _ln = _tcPr.find('{http://schemas.openxmlformats.org/drawingml/2006/main}' + _side)
-                                                            if _ln is None:
-                                                                continue
-                                                            try:
-                                                                _bw = max(1, round(int(_ln.get('w') or 12700) / 12700))
-                                                            except Exception:
-                                                                _bw = 1
-                                                            _bc = None
-                                                            try:
-                                                                _sf = _ln.find('{http://schemas.openxmlformats.org/drawingml/2006/main}solidFill')
-                                                                if _sf is not None and len(_sf):
-                                                                    _cc = _sf[0]
-                                                                    _tag = _cc.tag.split('}')[-1]
-                                                                    if _tag == 'srgbClr' and _cc.get('val'):
-                                                                        _bc = '#' + _cc.get('val').upper()
-                                                                    elif _tag == 'schemeClr' and _cc.get('val'):
-                                                                        _bc = (scheme or {}).get(_cc.get('val')) or None
-                                                                    if _bc:
-                                                                        _al = _cc.find('{http://schemas.openxmlformats.org/drawingml/2006/main}alpha')
-                                                                        if _al is not None and _al.get('val'):
-                                                                            try:
-                                                                                _av = max(0.0, min(1.0, int(_al.get('val')) / 100000.0))
-                                                                                if _av < 0.999:
-                                                                                    _bc = _hex_to_rgba(_bc, _av)
-                                                                            except Exception:
-                                                                                pass
-                                                            except Exception:
-                                                                pass
-                                                            cell_style[_css] = '%dpx solid %s' % (_bw, _bc or '#94A3B8')
-                                                        _anch = (_tcPr.get('anchor') or '').lower()
-                                                        if _anch in ('ctr', 'b', 't'):
-                                                            cell_style['anchorItems'] = {'ctr': 'center', 'b': 'flex-end', 't': 'flex-start'}[_anch]
-                                                        try:
-                                                            _mar = []
-                                                            for _mk in ('marT', 'marR', 'marB', 'marL'):
-                                                                _mv = _tcPr.get(_mk)
-                                                                _mar.append(round(int(_mv) / 914400 * 96, 1) if _mv else 0)
-                                                            if max(_mar) > 1:
-                                                                cell_style['cellPad'] = _mar
-                                                        except Exception:
-                                                            pass
-                                                except Exception:
-                                                    pass
-                                                row_cells.append({'text': txt, 'style': cell_style, 'colspan': colspan, 'rowspan': rowspan, 'merged': merged_away})
-                                            cells.append(row_cells)
-                                        geom = _geom(shape)
-                                        style = {'x': geom['x'], 'y': geom['y'], 'w': geom['w'], 'h': geom['h'], 'z': z, 'unit': '%'}
-                                        blocks.append({'id': uuid.uuid4().hex[:8], 'type':'table','table':{'rows': rows, 'cols': cols, 'cells': cells}, 'style': style})
-                                        continue
+                                        rot = float(getattr(shape, 'rotation', 0) or 0)
+                                    except:
+                                        rot = 0
+                                    return {'x': x, 'y': y, 'w': w, 'h': h, 'rotation': rot, 'unit': '%'}
                                 except:
-                                    pass
-                                # TEXT
-                                try:
-                                    _phk = 'other'
-                                    if getattr(shape, 'is_placeholder', False):
-                                        try:
-                                            _pht = int(shape.placeholder_format.type)
-                                        except Exception:
-                                            _pht = -1
-                                        if _pht in (1, 3, 5):
-                                            _phk = 'title'
-                                        elif _pht in (2, 4, 6):
-                                            _phk = 'body'
-                                except Exception:
-                                    _phk = 'other'
-                                _fbm = dict((typo or {}).get('other') or {})
-                                _fbm.update((typo or {}).get('body') or {})
-                                _fbm.update((typo or {}).get(_phk) or {})
-                                tex = _extract_text_frame(shape, bg, scheme, _fbm or None)
-                                if tex:
-                                    full_txt, paragraphs, first_style, has_bullet = tex
-                                    if full_txt and len(full_txt.strip()) > 0:
-                                        geom = _geom(shape)
-                                        # фон фигуры для текста
-                                        fill_bg, _ = _extract_shape_fill_css(shape, scheme)
-                                        # line для bullet
-                                        style = {
-                                            'x': geom['x'], 'y': geom['y'], 'w': geom['w'], 'h': geom['h'],
-                                            'rotation': geom.get('rotation',0), 'z': z, 'unit': '%',
-                                        }
-                                        # если paragraphs имеют разные aligns — сохраним per paragraph, иначе в style
-                                        # для совместимости сохраним align/fontSize/color из first paragraph
-                                        if first_style:
-                                            for k in ['fontSize','bold','italic','underline','color','fontFamily','highlight']:
-                                                if k in first_style:
-                                                    style[k] = first_style[k]
-                                        # если единый align у всех
-                                        try:
-                                            aligns = set(p['align'] for p in paragraphs)
-                                            if len(aligns) == 1:
-                                                style['align'] = paragraphs[0]['align']
-                                            else:
-                                                style['align'] = 'left'
-                                        except:
-                                            style['align'] = 'left'
-                                        if has_bullet:
-                                            style['bullet'] = True
-                                        try:
-                                            _flh = paragraphs[0].get('lineHeight') if paragraphs else None
-                                            if _flh:
-                                                style['lineHeight'] = _flh
-                                            elif (_fbm or {}).get('lineHeight'):
-                                                style['lineHeight'] = _fbm['lineHeight']
-                                        except Exception:
-                                            pass
-                                        if fill_bg and fill_bg.upper() not in ('#FFFFFF',):
-                                            style['background'] = fill_bg
-                                        # обводка текстового бокса (иначе карты с рамкой её теряют)
-                                        try:
-                                            _tl, _tw, _td = _extract_shape_line(shape, scheme)
-                                            if _tl and _tw:
-                                                style['stroke'] = _tl
-                                                style['strokeWidth'] = _tw
-                                                style['dash'] = _td or 'solid'
-                                        except Exception:
-                                            pass
-                                        # highlight flag из runs
-                                        try:
-                                            has_hl = any(any(r.get('style',{}).get('highlight') for r in p['runs']) for p in paragraphs)
-                                            if has_hl:
-                                                style['highlight'] = True
-                                        except:
-                                            pass
-                                        # lightness fix ТОЛЬКО если фон слайда светлый и текст светлый без своего фона
-                                        try:
-                                            col = style.get('color','')
-                                            if col and _is_light(col) and not fill_bg and bg and bg.startswith('#') and _is_light(bg):
-                                                # белый на белом → тёмный
-                                                style['color'] = '#1e293b'
-                                            # тёмный фон + белый текст — оставляем как есть
+                                    return {'x': 2, 'y': 2, 'w': 96, 'h': 10, 'unit': '%'}
+
+                            # рекурсивный обход с учётом групп
+                            def _walk_shapes(shapes, z_base=0):
+                                nonlocal blocks
+                                for si, shape in enumerate(shapes):
+                                    z = z_base + si
+                                    # GROUP
+                                    try:
+                                        if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
                                             try:
-                                                _fc = (fill_bg or '')
-                                                if _fc.startswith('#') and _is_dark(_fc):
-                                                    _cc = style.get('color', '')
-                                                    if _cc and _cc.startswith('#') and _is_dark(_cc):
-                                                        style['color'] = '#F8FAFC'
+                                                _walk_shapes(shape.shapes, z_base=z*10)
+                                            except:
+                                                pass
+                                            continue
+                                    except:
+                                        pass
+                                    # PICTURE
+                                    is_picture = False
+                                    try:
+                                        if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                                            is_picture = True
+                                    except:
+                                        pass
+                                    if is_picture:
+                                        try:
+                                            blob = shape.image.blob
+                                            img_ext = '.' + (shape.image.ext or 'png')
+                                            # браузеры не показывают EMF/WMF/TIFF/BMP — пробуем конверт через LibreOffice, иначе плейсхолдер
+                                            BROWSER_OK = ['.png','.jpg','.jpeg','.gif','.webp','.svg']
+                                            need_convert = img_ext.lower() not in BROWSER_OK
+                                            conv_blob, conv_ext, unrenderable = blob, img_ext, False
+                                            if need_convert:
+                                                conv_blob, conv_ext = _convert_image_blob(blob, img_ext)
+                                                if conv_blob is None:
+                                                    conv_blob, conv_ext, unrenderable = blob, img_ext, True
+                                            if not unrenderable and conv_ext.lower() not in BROWSER_OK + ['.png']:
+                                                conv_ext = '.png'
+                                            fname = f"{uuid.uuid4().hex}{conv_ext}"
+                                            rel = f"pptx_images/{fname}"
+                                            full = os.path.join(media_root, rel)
+                                            with open(full, 'wb') as out:
+                                                out.write(conv_blob)
+                                            store_media_blob(rel, conv_blob)
+                                            url = s.MEDIA_URL + rel
+                                            geom = _geom(shape)
+                                            # crop? PowerPoint stretches to box when no crop -> fill, else cover
+                                            try:
+                                                _sr = shape._element.find('.//{http://schemas.openxmlformats.org/drawingml/2006/main}srcRect')
+                                                _has_crop = _sr is not None and any((_sr.get(k) or '0') != '0' for k in ('l', 't', 'r', 'b'))
+                                            except Exception:
+                                                _has_crop = False
+                                            style = {'borderRadius': 4, 'objectFit': 'cover' if _has_crop else 'contain', 'x': geom['x'], 'y': geom['y'], 'w': geom['w'], 'h': geom['h'], 'rotation': geom.get('rotation',0), 'z': z, 'unit': '%'}
+                                            # если картинка в тексте — сохраняем как image блок с геометрией
+                                            img_block = {'id': uuid.uuid4().hex[:8], 'type':'image','src': url, 'style': style}
+                                            if unrenderable:
+                                                img_block['unrenderable'] = True
+                                                img_block['origExt'] = img_ext
+                                            blocks.append(img_block)
+                                            continue
+                                        except Exception:
+                                            # картинка с битой связью (rId) — оставляем честный
+                                            # плейсхолдер с геометрией, а не дыру
+                                            try:
+                                                _gg = _geom(shape)
+                                                blocks.append({
+                                                    'id': uuid.uuid4().hex[:8], 'type': 'image',
+                                                    'src': '', 'unrenderable': True, 'brokenLink': True,
+                                                    'style': {'borderRadius': 4, 'objectFit': 'contain',
+                                                              'x': _gg['x'], 'y': _gg['y'],
+                                                              'w': _gg['w'], 'h': _gg['h'],
+                                                              'rotation': _gg.get('rotation', 0),
+                                                              'z': z, 'unit': '%'},
+                                                })
                                             except Exception:
                                                 pass
-                                        except:
-                                            pass
-                                        # lineHeight / vertical anchor (по имени enum: TOP/MIDDLE/BOTTOM; str вида "MIDDLE (3)")
-                                        try:
-                                            if shape.text_frame and hasattr(shape.text_frame, 'vertical_anchor') and shape.text_frame.vertical_anchor is not None:
-                                                _van = str(shape.text_frame.vertical_anchor).split(' ')[0].split('.')[-1].upper()
-                                                va_map = {'TOP': 'top', 'MIDDLE': 'middle', 'BOTTOM': 'bottom',
-                                                          'TOP_CENTERED': 'top', 'BOTTOM_CENTERED': 'bottom'}
-                                                style['verticalAlign'] = va_map.get(_van, 'top')
-                                        except:
-                                            pass
-                                        # wrap (None in pptx means default ON)
-                                        try:
-                                            _ww = shape.text_frame.word_wrap if hasattr(shape.text_frame, 'word_wrap') else None
-                                            style['wordWrap'] = True if _ww is None else bool(_ww)
-                                        except:
-                                            pass
-                                        # inner margins EMU -> % of slide
-                                        try:
-                                            _tfm = shape.text_frame
-                                            _ml = float(_tfm.margin_left or 0) / float(slide_width) * 100
-                                            _mr = float(_tfm.margin_right or 0) / float(slide_width) * 100
-                                            _mt = float(_tfm.margin_top or 0) / float(slide_height) * 100
-                                            _mb = float(_tfm.margin_bottom or 0) / float(slide_height) * 100
-                                            if max(_ml, _mr, _mt, _mb) > 0.15:
-                                                style['paddingPct'] = [round(_mt, 2), round(_mr, 2), round(_mb, 2), round(_ml, 2)]
-                                        except Exception:
-                                            pass
-                                        if len(full_txt) > 8000:
-                                            full_txt = full_txt[:8000]
-                                        # финальный блок с paragraphs для rich rendering
-                                        blocks.append({
-                                            'id': uuid.uuid4().hex[:8],
-                                            'type':'text',
-                                            'content': full_txt,
-                                            'paragraphs': paragraphs,
-                                            'style': style
-                                        })
-                                        continue
-                                # LINE/CONNECTOR: линия без заливки и текста — сохраняем как line-блок, иначе дропается молча
-                                try:
-                                    if getattr(shape, 'shape_type', None) == MSO_SHAPE_TYPE.LINE:
-                                        _geom4 = _geom(shape)
-                                        _lcol, _lw, _ldash = _extract_shape_line(shape, scheme)
-                                        blocks.append({
-                                            'id': uuid.uuid4().hex[:8], 'type': 'shape', 'shape': 'line',
-                                            'style': {'fill': 'transparent', 'stroke': _lcol or '#64748B',
-                                                      'strokeWidth': _lw or 1, 'dash': _ldash or 'solid',
-                                                      'x': _geom4['x'], 'y': _geom4['y'],
-                                                      'w': max(_geom4['w'], 2), 'h': max(_geom4['h'], 2),
-                                                      'rotation': _geom4.get('rotation', 0), 'z': z, 'unit': '%',
-                                                      'borderRadius': 4}
-                                        })
-                                        continue
-                                except Exception:
-                                    pass
-                                # SMARTART/CHART без text_frame: диаграмму — таблицей с данными, SmartArt — текстом узлов
-                                try:
-                                    _gtext = _extract_graphic_text(shape)
-                                    _ctable = _extract_chart_table(shape)
-                                    if _ctable:
-                                        _geom3 = _geom(shape)
-                                        blocks.append({
-                                            'id': uuid.uuid4().hex[:8], 'type': 'table', 'table': _ctable,
-                                            'style': {'x': _geom3['x'], 'y': _geom3['y'], 'w': _geom3['w'], 'h': _geom3['h'],
-                                                      'rotation': _geom3.get('rotation', 0), 'z': z, 'unit': '%'}
-                                        })
-                                        continue
-                                    if _gtext:
-                                        _geom3 = _geom(shape)
-                                        blocks.append({
-                                            'id': uuid.uuid4().hex[:8], 'type': 'text', 'content': _gtext,
-                                            'style': {'x': _geom3['x'], 'y': _geom3['y'], 'w': _geom3['w'], 'h': _geom3['h'],
-                                                      'rotation': _geom3.get('rotation', 0), 'z': z, 'unit': '%',
-                                                      'fontSize': 14, 'color': '#334155', 'align': 'left'}
-                                        })
-                                        continue
-                                except Exception:
-                                    pass
-                                # undecorated shapes incl freeform: fills/cards, white cards, thin lines
-                                try:
-                                    fill_bg2, _ = _extract_shape_fill_css(shape, scheme)
-                                    line_col2, line_w2, line_dash2 = _extract_shape_line(shape, scheme)
-                                    geom2 = _geom(shape)
+                                    # TABLE — извлекаем ячейки
                                     try:
-                                        _svgd, _svw, _svh = _extract_custgeom_path(shape)
+                                        if getattr(shape, 'has_table', False) and shape.has_table:
+                                            tbl = shape.table
+                                            rows = len(tbl.rows)
+                                            cols = len(tbl.columns)
+                                            cells = []
+                                            for r in tbl.rows:
+                                                row_cells = []
+                                                for c in r.cells:
+                                                    txt = ''
+                                                    try:
+                                                        txt = c.text.strip() if c.text else ''
+                                                    except:
+                                                        txt = ''
+                                                    # объединённые ячейки: gridSpan/rowSpan + пропуск поглощённых (hMerge/vMerge)
+                                                    colspan, rowspan, merged_away = 1, 1, False
+                                                    try:
+                                                        _tc_el = c._tc
+                                                        colspan = max(1, int(_tc_el.get('gridSpan') or 1))
+                                                        rowspan = max(1, int(_tc_el.get('rowSpan') or 1))
+                                                        if _tc_el.get('hMerge') == '1' or _tc_el.get('vMerge') == '1':
+                                                            merged_away = True
+                                                    except Exception:
+                                                        pass
+                                                    # стиль ячейки
+                                                    cell_style = {}
+                                                    try:
+                                                        if c.fill and c.fill.fore_color is not None:
+                                                            hc = _color_css(c.fill.fore_color, scheme or {})
+                                                            if hc and hc.upper() != '#FFFFFF':
+                                                                cell_style['background'] = hc
+                                                    except:
+                                                        pass
+                                                    try:
+                                                        # font of first paragraph
+                                                        if c.text_frame and c.text_frame.paragraphs and c.text_frame.paragraphs[0].runs:
+                                                            rr = c.text_frame.paragraphs[0].runs[0]
+                                                            if rr.font.color is not None:
+                                                                hc = _color_css(rr.font.color, scheme or {})
+                                                                if hc:
+                                                                    cell_style['color'] = hc
+                                                            if rr.font.bold is not None:
+                                                                cell_style['bold'] = bool(rr.font.bold)
+                                                    except:
+                                                        pass
+                                                    # границы ячейки tcBdr + вертикальный якорь + отступы
+                                                    try:
+                                                        _tcPr = c._tc.find('{http://schemas.openxmlformats.org/drawingml/2006/main}tcPr')
+                                                        if _tcPr is not None:
+                                                            for _side, _css in (('lnL', 'borderLeft'), ('lnR', 'borderRight'), ('lnT', 'borderTop'), ('lnB', 'borderBottom')):
+                                                                _ln = _tcPr.find('{http://schemas.openxmlformats.org/drawingml/2006/main}' + _side)
+                                                                if _ln is None:
+                                                                    continue
+                                                                try:
+                                                                    _bw = max(1, round(int(_ln.get('w') or 12700) / 12700))
+                                                                except Exception:
+                                                                    _bw = 1
+                                                                _bc = None
+                                                                try:
+                                                                    _sf = _ln.find('{http://schemas.openxmlformats.org/drawingml/2006/main}solidFill')
+                                                                    if _sf is not None and len(_sf):
+                                                                        _cc = _sf[0]
+                                                                        _tag = _cc.tag.split('}')[-1]
+                                                                        if _tag == 'srgbClr' and _cc.get('val'):
+                                                                            _bc = '#' + _cc.get('val').upper()
+                                                                        elif _tag == 'schemeClr' and _cc.get('val'):
+                                                                            _bc = (scheme or {}).get(_cc.get('val')) or None
+                                                                        if _bc:
+                                                                            _al = _cc.find('{http://schemas.openxmlformats.org/drawingml/2006/main}alpha')
+                                                                            if _al is not None and _al.get('val'):
+                                                                                try:
+                                                                                    _av = max(0.0, min(1.0, int(_al.get('val')) / 100000.0))
+                                                                                    if _av < 0.999:
+                                                                                        _bc = _hex_to_rgba(_bc, _av)
+                                                                                except Exception:
+                                                                                    pass
+                                                                except Exception:
+                                                                    pass
+                                                                cell_style[_css] = '%dpx solid %s' % (_bw, _bc or '#94A3B8')
+                                                            _anch = (_tcPr.get('anchor') or '').lower()
+                                                            if _anch in ('ctr', 'b', 't'):
+                                                                cell_style['anchorItems'] = {'ctr': 'center', 'b': 'flex-end', 't': 'flex-start'}[_anch]
+                                                            try:
+                                                                _mar = []
+                                                                for _mk in ('marT', 'marR', 'marB', 'marL'):
+                                                                    _mv = _tcPr.get(_mk)
+                                                                    _mar.append(round(int(_mv) / 914400 * 96, 1) if _mv else 0)
+                                                                if max(_mar) > 1:
+                                                                    cell_style['cellPad'] = _mar
+                                                            except Exception:
+                                                                pass
+                                                    except Exception:
+                                                        pass
+                                                    row_cells.append({'text': txt, 'style': cell_style, 'colspan': colspan, 'rowspan': rowspan, 'merged': merged_away})
+                                                cells.append(row_cells)
+                                            geom = _geom(shape)
+                                            style = {'x': geom['x'], 'y': geom['y'], 'w': geom['w'], 'h': geom['h'], 'z': z, 'unit': '%'}
+                                            blocks.append({'id': uuid.uuid4().hex[:8], 'type':'table','table':{'rows': rows, 'cols': cols, 'cells': cells}, 'style': style})
+                                            continue
+                                    except:
+                                        pass
+                                    # TEXT
+                                    try:
+                                        _phk = 'other'
+                                        if getattr(shape, 'is_placeholder', False):
+                                            try:
+                                                _pht = int(shape.placeholder_format.type)
+                                            except Exception:
+                                                _pht = -1
+                                            if _pht in (1, 3, 5):
+                                                _phk = 'title'
+                                            elif _pht in (2, 4, 6):
+                                                _phk = 'body'
                                     except Exception:
-                                        _svgd, _svw, _svh = None, 0, 0
+                                        _phk = 'other'
+                                    _fbm = dict((typo or {}).get('other') or {})
+                                    _fbm.update((typo or {}).get('body') or {})
+                                    _fbm.update((typo or {}).get(_phk) or {})
+                                    tex = _extract_text_frame(shape, bg, scheme, _fbm or None)
+                                    if tex:
+                                        full_txt, paragraphs, first_style, has_bullet = tex
+                                        if full_txt and len(full_txt.strip()) > 0:
+                                            geom = _geom(shape)
+                                            # фон фигуры для текста
+                                            fill_bg, _ = _extract_shape_fill_css(shape, scheme)
+                                            # line для bullet
+                                            style = {
+                                                'x': geom['x'], 'y': geom['y'], 'w': geom['w'], 'h': geom['h'],
+                                                'rotation': geom.get('rotation',0), 'z': z, 'unit': '%',
+                                            }
+                                            # если paragraphs имеют разные aligns — сохраним per paragraph, иначе в style
+                                            # для совместимости сохраним align/fontSize/color из first paragraph
+                                            if first_style:
+                                                for k in ['fontSize','bold','italic','underline','color','fontFamily','highlight']:
+                                                    if k in first_style:
+                                                        style[k] = first_style[k]
+                                            # если единый align у всех
+                                            try:
+                                                aligns = set(p['align'] for p in paragraphs)
+                                                if len(aligns) == 1:
+                                                    style['align'] = paragraphs[0]['align']
+                                                else:
+                                                    style['align'] = 'left'
+                                            except:
+                                                style['align'] = 'left'
+                                            if has_bullet:
+                                                style['bullet'] = True
+                                            try:
+                                                _flh = paragraphs[0].get('lineHeight') if paragraphs else None
+                                                if _flh:
+                                                    style['lineHeight'] = _flh
+                                                elif (_fbm or {}).get('lineHeight'):
+                                                    style['lineHeight'] = _fbm['lineHeight']
+                                            except Exception:
+                                                pass
+                                            if fill_bg and fill_bg.upper() not in ('#FFFFFF',):
+                                                style['background'] = fill_bg
+                                            # обводка текстового бокса (иначе карты с рамкой её теряют)
+                                            try:
+                                                _tl, _tw, _td = _extract_shape_line(shape, scheme)
+                                                if _tl and _tw:
+                                                    style['stroke'] = _tl
+                                                    style['strokeWidth'] = _tw
+                                                    style['dash'] = _td or 'solid'
+                                            except Exception:
+                                                pass
+                                            # highlight flag из runs
+                                            try:
+                                                has_hl = any(any(r.get('style',{}).get('highlight') for r in p['runs']) for p in paragraphs)
+                                                if has_hl:
+                                                    style['highlight'] = True
+                                            except:
+                                                pass
+                                            # lightness fix ТОЛЬКО если фон слайда светлый и текст светлый без своего фона
+                                            try:
+                                                col = style.get('color','')
+                                                if col and _is_light(col) and not fill_bg and bg and bg.startswith('#') and _is_light(bg):
+                                                    # белый на белом → тёмный
+                                                    style['color'] = '#1e293b'
+                                                # тёмный фон + белый текст — оставляем как есть
+                                                try:
+                                                    _fc = (fill_bg or '')
+                                                    if _fc.startswith('#') and _is_dark(_fc):
+                                                        _cc = style.get('color', '')
+                                                        if _cc and _cc.startswith('#') and _is_dark(_cc):
+                                                            style['color'] = '#F8FAFC'
+                                                except Exception:
+                                                    pass
+                                            except:
+                                                pass
+                                            # lineHeight / vertical anchor (по имени enum: TOP/MIDDLE/BOTTOM; str вида "MIDDLE (3)")
+                                            try:
+                                                if shape.text_frame and hasattr(shape.text_frame, 'vertical_anchor') and shape.text_frame.vertical_anchor is not None:
+                                                    _van = str(shape.text_frame.vertical_anchor).split(' ')[0].split('.')[-1].upper()
+                                                    va_map = {'TOP': 'top', 'MIDDLE': 'middle', 'BOTTOM': 'bottom',
+                                                              'TOP_CENTERED': 'top', 'BOTTOM_CENTERED': 'bottom'}
+                                                    style['verticalAlign'] = va_map.get(_van, 'top')
+                                            except:
+                                                pass
+                                            # wrap (None in pptx means default ON)
+                                            try:
+                                                _ww = shape.text_frame.word_wrap if hasattr(shape.text_frame, 'word_wrap') else None
+                                                style['wordWrap'] = True if _ww is None else bool(_ww)
+                                            except:
+                                                pass
+                                            # inner margins EMU -> % of slide
+                                            try:
+                                                _tfm = shape.text_frame
+                                                _ml = float(_tfm.margin_left or 0) / float(slide_width) * 100
+                                                _mr = float(_tfm.margin_right or 0) / float(slide_width) * 100
+                                                _mt = float(_tfm.margin_top or 0) / float(slide_height) * 100
+                                                _mb = float(_tfm.margin_bottom or 0) / float(slide_height) * 100
+                                                if max(_ml, _mr, _mt, _mb) > 0.15:
+                                                    style['paddingPct'] = [round(_mt, 2), round(_mr, 2), round(_mb, 2), round(_ml, 2)]
+                                            except Exception:
+                                                pass
+                                            if len(full_txt) > 8000:
+                                                full_txt = full_txt[:8000]
+                                            # финальный блок с paragraphs для rich rendering
+                                            blocks.append({
+                                                'id': uuid.uuid4().hex[:8],
+                                                'type':'text',
+                                                'content': full_txt,
+                                                'paragraphs': paragraphs,
+                                                'style': style
+                                            })
+                                            continue
+                                    # LINE/CONNECTOR: линия без заливки и текста — сохраняем как line-блок, иначе дропается молча
                                     try:
-                                        _sp2 = shape._element.spPr
-                                        _pg2 = _sp2.find('{http://schemas.openxmlformats.org/drawingml/2006/main}prstGeom') if _sp2 is not None else None
-                                        _prst2 = _pg2.get('prst') if _pg2 is not None else None
-                                    except Exception:
-                                        _prst2 = None
-                                    # adj скругления: roundRect с adj=0 = острые углы (не скругляем!)
-                                    _radius_pct = None
-                                    try:
-                                        if _pg2 is not None and _prst2 in ('roundRect', 'round1Rect', 'round2SameRect', 'round2DiagRect'):
-                                            _av = _pg2.find('{http://schemas.openxmlformats.org/drawingml/2006/main}avLst')
-                                            _adj = 16666
-                                            if _av is not None:
-                                                for _gd in _av:
-                                                    if _gd.get('name') == 'adj':
-                                                        _fmla = (_gd.get('fmla') or '').split(' ')
-                                                        _adj = int(_fmla[-1]) if _fmla else 16666
-                                                        break
-                                            _radius_pct = round(max(0, min(50000, _adj)) / 50000, 3)
+                                        if getattr(shape, 'shape_type', None) == MSO_SHAPE_TYPE.LINE:
+                                            _geom4 = _geom(shape)
+                                            _lcol, _lw, _ldash = _extract_shape_line(shape, scheme)
+                                            blocks.append({
+                                                'id': uuid.uuid4().hex[:8], 'type': 'shape', 'shape': 'line',
+                                                'style': {'fill': 'transparent', 'stroke': _lcol or '#64748B',
+                                                          'strokeWidth': _lw or 1, 'dash': _ldash or 'solid',
+                                                          'x': _geom4['x'], 'y': _geom4['y'],
+                                                          'w': max(_geom4['w'], 2), 'h': max(_geom4['h'], 2),
+                                                          'rotation': _geom4.get('rotation', 0), 'z': z, 'unit': '%',
+                                                          'borderRadius': 4}
+                                            })
+                                            continue
                                     except Exception:
                                         pass
-                                    up2 = (fill_bg2 or '').upper()
-                                    is_white2 = up2 == '#FFFFFF'
-                                    if fill_bg2 and geom2['w'] >= 1.5 and geom2['h'] >= 0.35:
-                                        if is_white2 and not (5 < geom2['w'] < 98 and 3 < geom2['h'] < 95):
-                                            # мелкая белая иконка поверх цветной фигуры (бейдж) — оставить
-                                            if not (geom2['w'] >= 0.8 and geom2['h'] >= 0.35
-                                                    and _inside_colored_shape(blocks, geom2)):
-                                                pass
-                                            else:
-                                                _shape_name = 'rect'
-                                                try:
-                                                    _pmap = {'ellipse': 'ellipse', 'diamond': 'diamond', 'triangle': 'triangle',
-                                                             'rightTriangle': 'rightTriangle', 'pentagon': 'pentagon', 'hexagon': 'hexagon',
-                                                             'star5': 'star', 'star': 'star', 'roundRect': 'rounded', 'round1Rect': 'rounded',
-                                                             'round2SameRect': 'rounded', 'arrow': 'arrow', 'leftArrow': 'arrow',
-                                                             'rightArrow': 'arrow', 'trapezoid': 'trapezoid', 'parallelogram': 'parallelogram',
-                                                             'circle': 'circle', 'oval': 'ellipse'}
-                                                    if _prst2 and _prst2 in _pmap:
-                                                        _shape_name = _pmap[_prst2]
-                                                except Exception:
-                                                    pass
-                                                style2 = {'fill': fill_bg2, 'x': geom2['x'], 'y': geom2['y'], 'w': geom2['w'], 'h': geom2['h'], 'rotation': geom2.get('rotation', 0), 'z': z - 0.5, 'unit': '%', 'borderRadius': 8}
-                                                if _radius_pct is not None:
-                                                    style2['radiusPct'] = _radius_pct
-                                                style2['icon'] = True
-                                                if _svgd:
-                                                    style2['svgPath'] = _svgd
-                                                    style2['svgW'] = _svw
-                                                    style2['svgH'] = _svh
-                                                if _prst2:
-                                                    style2['preset'] = _prst2
-                                                if line_col2:
-                                                    style2['stroke'] = line_col2
-                                                    style2['strokeWidth'] = line_w2
-                                                    style2['dash'] = line_dash2 or 'solid'
-                                                blocks.append({'id': uuid.uuid4().hex[:8], 'type': 'shape', 'shape': _shape_name, 'style': style2})
-                                                continue
-                                        else:
-                                            is_deco2 = (not is_white2) and up2 in ('#FF8C69', '#7EDBD5', '#FFE66D', '#FF6B35') and (geom2['x'] < 15 or geom2['x'] > 75) and geom2['y'] < 20
-                                            if not is_deco2:
-                                                _shape_name = 'rect'
-                                                try:
-                                                    _pmap = {'ellipse': 'ellipse', 'diamond': 'diamond', 'triangle': 'triangle',
-                                                             'rightTriangle': 'rightTriangle', 'pentagon': 'pentagon', 'hexagon': 'hexagon',
-                                                             'star5': 'star', 'star': 'star', 'roundRect': 'rounded', 'round1Rect': 'rounded',
-                                                             'round2SameRect': 'rounded', 'arrow': 'arrow', 'leftArrow': 'arrow',
-                                                             'rightArrow': 'arrow', 'trapezoid': 'trapezoid', 'parallelogram': 'parallelogram',
-                                                             'circle': 'circle', 'oval': 'ellipse'}
-                                                    if _prst2 and _prst2 in _pmap:
-                                                        _shape_name = _pmap[_prst2]
-                                                except Exception:
-                                                    pass
-                                                style2 = {'fill': fill_bg2, 'x': geom2['x'], 'y': geom2['y'], 'w': geom2['w'], 'h': geom2['h'], 'rotation': geom2.get('rotation', 0), 'z': z - 0.5, 'unit': '%', 'borderRadius': 8}
-                                                if _radius_pct is not None:
-                                                    style2['radiusPct'] = _radius_pct
-                                                # мелкие фигурки (<6% x <10%) — это иконки: рендерить без растягивания
-                                                try:
-                                                    if geom2['w'] < 6 and geom2['h'] < 10:
-                                                        style2['icon'] = True
-                                                except Exception:
-                                                    pass
-                                                if _svgd:
-                                                    style2['svgPath'] = _svgd
-                                                    style2['svgW'] = _svw
-                                                    style2['svgH'] = _svh
-                                                if _prst2:
-                                                    style2['preset'] = _prst2
-                                                if line_col2:
-                                                    style2['stroke'] = line_col2
-                                                    style2['strokeWidth'] = line_w2
-                                                    style2['dash'] = line_dash2 or 'solid'
-                                                if is_white2:
-                                                    style2['shadow'] = True
-                                                blocks.append({'id': uuid.uuid4().hex[:8], 'type': 'shape', 'shape': _shape_name, 'style': style2})
-                                                continue
-                                    if not fill_bg2 and line_col2 and line_w2:
-                                        if geom2['w'] < 4 or geom2['h'] < 4:
-                                            style2 = {'fill': 'transparent', 'stroke': line_col2, 'strokeWidth': line_w2, 'dash': line_dash2 or 'solid', 'x': geom2['x'], 'y': geom2['y'], 'w': max(geom2['w'], 2), 'h': max(geom2['h'], 2), 'rotation': geom2.get('rotation', 0), 'z': z - 0.5, 'unit': '%', 'borderRadius': 4}
-                                            if _svgd:
-                                                style2['svgPath'] = _svgd
-                                                style2['svgW'] = _svw
-                                                style2['svgH'] = _svh
-                                            blocks.append({'id': uuid.uuid4().hex[:8], 'type': 'shape', 'shape': 'rect', 'style': style2})
+                                    # SMARTART/CHART без text_frame: диаграмму — таблицей с данными, SmartArt — текстом узлов
+                                    try:
+                                        _gtext = _extract_graphic_text(shape)
+                                        _ctable = _extract_chart_table(shape)
+                                        if _ctable:
+                                            _geom3 = _geom(shape)
+                                            blocks.append({
+                                                'id': uuid.uuid4().hex[:8], 'type': 'table', 'table': _ctable,
+                                                'style': {'x': _geom3['x'], 'y': _geom3['y'], 'w': _geom3['w'], 'h': _geom3['h'],
+                                                          'rotation': _geom3.get('rotation', 0), 'z': z, 'unit': '%'}
+                                            })
                                             continue
+                                        if _gtext:
+                                            _geom3 = _geom(shape)
+                                            blocks.append({
+                                                'id': uuid.uuid4().hex[:8], 'type': 'text', 'content': _gtext,
+                                                'style': {'x': _geom3['x'], 'y': _geom3['y'], 'w': _geom3['w'], 'h': _geom3['h'],
+                                                          'rotation': _geom3.get('rotation', 0), 'z': z, 'unit': '%',
+                                                          'fontSize': 14, 'color': '#334155', 'align': 'left'}
+                                            })
+                                            continue
+                                    except Exception:
+                                        pass
+                                    # undecorated shapes incl freeform: fills/cards, white cards, thin lines
+                                    try:
+                                        fill_bg2, _ = _extract_shape_fill_css(shape, scheme)
+                                        line_col2, line_w2, line_dash2 = _extract_shape_line(shape, scheme)
+                                        geom2 = _geom(shape)
+                                        try:
+                                            _svgd, _svw, _svh = _extract_custgeom_path(shape)
+                                        except Exception:
+                                            _svgd, _svw, _svh = None, 0, 0
+                                        try:
+                                            _sp2 = shape._element.spPr
+                                            _pg2 = _sp2.find('{http://schemas.openxmlformats.org/drawingml/2006/main}prstGeom') if _sp2 is not None else None
+                                            _prst2 = _pg2.get('prst') if _pg2 is not None else None
+                                        except Exception:
+                                            _prst2 = None
+                                        # adj скругления: roundRect с adj=0 = острые углы (не скругляем!)
+                                        _radius_pct = None
+                                        try:
+                                            if _pg2 is not None and _prst2 in ('roundRect', 'round1Rect', 'round2SameRect', 'round2DiagRect'):
+                                                _av = _pg2.find('{http://schemas.openxmlformats.org/drawingml/2006/main}avLst')
+                                                _adj = 16666
+                                                if _av is not None:
+                                                    for _gd in _av:
+                                                        if _gd.get('name') == 'adj':
+                                                            _fmla = (_gd.get('fmla') or '').split(' ')
+                                                            _adj = int(_fmla[-1]) if _fmla else 16666
+                                                            break
+                                                _radius_pct = round(max(0, min(50000, _adj)) / 50000, 3)
+                                        except Exception:
+                                            pass
+                                        up2 = (fill_bg2 or '').upper()
+                                        is_white2 = up2 == '#FFFFFF'
+                                        if fill_bg2 and geom2['w'] >= 1.5 and geom2['h'] >= 0.35:
+                                            if is_white2 and not (5 < geom2['w'] < 98 and 3 < geom2['h'] < 95):
+                                                # мелкая белая иконка поверх цветной фигуры (бейдж) — оставить
+                                                if not (geom2['w'] >= 0.8 and geom2['h'] >= 0.35
+                                                        and _inside_colored_shape(blocks, geom2)):
+                                                    pass
+                                                else:
+                                                    _shape_name = 'rect'
+                                                    try:
+                                                        _pmap = {'ellipse': 'ellipse', 'diamond': 'diamond', 'triangle': 'triangle',
+                                                                 'rightTriangle': 'rightTriangle', 'pentagon': 'pentagon', 'hexagon': 'hexagon',
+                                                                 'star5': 'star', 'star': 'star', 'roundRect': 'rounded', 'round1Rect': 'rounded',
+                                                                 'round2SameRect': 'rounded', 'arrow': 'arrow', 'leftArrow': 'arrow',
+                                                                 'rightArrow': 'arrow', 'trapezoid': 'trapezoid', 'parallelogram': 'parallelogram',
+                                                                 'circle': 'circle', 'oval': 'ellipse'}
+                                                        if _prst2 and _prst2 in _pmap:
+                                                            _shape_name = _pmap[_prst2]
+                                                    except Exception:
+                                                        pass
+                                                    style2 = {'fill': fill_bg2, 'x': geom2['x'], 'y': geom2['y'], 'w': geom2['w'], 'h': geom2['h'], 'rotation': geom2.get('rotation', 0), 'z': z - 0.5, 'unit': '%', 'borderRadius': 8}
+                                                    if _radius_pct is not None:
+                                                        style2['radiusPct'] = _radius_pct
+                                                    style2['icon'] = True
+                                                    if _svgd:
+                                                        style2['svgPath'] = _svgd
+                                                        style2['svgW'] = _svw
+                                                        style2['svgH'] = _svh
+                                                    if _prst2:
+                                                        style2['preset'] = _prst2
+                                                    if line_col2:
+                                                        style2['stroke'] = line_col2
+                                                        style2['strokeWidth'] = line_w2
+                                                        style2['dash'] = line_dash2 or 'solid'
+                                                    blocks.append({'id': uuid.uuid4().hex[:8], 'type': 'shape', 'shape': _shape_name, 'style': style2})
+                                                    continue
+                                            else:
+                                                is_deco2 = (not is_white2) and up2 in ('#FF8C69', '#7EDBD5', '#FFE66D', '#FF6B35') and (geom2['x'] < 15 or geom2['x'] > 75) and geom2['y'] < 20
+                                                if not is_deco2:
+                                                    _shape_name = 'rect'
+                                                    try:
+                                                        _pmap = {'ellipse': 'ellipse', 'diamond': 'diamond', 'triangle': 'triangle',
+                                                                 'rightTriangle': 'rightTriangle', 'pentagon': 'pentagon', 'hexagon': 'hexagon',
+                                                                 'star5': 'star', 'star': 'star', 'roundRect': 'rounded', 'round1Rect': 'rounded',
+                                                                 'round2SameRect': 'rounded', 'arrow': 'arrow', 'leftArrow': 'arrow',
+                                                                 'rightArrow': 'arrow', 'trapezoid': 'trapezoid', 'parallelogram': 'parallelogram',
+                                                                 'circle': 'circle', 'oval': 'ellipse'}
+                                                        if _prst2 and _prst2 in _pmap:
+                                                            _shape_name = _pmap[_prst2]
+                                                    except Exception:
+                                                        pass
+                                                    style2 = {'fill': fill_bg2, 'x': geom2['x'], 'y': geom2['y'], 'w': geom2['w'], 'h': geom2['h'], 'rotation': geom2.get('rotation', 0), 'z': z - 0.5, 'unit': '%', 'borderRadius': 8}
+                                                    if _radius_pct is not None:
+                                                        style2['radiusPct'] = _radius_pct
+                                                    # мелкие фигурки (<6% x <10%) — это иконки: рендерить без растягивания
+                                                    try:
+                                                        if geom2['w'] < 6 and geom2['h'] < 10:
+                                                            style2['icon'] = True
+                                                    except Exception:
+                                                        pass
+                                                    if _svgd:
+                                                        style2['svgPath'] = _svgd
+                                                        style2['svgW'] = _svw
+                                                        style2['svgH'] = _svh
+                                                    if _prst2:
+                                                        style2['preset'] = _prst2
+                                                    if line_col2:
+                                                        style2['stroke'] = line_col2
+                                                        style2['strokeWidth'] = line_w2
+                                                        style2['dash'] = line_dash2 or 'solid'
+                                                    if is_white2:
+                                                        style2['shadow'] = True
+                                                    blocks.append({'id': uuid.uuid4().hex[:8], 'type': 'shape', 'shape': _shape_name, 'style': style2})
+                                                    continue
+                                        if not fill_bg2 and line_col2 and line_w2:
+                                            if geom2['w'] < 4 or geom2['h'] < 4:
+                                                style2 = {'fill': 'transparent', 'stroke': line_col2, 'strokeWidth': line_w2, 'dash': line_dash2 or 'solid', 'x': geom2['x'], 'y': geom2['y'], 'w': max(geom2['w'], 2), 'h': max(geom2['h'], 2), 'rotation': geom2.get('rotation', 0), 'z': z - 0.5, 'unit': '%', 'borderRadius': 4}
+                                                if _svgd:
+                                                    style2['svgPath'] = _svgd
+                                                    style2['svgW'] = _svw
+                                                    style2['svgH'] = _svh
+                                                blocks.append({'id': uuid.uuid4().hex[:8], 'type': 'shape', 'shape': 'rect', 'style': style2})
+                                                continue
+                                    except Exception:
+                                        pass
+                                    pass
+                            # end for shape
+
+                            _walk_shapes(slide.shapes)
+                            # фоновый дизайн из слоя/мастера: только не-плейсхолдеры без текста, позади всего
+                            try:
+                                _mh = []
+                                try:
+                                    _mh.append(slide.slide_layout.slide_master)
+                                    _mh.append(slide.slide_layout)
                                 except Exception:
                                     pass
-                                pass
-                        # end for shape
-
-                        _walk_shapes(slide.shapes)
-                        # фоновый дизайн из слоя/мастера: только не-плейсхолдеры без текста, позади всего
-                        try:
-                            _mh = []
-                            try:
-                                _mh.append(slide.slide_layout.slide_master)
-                                _mh.append(slide.slide_layout)
+                                for _zb, _holder in ((-2000, _mh[0] if len(_mh) > 0 else None), (-1000, _mh[1] if len(_mh) > 1 else None)):
+                                    if _holder is None:
+                                        continue
+                                    try:
+                                        _extra = [s for s in _holder.shapes if not getattr(s, 'is_placeholder', False) and not (getattr(s, 'has_text_frame', False) and (s.text or '').strip())]
+                                    except Exception:
+                                        _extra = []
+                                    if _extra:
+                                        _walk_shapes(_extra, z_base=_zb)
                             except Exception:
                                 pass
-                            for _zb, _holder in ((-2000, _mh[0] if len(_mh) > 0 else None), (-1000, _mh[1] if len(_mh) > 1 else None)):
-                                if _holder is None:
-                                    continue
-                                try:
-                                    _extra = [s for s in _holder.shapes if not getattr(s, 'is_placeholder', False) and not (getattr(s, 'has_text_frame', False) and (s.text or '').strip())]
-                                except Exception:
-                                    _extra = []
-                                if _extra:
-                                    _walk_shapes(_extra, z_base=_zb)
+                            if not blocks:
+                                # пустой слайд
+                                blocks.append({'id': uuid.uuid4().hex[:8], 'type':'text','content': f'Слайд {idx+1}', 'style':{'color':'#94a3b8','align':'center','x':10,'y':40,'w':80,'h':20,'unit':'%'}})
+                            # сортируем по y затем x для стабильного порядка если z одинаков, но сохраняем z
+                            try:
+                                blocks = sorted(blocks, key=lambda b: (b.get('style',{}).get('z', 0), b.get('style',{}).get('y', 0), b.get('style',{}).get('x', 0)))
+                            except:
+                                pass
+                            # ограничиваем до 200 (плотные слайды с подложками)
+                            blocks = blocks[:200]
+                            # авто-контраст: золото-на-золоте и т.п. чиним до сохранения
+                            try:
+                                _autocontrast_blocks(blocks)
+                            except Exception:
+                                pass
+                            # notes
+                            notes_text = ''
+                            try:
+                                if slide.has_notes_slide and slide.notes_slide:
+                                    ns = slide.notes_slide
+                                    for shp in ns.shapes:
+                                        if shp.has_text_frame and shp.text and shp.text.strip():
+                                            if 'Click to edit' not in shp.text:
+                                                notes_text += shp.text.strip() + '\n'
+                                    notes_text = notes_text.strip()[:2000]
+                            except:
+                                pass
+                            # transition из оригинала, layout name
+                            slide_transition = 'fade'
+                            try:
+                                slide_transition = _extract_transition(slide)
+                            except Exception:
+                                pass
+                            layout_name = 'blank'
+                            try:
+                                layout_name = slide.slide_layout.name or 'blank'
+                                layout_name = re.sub(r'[^a-zA-Z0-9_-]', '', layout_name)[:20].lower() or 'blank'
+                            except:
+                                pass
+                            Slide.objects.create(
+                                presentation=pres,
+                                order=idx,
+                                background=bg,
+                                background_type=bg_type,
+                                gradient=gradient,
+                                bg_image=bg_image,
+                                layout=layout_name,
+                                transition=slide_transition,
+                                width=sw,
+                                height=sh,
+                                content={'blocks': blocks},
+                                notes=notes_text[:2000]
+                            )
+                            created_slides += 1
                         except Exception:
-                            pass
-                        if not blocks:
-                            # пустой слайд
-                            blocks.append({'id': uuid.uuid4().hex[:8], 'type':'text','content': f'Слайд {idx+1}', 'style':{'color':'#94a3b8','align':'center','x':10,'y':40,'w':80,'h':20,'unit':'%'}})
-                        # сортируем по y затем x для стабильного порядка если z одинаков, но сохраняем z
-                        try:
-                            blocks = sorted(blocks, key=lambda b: (b.get('style',{}).get('z', 0), b.get('style',{}).get('y', 0), b.get('style',{}).get('x', 0)))
-                        except:
-                            pass
-                        # ограничиваем до 200 (плотные слайды с подложками)
-                        blocks = blocks[:200]
-                        # авто-контраст: золото-на-золоте и т.п. чиним до сохранения
-                        try:
-                            _autocontrast_blocks(blocks)
-                        except Exception:
-                            pass
-                        # notes
-                        notes_text = ''
-                        try:
-                            if slide.has_notes_slide and slide.notes_slide:
-                                ns = slide.notes_slide
-                                for shp in ns.shapes:
-                                    if shp.has_text_frame and shp.text and shp.text.strip():
-                                        if 'Click to edit' not in shp.text:
-                                            notes_text += shp.text.strip() + '\n'
-                                notes_text = notes_text.strip()[:2000]
-                        except:
-                            pass
-                        # transition из оригинала, layout name
-                        slide_transition = 'fade'
-                        try:
-                            slide_transition = _extract_transition(slide)
-                        except Exception:
-                            pass
-                        layout_name = 'blank'
-                        try:
-                            layout_name = slide.slide_layout.name or 'blank'
-                            layout_name = re.sub(r'[^a-zA-Z0-9_-]', '', layout_name)[:20].lower() or 'blank'
-                        except:
-                            pass
-                        Slide.objects.create(
-                            presentation=pres,
-                            order=idx,
-                            background=bg,
-                            background_type=bg_type,
-                            gradient=gradient,
-                            bg_image=bg_image,
-                            layout=layout_name,
-                            transition=slide_transition,
-                            width=sw,
-                            height=sh,
-                            content={'blocks': blocks},
-                            notes=notes_text[:2000]
-                        )
-                        created_slides += 1
+                            # слайд не парсится — заглушка вместо падения всего импорта
+                            import traceback as _tb
+                            traceback.print_exc()
+                            try:
+                                Slide.objects.create(
+                                    presentation=pres, order=idx,
+                                    background='#F7F9FC', background_type='solid', gradient='',
+                                    bg_image='', layout='blank', transition='fade',
+                                    width=sw, height=sh,
+                                    content={'blocks': [{'id': uuid.uuid4().hex[:8], 'type': 'text', 'content': 'Слайд ' + str(idx+1), 'style': {'color': '#94a3b8', 'align': 'center', 'x': 10, 'y': 40, 'w': 80, 'h': 20, 'unit': '%'}}]},
+                                    notes='')
+                                created_slides += 1
+                            except Exception:
+                                pass
                     # PDF-двойник оригинала (не роняет импорт при ошибке конверта)
                     try:
                         _pdf_bytes, _pdf_pages = _convert_pptx_to_pdf(tmp_path, created_slides)
@@ -2125,6 +2141,23 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                     except: pass
                 if created_slides == 0:
                     raise ValueError('Не удалось извлечь страницы из PDF')
+                # PDF-двойник: сам загруженный PDF — это и есть оригинал. Сохраняем его
+                # как pdf_file + в MediaBlob (диск Render free эфемерный), чтобы режим
+                # «Оригинал» и миниатюры работали попиксельно после любого редеплоя.
+                try:
+                    file.seek(0)
+                    _pdf_bytes = file.read()
+                    if _pdf_bytes:
+                        from django.core.files.base import ContentFile as _CF3
+                        pres.pdf_file.save('pres_%d.pdf' % pres.id, _CF3(_pdf_bytes))
+                        try:
+                            store_media_blob('pptx_pdf/pres_%d.pdf' % pres.id, _pdf_bytes)
+                        except Exception:
+                            pass
+                        pres.pdf_pages = created_slides
+                        pres.save(update_fields=['pdf_file', 'pdf_pages'])
+                except Exception:
+                    pass
         except Exception as e:
             pres.delete()
             import traceback; traceback.print_exc()
@@ -2141,6 +2174,13 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                 # сохраняем оригинальное имя без path-traversal
                 safe_name = os.path.basename(file.name)[:100]
                 uf.file.save(safe_name, file, save=True)
+                # копия байтов в MediaBlob: диск Render free эфемерный — оригинал
+                # должен пережить редеплой (отдаётся через media_fallback)
+                try:
+                    uf.file.seek(0)
+                    store_media_blob(uf.file.name, uf.file.read())
+                except Exception:
+                    pass
         except Exception:
             pass
         return Response(PresentationSerializer(pres, context={'request': request}).data, status=201)

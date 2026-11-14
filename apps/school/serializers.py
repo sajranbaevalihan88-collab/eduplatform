@@ -9,7 +9,7 @@ class TopicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Topic
         fields = ['id', 'subject', 'subject_name', 'subject_icon', 'grade', 'num',
-                  'title', 'description', 'created_at']
+                  'title', 'description', 'created_by', 'created_at']
         read_only_fields = ['id', 'created_at', 'created_by']
 
     def create(self, validated_data):

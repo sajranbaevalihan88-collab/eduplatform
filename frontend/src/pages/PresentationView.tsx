@@ -182,6 +182,9 @@ export default function PresentationView(){
   const pdfUrl = pres.pdf_url ? resolveSrc(pres.pdf_url) : ''
   const hasPdf = !!pdfUrl
   const mode = modeOv ?? (hasPdf ? 'orig' : 'blocks')
+  // в режиме «Оригинал» страниц может быть больше, чем распарсенных слайдов
+  // (старый импорт терял часть слайдов) — навигация идёт по страницам PDF
+  const totalPages = (mode==='orig' && hasPdf) ? Math.max(slides.length, Number(pres.pdf_pages||0)) : slides.length
   const pdfFail = ()=> setModeOv('blocks')
   const isOwner = me && (String(pres.owner)===String(me.id) || String(pres.owner_id)===String(me.id) || me.role==='admin' || me.is_staff)
   const handleDelete=async()=>{
@@ -459,8 +462,8 @@ export default function PresentationView(){
         </div>
         <div className="h-14 bg-white/10 backdrop-blur flex items-center justify-center gap-3 text-white">
           <button onClick={()=>setIdx(i=>Math.max(0,i-1))} className="px-4 py-2 rounded-lg bg-white text-slate-900">{t('pv_back')}</button>
-          <span>{idx+1} / {slides.length}</span>
-          <button onClick={()=>setIdx(i=>Math.min(slides.length-1,i+1))} className="px-4 py-2 rounded-lg bg-white text-slate-900">{t('pv_next')}</button>
+          <span>{idx+1} / {totalPages}</span>
+          <button onClick={()=>setIdx(i=>Math.min(totalPages-1,i+1))} className="px-4 py-2 rounded-lg bg-white text-slate-900">{t('pv_next')}</button>
           <button onClick={()=>setSlideshow(false)} className="ml-4 px-4 py-2 rounded-lg bg-red-600">{t('pv_exit')}</button>
         </div>
       </div>
@@ -506,8 +509,8 @@ export default function PresentationView(){
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
           <div className="flex items-center gap-2">
             <button onClick={()=>setIdx(i=>Math.max(0,i-1))} disabled={idx===0} aria-label={t('pv_back')} className="w-11 h-11 rounded-xl bg-slate-100 disabled:opacity-40 flex items-center justify-center"><ChevronLeft size={20}/></button>
-            <span className="px-3 py-2 min-h-[44px] rounded-xl bg-slate-50 border text-sm font-medium flex items-center">{idx+1} / {slides.length}</span>
-            <button onClick={()=>setIdx(i=>Math.min(slides.length-1,i+1))} disabled={idx===slides.length-1} aria-label={t('pv_next')} className="w-11 h-11 rounded-xl bg-slate-100 disabled:opacity-40 flex items-center justify-center"><ChevronRight size={20}/></button>
+            <span className="px-3 py-2 min-h-[44px] rounded-xl bg-slate-50 border text-sm font-medium flex items-center">{idx+1} / {totalPages}</span>
+            <button onClick={()=>setIdx(i=>Math.min(totalPages-1,i+1))} disabled={idx===totalPages-1} aria-label={t('pv_next')} className="w-11 h-11 rounded-xl bg-slate-100 disabled:opacity-40 flex items-center justify-center"><ChevronRight size={20}/></button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {hasPdf && (
@@ -521,8 +524,8 @@ export default function PresentationView(){
           </div>
         </div>
 
-        {cur ? (
-          <div key={`${idx}-${cur.transition}`} className={`aspect-video shrink-0 rounded-xl border shadow-lg overflow-hidden relative ${getTransitionClass(cur.transition||'fade')} ${curIsAbsolute?'':'flex flex-col'}`} style={{...bgStyle(cur), ...slideAspectStyle(cur)}}>
+        {(cur || (mode==='orig' && hasPdf)) ? (
+          <div key={`${idx}-${cur?.transition||'pdf'}`} className={`aspect-video shrink-0 rounded-xl border shadow-lg overflow-hidden relative ${cur?getTransitionClass(cur.transition||'fade'):''} ${cur&&curIsAbsolute?'':'flex flex-col'}`} style={cur?{...bgStyle(cur), ...slideAspectStyle(cur)}:{background:'#ffffff'}}>
             {mode==='orig' && hasPdf ? (
               <div className="absolute inset-0 flex items-center justify-center">
                 <PdfPage url={pdfUrl} page={idx+1} scale={2} className="w-full h-full object-contain" onError={pdfFail}/>
@@ -540,26 +543,29 @@ export default function PresentationView(){
                 {(!cur.content?.blocks || cur.content.blocks.length===0) && <div className="flex-1 flex items-center justify-center text-slate-400">{t('pv_empty_slide')}</div>}
               </div>
             )}
+            {cur && (
             <div className="absolute bottom-0 left-0 right-0 h-8 bg-slate-50/95 backdrop-blur border-t flex items-center justify-between px-3 text-xs text-slate-500 opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity" title={t('pv_slide_info')}>
               <span>{t('pv_slide')} {idx+1} • {cur.layout||'blank'} {cur.transition && `• ${cur.transition}`}</span>
               <span className="truncate max-w-[50%]">{cur.background?.slice(0,60)}</span>
             </div>
+            )}
           </div>
         ) : (
           <div className="aspect-video shrink-0 rounded-xl border flex items-center justify-center text-slate-400">{t('pv_no_slides')}</div>
         )}
 
         <div className="mt-4 flex gap-2 overflow-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {slides.map((s:any,i:number)=>{
-            const thumbBg = s.background||'#ffffff'
+          {Array.from({length: totalPages}).map((_,i)=>{
+            const s:any = slides[i]
+            const thumbBg = s?.background||'#ffffff'
             const thumbIsDark = thumbBg && !isLight(thumbBg) && !thumbBg.startsWith('linear-gradient')
-            const thumbHasGeom = (s.content?.blocks||[]).some((b:any)=> b.style?.x!==undefined)
+            const thumbHasGeom = (s?.content?.blocks||[]).some((b:any)=> b.style?.x!==undefined)
             return (
             <button key={i} onClick={()=>setIdx(i)} className={`shrink-0 w-32 aspect-video rounded-lg border-2 overflow-hidden text-left relative ${i===idx?'border-indigo-600 ring-2 ring-blue-100':'border-slate-200 hover:border-slate-300'}`}>
-              <div className="h-full w-full relative overflow-hidden" style={bgStyle(s)}>
+              <div className="h-full w-full relative overflow-hidden" style={s?bgStyle(s):{}}>
                 {mode==='orig' && hasPdf ? (
                   <PdfThumb url={pdfUrl} page={i+1} active={i===idx}/>
-                ) : thumbHasGeom ? (
+                ) : !s ? null : thumbHasGeom ? (
                   <div className="absolute inset-0 scale-[0.18] origin-top-left w-[555%] h-[555%]">
                     {s.content?.blocks?.slice(0,6).map((b:any)=>(
                       <div key={b.id} style={{
@@ -573,14 +579,14 @@ export default function PresentationView(){
                         overflow:'hidden',
                         lineHeight:1.2
                       }} className="truncate">
-                        {b.type==='text'? (b.content?.slice(0,40)||'') : b.type==='image'? '🖼' : '⬜'}
+                        {b.type==='text'? (b.content?.slice(0,40)||'') : (b.type==='image'&&b.src)? <img src={resolveSrc(b.src)} className="w-full h-full object-cover" alt=""/> : b.type==='image'? '🖼' : '⬜'}
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="h-full p-1.5 flex flex-col gap-0.5 overflow-hidden">
                     {s.content?.blocks?.slice(0,2).map((b:any,bi:number)=>(
-                      <div key={bi} className="text-[7px] leading-tight truncate" style={{color:b.style?.color || (thumbIsDark? '#fff':'#1e293b')}}>{b.type==='text'? b.content?.slice(0,28) : b.type==='image'? '🖼' : '⬜'}</div>
+                      <div key={bi} className="text-[7px] leading-tight truncate" style={{color:b.style?.color || (thumbIsDark? '#fff':'#1e293b')}}>{b.type==='text'? b.content?.slice(0,28) : (b.type==='image'&&b.src)? <img src={resolveSrc(b.src)} className="w-full h-full object-cover rounded-sm" alt=""/> : b.type==='image'? '🖼' : '⬜'}</div>
                     ))}
                   </div>
                 )}
