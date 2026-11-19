@@ -48,6 +48,9 @@ export default function Board() {
   const toastTimer = useRef<any>(null)
   const langRef = useRef(lang)
   langRef.current = lang
+  useEffect(() => {
+    try { editorRef.current?.user.updateUserPreferences({ locale: lang === 'en' ? 'en' : 'ru' }) } catch {}
+  }, [lang])
 
   const showToast = (msg: string) => {
     setToast(msg)

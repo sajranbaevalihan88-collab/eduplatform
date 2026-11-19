@@ -416,6 +416,14 @@ class SchoolMixin:
         if not room.is_member(request.user):
             raise PermissionDenied('Ты не участник класса')
         qs = room.attendance.filter(date=d).select_related('student')
+        # Приватность: ученик видит только свою посещаемость, родитель — только своих детей
+        if not (_is_admin(request.user) or room.owner_id == request.user.id):
+            if getattr(request.user, 'role', None) == 'parent':
+                from apps.accounts.models import ParentLink
+                kid_ids = list(ParentLink.objects.filter(parent=request.user).values_list('student_id', flat=True))
+                qs = qs.filter(student_id__in=kid_ids)
+            else:
+                qs = qs.filter(student=request.user)
         return Response(AttendanceSerializer(qs, many=True).data)
 
     @action(detail=True, methods=['get'])
@@ -430,6 +438,13 @@ class SchoolMixin:
         except (ValueError, IndexError):
             raise ValidationError({'month': 'Формат YYYY-MM'})
         qs = room.attendance.filter(date__year=y, date__month=m)
+        if not (_is_admin(request.user) or room.owner_id == request.user.id):
+            if getattr(request.user, 'role', None) == 'parent':
+                from apps.accounts.models import ParentLink
+                kid_ids = list(ParentLink.objects.filter(parent=request.user).values_list('student_id', flat=True))
+                qs = qs.filter(student_id__in=kid_ids)
+            else:
+                qs = qs.filter(student=request.user)
         per = {}
         for a in qs:
             s = per.setdefault(a.student_id, {'present': 0, 'absent': 0, 'late': 0,
@@ -522,12 +537,22 @@ class SchoolMixin:
             5 if overall_avg >= 85 else 4 if overall_avg >= 70 else 3 if overall_avg >= 50 else 2
         ) if overall_avg is not None else None
         prog['submitted_total'] = len(pcts)
-        # доступные диагностики (ещё не пройденные)
+        # доступные диагностики (только публичные или назначенные в классах ученика)
+        from django.db.models import Q
         from apps.assessments.models import Test
+        from apps.classroom.models import Assignment
         taken = {d['test_id'] for d in prog['diagnostics']}
+        assigned_diag_ids = set(
+            Assignment.objects.filter(
+                kind='test', test__is_diagnostic=True,
+                classroom__enrollments__student=student,
+            ).values_list('test_id', flat=True)
+        )
         available = (Test.objects.filter(is_diagnostic=True)
+                     .filter(Q(is_public=True) | Q(id__in=assigned_diag_ids))
                      .exclude(id__in=taken)
-                     .select_related('subject'))[:10]
+                     .select_related('subject')
+                     .distinct())[:10]
         prog['diagnostics_available'] = [
             {'id': t.id, 'title': t.title,
              'subject': t.subject.name if t.subject else '',
@@ -1125,6 +1150,16 @@ class SchoolMixin:
                     {'assignment_id': s.assignment_id, 'student': s.student.username,
                      'score': s.score, 'mark': s.mark, 'status': s.status}
                     for s in Submission.objects.filter(assignment__classroom=rm).select_related('student')
+                ],
+                'attendance': [
+                    {'date': a.date.isoformat(), 'lesson_num': a.lesson_num,
+                     'student': a.student.username, 'status': a.status, 'note': a.note}
+                    for a in rm.attendance.select_related('student').order_by('-date')[:2000]
+                ],
+                'substitutions': [
+                    {'date': s.date.isoformat(), 'num': s.num,
+                     'subject': s.subject.slug if s.subject else '', 'note': s.note}
+                    for s in rm.substitutions.select_related('subject').order_by('-date')[:500]
                 ],
                 'attendance_count': rm.attendance.count(),
             })

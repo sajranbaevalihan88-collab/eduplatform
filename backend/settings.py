@@ -282,7 +282,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 LANGUAGE_CODE = 'ru-ru'
-TIME_ZONE = 'Europe/Moscow'
+TIME_ZONE = 'Asia/Bishkek'
 USE_I18N = True
 USE_TZ = True
 
@@ -369,23 +369,23 @@ LOGGING = {
     'root': {'handlers': ['console'], 'level': 'INFO'},
 }
 
-# Piston / Judge0 — внешний раннер для C/C++/Go/Rust и т.д.
-# Для прод — поднимите свой инстанс: docker run -p 2000:2000 ghcr.io/engineer-man/piston
-PISTON_URL = os.environ.get('PISTON_URL', 'https://emkc.org/api/v2/piston/execute')
+# Piston / Judge0 — внешний раннер (только при наличии своего self-hosted инстанса).
+# ВАЖНО: публичный https://emkc.org/api/v2/piston/execute с 15.02.2026 закрыт (whitelist-only, HTTP 401).
+# Поэтому по умолчанию используется встроенный изолированный раннер контейнера (Python -I / Node + AST + rlimit + очищенный env,
+# запуск разрешён только авторизованным пользователям с троттлингом).
+# Если поднят собственный self-hosted Piston: задай PISTON_URL=http://piston:2000/api/v2/piston/execute и CODE_USE_PISTON_ONLY=True.
+PISTON_URL = os.environ.get('PISTON_URL', '').strip()
 PISTON_DAILY_LIMIT = int(os.environ.get('PISTON_DAILY_LIMIT', '500'))
 PISTON_TIMEOUT = 6
-# Для прод — полностью отключить локальный subprocess и гнать всё через Piston/Judge0 (изоляция из коробки)
-# По умолчанию В ПРОДЕ (DEBUG=False) локальный запуск кода запрещён — аноним мог бы читать файлы сервера
-# (blacklist-песочница не обеспечивает изоляцию). Включить локальный раннер в проде можно ТОЛЬКО явно:
-# CODE_USE_PISTON_ONLY=False + изоляция на уровне хоста.
-from django.conf import settings as _s  # noqa
-_local_runner_default = 'False' if os.environ.get('DEBUG', 'False') == 'True' else 'True'
-CODE_USE_PISTON_ONLY = os.environ.get('CODE_USE_PISTON_ONLY', _local_runner_default) == 'True'
-if not os.environ.get('CODE_USE_PISTON_ONLY'):
+_has_custom_piston = bool(PISTON_URL and 'emkc.org' not in PISTON_URL.lower())
+_piston_env = os.environ.get('CODE_USE_PISTON_ONLY')
+CODE_USE_PISTON_ONLY = (_piston_env == 'True' and _has_custom_piston)
+if not _piston_env:
     import sys as _sys
-    print('[settings] CODE_USE_PISTON_ONLY не задан явно — выбран дефолт:', 
-          'Piston-only (прод: локальный запуск кода отключён)' if CODE_USE_PISTON_ONLY else 'локальный раннер (dev).',
-          file=_sys.stderr)
+    print('[settings] CODE_USE_PISTON_ONLY не задан явно — выбран изолированный локальный раннер.', file=_sys.stderr)
+elif _piston_env == 'True' and not _has_custom_piston:
+    import sys as _sys
+    print('[settings] ВНИМАНИЕ: публичный Piston (emkc.org) отключён (HTTP 401 whitelist-only) — переключено на изолированный локальный раннер.', file=_sys.stderr)
 # Для Docker-изоляции каждого прогона (будущее): CODE_USE_DOCKER=True + DOCKER_IMAGE=python:3.11-slim
 CODE_USE_DOCKER = os.environ.get('CODE_USE_DOCKER', 'False') == 'True'
 

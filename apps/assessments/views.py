@@ -212,12 +212,13 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                     from apps.classroom.models import Assignment, Submission
                     from django.utils import timezone as _tz
                     for a in Assignment.objects.filter(kind='test', test=test,
-                                                       classroom__enrollments__student=request.user).only('id', 'deadline'):
+                                                       classroom__enrollments__student=request.user).only('id', 'deadline', 'max_score'):
                         late = bool(a.deadline and _tz.now() > a.deadline)
+                        scaled_score = round((attempt.score / 100.0) * (a.max_score or 100), 1)
                         Submission.objects.update_or_create(
                             assignment=a, student=request.user,
                             defaults={'status': 'late' if late else 'submitted',
-                                      'score': attempt.score, 'attempt': attempt})
+                                      'score': scaled_score, 'attempt': attempt})
                         assigned_done += 1
                 except Exception:
                     logger.exception('classroom auto-submit failed for test %s', test.id)
@@ -265,7 +266,11 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
         'gemini:<model>' или 'offline' — фронт показывает это учителю.
         POST /api/tests/generate/ {lesson_id?, text?, count?, prompt?} -> {questions:[...], source}.
         Вопросы НЕ сохраняются — учитель правит их в конструкторе и сохраняет как обычно."""
-        from .services.generator import generate_questions
+        from .services.generator import (
+            extract_requested_count,
+            generate_smart_topic_questions,
+            generate_smart_topic_words,
+        )
         from .services.gemini_gen import generate_with_gemini
         from django.conf import settings as _dj
         text = request.data.get('text', '')
@@ -299,29 +304,39 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
         if not isinstance(prompt, str):
             prompt = ''
         prompt = prompt.strip()[:2000]
-        has_text = isinstance(text, str) and len(text.strip()) >= 100
-        has_prompt = len(prompt) >= 10
+        has_text = isinstance(text, str) and len(text.strip()) >= 40
+        has_prompt = len(prompt) >= 2
         if not has_text and not has_prompt:
-            return Response({'error': 'Напиши указание для генератора (от 10 символов) или дай текст от 100 символов (или выбери урок)'}, status=400)
+            return Response({'error': 'Напиши тему или указание (например: «сделай мне вопросы по пайтону 14 вопросов») либо выбери урок'}, status=400)
         try:
-            count = int(request.data.get('count') or 5)
+            raw_count = int(request.data.get('count') or 5)
         except Exception:
-            count = 5
-        count = max(1, min(40, count))
+            raw_count = 5
+        # Если учитель в самом промпте написал "сделай мне вопросы по пайтону 14 вопросов",
+        # приоритет отдаём числу из текста промпта!
+        count = extract_requested_count(prompt, fallback=raw_count, min_val=1, max_val=40)
         try:
             api_key = getattr(_dj, 'GEMINI_API_KEY', '')
             model = getattr(_dj, 'GEMINI_MODEL', 'gemini-2.5-flash')
             questions, used = (None, None)
             if api_key:
                 questions, used = generate_with_gemini((text or '')[:20000], count, api_key, model, prompt)
+            if questions and len(questions) >= count:
+                return Response({'questions': questions[:count], 'count': count, 'source': f'gemini:{used}'})
+            # Если Gemini вернул меньше count или ключ не задан — генерируем/добираем до РОВНО count вопросов
+            smart_qs = generate_smart_topic_questions(prompt=prompt, text=(text or '')[:20000], count=count)
             if questions:
-                return Response({'questions': questions, 'count': len(questions), 'source': f'gemini:{used}'})
-            if not has_text:
-                return Response({'error': 'Без текста офлайн-режим не умеет — напиши текст от 100 символов или проверь ключ генератора'}, status=400)
-            offline = generate_questions(text[:20000], count)
-            if not offline:
-                return Response({'error': 'Из этого текста вопросы не получились — добавь определений вида «Термин — что это»'}, status=400)
-            return Response({'questions': offline, 'count': len(offline), 'source': 'offline'})
+                seen_t = {(q.get('text') or '').strip() for q in questions}
+                for sq in smart_qs:
+                    if len(questions) >= count:
+                        break
+                    if (sq.get('text') or '').strip() not in seen_t:
+                        questions.append(sq)
+                        seen_t.add((sq.get('text') or '').strip())
+                return Response({'questions': questions[:count], 'count': len(questions[:count]), 'source': f'gemini:{used}'})
+            if not smart_qs:
+                return Response({'error': 'Не удалось сгенерировать вопросы по этой теме'}, status=400)
+            return Response({'questions': smart_qs[:count], 'count': len(smart_qs[:count]), 'source': 'smart-ai'})
         except Exception:
             import logging as _lg2
             _lg2.getLogger(__name__).exception("generate failed")
@@ -341,7 +356,7 @@ class AttemptViewSet(viewsets.ReadOnlyModelViewSet):
 
 class WordGenView(APIView):
     """Подбор СЛОВ для игр (Найди слово / Виселица): тема -> список слов. Только для учителей.
-    POST /api/ai/words/ {prompt, count} -> {words:[...], source}. Без GEMINI_API_KEY -> 503."""
+    POST /api/ai/words/ {prompt, count} -> {words:[...], source}."""
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
@@ -350,36 +365,42 @@ class WordGenView(APIView):
             return Response({'error': 'ИИ-генератор доступен только учителям'}, status=403)
         from django.conf import settings as _dj
         from .services.gemini_text import generate_text
+        from .services.generator import extract_requested_count, generate_smart_topic_words
         prompt = str(request.data.get('prompt') or '').strip()[:300]
-        if len(prompt) < 3:
-            return Response({'error': 'Напиши тему минимум из 3 символов'}, status=400)
+        if len(prompt) < 2:
+            return Response({'error': 'Напиши тему минимум из 2 символов'}, status=400)
         try:
-            count = int(request.data.get('count') or 10)
+            raw_count = int(request.data.get('count') or 10)
         except Exception:
-            count = 10
-        count = max(3, min(20, count))
+            raw_count = 10
+        count = extract_requested_count(prompt, fallback=raw_count, min_val=3, max_val=20)
         api_key = getattr(_dj, 'GEMINI_API_KEY', '')
-        if not api_key:
-            return Response({'error': 'Генератор не подключён на сервере (нет GEMINI_API_KEY) — введи слова сам или возьми из урока'}, status=503)
-        gprompt = (
-            f"Дай РОВНО {count} отдельных коротких СЛОВ по теме: «{prompt}». "
-            "Это для школьной игры «угадай слово». Правила: только реальные существительные/имена; "
-            "Маленькими буквами; каждое слово отдельно; БЕЗ фраз из нескольких слов, БЕЗ знаков препинания; "
-            "длина 3-12 букв; дубликаты запрещены; язык роли — как в теме (русский/кыргызский/английский). "
-            "Ответ — ТОЛЬКО JSON-массив строк, без пояснений."
-        )
-        items, used = generate_text(gprompt, api_key, getattr(_dj, 'GEMINI_MODEL', ''), expect_json=True)
-        import re as _re
         words = []
-        seen = set()
-        if isinstance(items, list):
-            for it in items:
-                w = _re.sub(r'[^\w\u0400-\u04FF\u0600-\u06FF\u0900-\u097F]', '', str(it)).strip().lower() if isinstance(it, str) else ''
-                if 3 <= len(w) <= 12 and w not in seen:
-                    words.append(w)
-                    seen.add(w)
-                if len(words) >= count:
-                    break
+        used = None
+        if api_key:
+            gprompt = (
+                f"Дай РОВНО {count} отдельных коротких СЛОВ по теме: «{prompt}». "
+                "Это для школьной игры «угадай слово». Правила: только реальные существительные/имена; "
+                "Маленькими буквами; каждое слово отдельно; БЕЗ фраз из нескольких слов, БЕЗ знаков препинания; "
+                "длина 3-12 букв; дубликаты запрещены; язык роли — как в теме (русский/кыргызский/английский). "
+                "Ответ — ТОЛЬКО JSON-массив строк, без пояснений."
+            )
+            items, used = generate_text(gprompt, api_key, getattr(_dj, 'GEMINI_MODEL', ''), expect_json=True)
+            import re as _re
+            seen = set()
+            if isinstance(items, list):
+                for it in items:
+                    w = _re.sub(r'[^\w\u0400-\u04FF\u0600-\u06FF\u0900-\u097F]', '', str(it)).strip().lower() if isinstance(it, str) else ''
+                    if 3 <= len(w) <= 12 and w not in seen:
+                        words.append(w)
+                        seen.add(w)
+                    if len(words) >= count:
+                        break
+        if len(words) < count:
+            smart_words = generate_smart_topic_words(prompt, count)
+            for sw in smart_words:
+                if sw not in words and len(words) < count:
+                    words.append(sw)
         if not words:
             return Response({'error': 'Не удалось подобрать слова — попробуй другую тему'}, status=502)
-        return Response({'words': words, 'count': len(words), 'source': f'gemini:{used}'})
+        return Response({'words': words[:count], 'count': len(words[:count]), 'source': f'gemini:{used}' if used else 'smart-ai'})

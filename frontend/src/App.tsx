@@ -81,6 +81,11 @@ import ColorMatch from './pages/ColorMatch'
 import Hangman from './pages/Hangman'
 import WordSearch from './pages/WordSearch'
 import FarmerBala from './pages/FarmerBala'
+import MathBattle from './pages/MathBattle'
+import SoundMemory from './pages/SoundMemory'
+import ConnectFour from './pages/ConnectFour'
+const LiveQuizHost = lazy(()=>import('./pages/LiveQuizHost'))
+const LiveQuizPlay = lazy(()=>import('./pages/LiveQuizPlay'))
 import Login from './pages/Login'
 import Profile from './pages/Profile'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -138,6 +143,11 @@ export default function App() {
                 <Route path="/games/hangman" element={<Hangman />} />
                 <Route path="/games/word-search" element={<WordSearch />} />
                 <Route path="/games/farmer" element={<FarmerBala />} />
+                <Route path="/games/math-battle" element={<MathBattle />} />
+                <Route path="/games/sound-memory" element={<SoundMemory />} />
+                <Route path="/games/connect-four" element={<ConnectFour />} />
+                <Route path="/live" element={<LiveQuizPlay />} />
+                <Route path="/live/host" element={<TeacherRoute><LiveQuizHost /></TeacherRoute>} />
                 <Route path="/s/:token" element={<SharedView />} />
                 <Route path="/editor" element={<VSCodeEditor />} />
                 <Route path="/sql" element={<SqlLab />} />

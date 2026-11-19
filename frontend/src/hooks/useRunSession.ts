@@ -96,7 +96,8 @@ export function useRunSession(){
         return
       }
       if(ev.code===4403){
-        setOutput('⚠️ Интерактивный запуск на сервере отключён. Используйте обычный запуск (Run).'); setPassed(false); setState('error')
+        // Оставляем output пустым, чтобы редактор автоматически переключился на HTTP runBatch()
+        setPassed(false); setState('error')
         return
       }
       setState(s=> s==='running'||s==='waiting' ? 'error' : s)

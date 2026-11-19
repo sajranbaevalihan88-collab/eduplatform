@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import client from '../api/client'
 import { toast } from '../context/UIContext'
+import { useLang } from '../context/LangContext'
 import {
   Sparkles, Users, AlertTriangle, Trophy, CheckCircle2, BookOpen,
   FileText, FlaskConical, Send, Download, Copy, ShieldCheck,
@@ -29,12 +30,13 @@ type StudentAnalysis = {
 
 const krBadgeCls = (g: number | null) =>
   g === 5 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-300'
-  : g === 4 ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300 border-sky-300'
-  : g === 3 ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-300'
-  : g === 2 ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-red-300'
-  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-300'
+    : g === 4 ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300 border-sky-300'
+      : g === 3 ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-300'
+        : g === 2 ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-red-300'
+          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-300'
 
 export default function TeacherAI() {
+  const { t } = useLang()
   const [tab, setTab] = useState<'students' | 'drafts' | 'analytics'>('students')
   const [classId, setClassId] = useState<string>('')
   const [filterMode, setFilterMode] = useState<'all' | 'pull_up' | 'leader'>('all')
@@ -101,9 +103,9 @@ export default function TeacherAI() {
   }, [classId])
 
   useEffect(() => {
-    client.get('/topics/').then(r => setTopics(Array.isArray(r.data) ? r.data : r.data.results || [])).catch(() => {})
-    client.get('/subjects/').then(r => setSubjects(Array.isArray(r.data) ? r.data : r.data.results || [])).catch(() => {})
-    client.get('/classrooms/school_analytics/').then(r => setSchoolStats(r.data)).catch(() => {})
+    client.get('/topics/').then(r => setTopics(Array.isArray(r.data) ? r.data : r.data.results || [])).catch(() => { })
+    client.get('/subjects/').then(r => setSubjects(Array.isArray(r.data) ? r.data : r.data.results || [])).catch(() => { })
+    client.get('/classrooms/school_analytics/').then(r => setSchoolStats(r.data)).catch(() => { })
   }, [])
 
   const runAIAnalysis = async () => {
@@ -332,14 +334,11 @@ export default function TeacherAI() {
       <div className="rounded-2xl bg-gradient-to-r from-indigo-600 via-blue-700 to-emerald-700 p-5 sm:p-6 text-white shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-xs font-bold mb-2">
-              <ShieldCheck size={14} /> Только для учителей и администрации
-            </div>
             <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
-              <Sparkles className="text-amber-300" /> ИИ-помощник учителя и Аналитика
+              <Sparkles className="text-amber-300" /> {t('tai_title')}
             </h1>
             <p className="text-white/85 text-xs sm:text-sm mt-1 max-w-3xl">
-              Анализ каждого ученика (кто как учится, у кого какие оценки, кого нужно подтянуть и по каким темам), методические советы, а также генерация черновиков заданий, тестов и объяснений. Учитель проверяет и утверждает результат; ИИ не выставляет итоговые оценки.
+              {t('tai_sub')}
             </p>
           </div>
         </div>
@@ -349,15 +348,15 @@ export default function TeacherAI() {
       <div className="flex flex-wrap gap-2 bg-white dark:bg-slate-900 p-2 rounded-2xl border dark:border-slate-700">
         <button onClick={() => setTab('students')} data-testid="tai-tab-students"
           className={`flex-1 min-w-[200px] py-2.5 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition ${tab === 'students' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
-          <Users size={16} /> Анализ учеников, оценок и советы
+          <Users size={16} /> {t('tai_tab_students')}
         </button>
         <button onClick={() => setTab('drafts')} data-testid="tai-tab-drafts"
           className={`flex-1 min-w-[200px] py-2.5 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition ${tab === 'drafts' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
-          <Sparkles size={16} /> Черновики заданий, тестов и объяснений
+          <Sparkles size={16} /> {t('tai_tab_drafts')}
         </button>
         <button onClick={() => setTab('analytics')} data-testid="tai-tab-analytics"
           className={`flex-1 min-w-[200px] py-2.5 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition ${tab === 'analytics' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
-          <TrendingUp size={16} /> Сводная аналитика школы и Экспорт
+          <TrendingUp size={16} /> {t('tai_tab_analytics')}
         </button>
       </div>
 
@@ -393,39 +392,39 @@ export default function TeacherAI() {
             <div className="flex flex-wrap items-center gap-2">
               <select value={classId} onChange={e => setClassId(e.target.value)} data-testid="tai-class-select"
                 className="w-full sm:w-auto px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 dark:text-white text-sm font-semibold">
-                <option value="">Все мои классы</option>
+                <option value="">{t('tai_all_classes')}</option>
                 {classesList.map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.title} ({c.students_count} уч.)</option>
+                  <option key={c.id} value={c.id}>{c.title} ({c.students_count})</option>
                 ))}
               </select>
               <div className="overflow-x-auto tab-scroll [scrollbar-width:none] max-w-full">
                 <div className="inline-flex rounded-xl border dark:border-slate-700 overflow-hidden text-xs font-bold shrink-0">
                   <button onClick={() => setFilterMode('all')}
                     className={`px-3 py-2.5 whitespace-nowrap min-h-[40px] ${filterMode === 'all' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 dark:text-slate-300'}`}>
-                    Все ({summary.total_students ?? 0})
+                    {t('tai_filter_all')} ({summary.total_students ?? 0})
                   </button>
                   <button onClick={() => setFilterMode('pull_up')} data-testid="tai-filter-pullup"
                     className={`px-3 py-2.5 whitespace-nowrap min-h-[40px] border-l dark:border-slate-700 ${filterMode === 'pull_up' ? 'bg-red-600 text-white' : 'bg-white dark:bg-slate-800 text-red-600'}`}>
-                    ⚠️ Кого подтянуть ({summary.needs_pull_up_count ?? 0})
+                    ⚠️ {t('tai_filter_pull')} ({summary.needs_pull_up_count ?? 0})
                   </button>
                   <button onClick={() => setFilterMode('leader')}
                     className={`px-3 py-2.5 whitespace-nowrap min-h-[40px] border-l dark:border-slate-700 ${filterMode === 'leader' ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-800 text-emerald-600'}`}>
-                    🏆 Лидеры ({summary.leaders_count ?? 0})
+                    🏆 {t('tai_filter_lead')} ({summary.leaders_count ?? 0})
                   </button>
                 </div>
               </div>
-              <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Поиск ученика по имени/нику…"
+              <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder={t('tai_search_ph')}
                 className="flex-1 min-w-[180px] w-full sm:w-auto px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 dark:text-white text-sm" />
             </div>
 
             <div className="flex flex-wrap gap-2 pt-2 border-t dark:border-slate-800">
               <input value={aiPrompt} onChange={e => setAiPrompt(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && runAIAnalysis()}
-                placeholder="Дополнительный вопрос ИИ (необязательно): напр. «Кому дать задачи по дробям и как подтянуть троечников?»"
+                placeholder={t('tai_prompt_ph')}
                 className="flex-1 min-w-0 w-full sm:w-auto px-3.5 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-indigo-50/40 dark:bg-slate-800 dark:text-white text-sm" />
               <button onClick={runAIAnalysis} disabled={aiBusy} data-testid="tai-run-btn"
                 className="w-full sm:w-auto justify-center px-5 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center gap-2 disabled:opacity-50 shadow">
-                <Sparkles size={16} /> {aiBusy ? 'Анализирую оценки и темы…' : 'Сформировать ИИ-анализ и советы'}
+                <Sparkles size={16} /> {aiBusy ? t('tai_running') : t('tai_run_btn')}
               </button>
             </div>
           </div>
@@ -508,19 +507,18 @@ export default function TeacherAI() {
                       {stu.grades.length === 0 && <span className="text-xs text-slate-400">В классе пока нет заданий</span>}
                       {stu.grades.map(g => (
                         <span key={g.assignment_id}
-                          className={`text-xs px-2.5 py-1 rounded-lg border font-medium ${
-                            g.score != null
+                          className={`text-xs px-2.5 py-1 rounded-lg border font-medium ${g.score != null
                               ? (g.pct != null && g.pct >= 70
-                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-900/25 dark:border-emerald-800 dark:text-emerald-200'
-                                  : g.pct != null && g.pct >= 50
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-900/25 dark:border-emerald-800 dark:text-emerald-200'
+                                : g.pct != null && g.pct >= 50
                                   ? 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-900/25 dark:border-amber-800 dark:text-amber-200'
                                   : 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/25 dark:border-red-800 dark:text-red-300')
                               : g.mark
-                              ? 'bg-slate-100 border-slate-300 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                              : g.status === 'overdue'
-                              ? 'bg-red-50 border-red-200 text-red-600 dark:bg-red-900/20'
-                              : 'bg-slate-50 border-slate-200 text-slate-400 dark:bg-slate-800/50 dark:border-slate-700'
-                          }`}>
+                                ? 'bg-slate-100 border-slate-300 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                : g.status === 'overdue'
+                                  ? 'bg-red-50 border-red-200 text-red-600 dark:bg-red-900/20'
+                                  : 'bg-slate-50 border-slate-200 text-slate-400 dark:bg-slate-800/50 dark:border-slate-700'
+                            }`}>
                           {g.title}:{' '}
                           <b>
                             {g.score != null ? `${g.score}/${g.max_score}` : g.mark ? g.mark : g.status === 'overdue' ? 'не сдано!' : 'ждёт'}
@@ -585,11 +583,11 @@ export default function TeacherAI() {
               className={`p-3 rounded-xl border text-left font-bold text-sm flex items-center gap-2 ${draftKind === 'assignment' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-900 dark:text-white dark:border-slate-700'}`}>
               <FileText size={16} /> Черновик задания (с критериями КР)
             </button>
-            <button onClick={() => setDraftKind('explanation')} data-testid="draft-kind-explanation"
+            <button onClick={() => { setDraftKind('explanation'); setDStudentId(''); setDStudentName('') }} data-testid="draft-kind-explanation"
               className={`p-3 rounded-xl border text-left font-bold text-sm flex items-center gap-2 ${draftKind === 'explanation' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-900 dark:text-white dark:border-slate-700'}`}>
               <BookOpen size={16} /> Черновик объяснения темы
             </button>
-            <button onClick={() => setDraftKind('test')} data-testid="draft-kind-test"
+            <button onClick={() => { setDraftKind('test'); setDStudentId(''); setDStudentName('') }} data-testid="draft-kind-test"
               className={`p-3 rounded-xl border text-left font-bold text-sm flex items-center gap-2 ${draftKind === 'test' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-900 dark:text-white dark:border-slate-700'}`}>
               <FlaskConical size={16} /> Черновик теста / диагностики
             </button>
@@ -754,11 +752,19 @@ export default function TeacherAI() {
                     <div className="grid sm:grid-cols-2 gap-1.5 pl-8">
                       {q.options.map((o: any, oi: number) => (
                         <label key={oi} className="flex items-center gap-1.5 text-xs dark:text-slate-200">
-                          <input type="checkbox" checked={!!o.is_correct}
+                          <input
+                            type={q.type === 'multi' ? 'checkbox' : 'radio'}
+                            name={`draft-q-${qi}`}
+                            checked={!!o.is_correct}
                             onChange={e => setDraftQuestions(qs => qs.map((x, i) => i === qi ? {
                               ...x,
-                              options: x.options.map((op: any, idx: number) => idx === oi ? { ...op, is_correct: e.target.checked } : op)
-                            } : x))} />
+                              options: x.options.map((op: any, idx: number) =>
+                                q.type === 'multi'
+                                  ? (idx === oi ? { ...op, is_correct: e.target.checked } : op)
+                                  : { ...op, is_correct: idx === oi }
+                              )
+                            } : x))}
+                          />
                           <input value={o.text}
                             onChange={e => setDraftQuestions(qs => qs.map((x, i) => i === qi ? {
                               ...x,
@@ -813,6 +819,7 @@ export default function TeacherAI() {
                 <thead>
                   <tr className="text-left text-xs text-slate-400 border-b dark:border-slate-700">
                     <th className="p-2">Класс</th>
+                    <th className="p-2">Учитель</th>
                     <th className="p-2">Предмет</th>
                     <th className="p-2">Учеников</th>
                     <th className="p-2">Средний %</th>
@@ -828,6 +835,7 @@ export default function TeacherAI() {
                       <td className="p-2 font-bold">
                         <Link to={`/classes/${c.id}`} className="text-indigo-600 dark:text-indigo-400 hover:underline">{c.title}</Link>
                       </td>
+                      <td className="p-2 text-xs text-slate-500">@{c.owner || '—'}</td>
                       <td className="p-2 text-xs text-slate-500">{c.subject || '—'}</td>
                       <td className="p-2">{c.students_count}</td>
                       <td className="p-2 font-bold">{c.avg_pct != null ? `${c.avg_pct}%` : '—'}</td>
@@ -842,7 +850,7 @@ export default function TeacherAI() {
                     </tr>
                   ))}
                   {!(schoolStats?.classes || []).length && (
-                    <tr><td colSpan={8} className="p-4 text-center text-slate-400">Нет данных по классам</td></tr>
+                    <tr><td colSpan={9} className="p-4 text-center text-slate-400">Нет данных по классам</td></tr>
                   )}
                 </tbody>
               </table>
@@ -871,4 +879,5 @@ export default function TeacherAI() {
     </div>
   )
 }
+
 

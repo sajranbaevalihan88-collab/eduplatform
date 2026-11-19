@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import client from '../api/client'
 import { Link } from 'react-router-dom'
-import { Plus, FlaskConical, Clock, Target, Search } from 'lucide-react'
-import { isStudent } from '../utils/role'
+import { Plus, FlaskConical, Clock, Target, Search, Zap } from 'lucide-react'
+import { canTeach, isStudent } from '../utils/role'
 import { requestGuardFullscreen } from '../utils/shotGuard'
 import { useLang } from '../context/LangContext'
 
@@ -51,6 +51,12 @@ export default function Tests(){
             <div className="flex gap-2 text-xs mt-3 text-slate-500"><span className="flex items-center gap-1"><Target size={12}/> {t('tests_pass')} {item.pass_score}%</span><span className="flex items-center gap-1"><Clock size={12}/> {item.time_limit||t('tests_no_limit')} {t('tests_min')}</span></div>
             <div className="flex gap-2 mt-4">
               <Link to={`/tests/${item.id}/take`} onClick={()=>requestGuardFullscreen()} className="flex-1 px-3 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 text-white text-sm font-semibold text-center flex items-center justify-center">{t('tests_take')}</Link>
+              {canTeach() && (
+                <Link to={`/live/host?test=${item.id}`} title="Запустить Билим-Квиз Live (Kahoot)"
+                  className="px-3 py-2.5 min-h-[44px] rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-sm font-bold flex items-center justify-center gap-1">
+                  <Zap size={15}/> Live
+                </Link>
+              )}
               {canEdit(item) ? <Link to={`/tests/${item.id}`} className="px-3 py-2.5 min-h-[44px] rounded-xl bg-slate-100 text-sm font-medium flex items-center justify-center">{t('edit')}</Link> : <span className="px-3 py-2.5 min-h-[44px] rounded-xl bg-slate-50 text-slate-400 text-sm flex items-center justify-center" title={t('tests_lock')}>🔒</span>}
             </div>
           </div>

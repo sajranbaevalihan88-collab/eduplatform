@@ -57,12 +57,13 @@ class ClassroomSerializer(serializers.ModelSerializer):
 
 class EnrollmentSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.username', read_only=True, default='')
+    student_first_name = serializers.CharField(source='student.first_name', read_only=True, default='')
     # статус под платный класс адаптирован: не оплатил -> 'pending' независимо от legacy-поля
     status = serializers.SerializerMethodField()
 
     class Meta:
         model = Enrollment
-        fields = ['id', 'classroom', 'student', 'student_name', 'status', 'access_granted',
+        fields = ['id', 'classroom', 'student', 'student_name', 'student_first_name', 'status', 'access_granted',
                   'receipt', 'receipt_at', 'paid_requested_at', 'created_at']
         read_only_fields = ['id', 'created_at']
 
@@ -75,6 +76,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 class AssignmentSerializer(serializers.ModelSerializer):
     title = serializers.CharField(read_only=True)
     topic_title = serializers.CharField(source='topic.title', read_only=True, default='')
+    topic_criteria = serializers.CharField(source='topic.description', read_only=True, default='')
     assigned_to_name = serializers.CharField(source='assigned_to.username', read_only=True, default='')
     object_id = serializers.SerializerMethodField()
     submitted_count = serializers.IntegerField(read_only=True, default=0)
@@ -83,7 +85,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Assignment
         fields = ['id', 'classroom', 'kind', 'lesson', 'test', 'title', 'object_id', 'manual_title', 'url',
-                  'topic', 'topic_title', 'assigned_to', 'assigned_to_name', 'instructions', 'deadline',
+                  'topic', 'topic_title', 'topic_criteria', 'assigned_to', 'assigned_to_name', 'instructions', 'deadline',
                   'max_score', 'created_at', 'submitted_count', 'graded_count']
         read_only_fields = ['id', 'created_at']
 

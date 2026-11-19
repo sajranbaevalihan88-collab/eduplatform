@@ -85,13 +85,19 @@ def _piston_single(lang, code, stdin=''):
             return _piston_error(lang, last_detail)
     return _piston_error(lang, last_detail)
 
-def _limit_memory():
-    """Ограничение RAM для дочернего процесса (Linux). На Windows — no-op."""
+def _limit_memory(cpu_sec=6):
+    """Ограничение RAM/CPU/FSIZE/NOFILE для дочернего процесса (Linux). На Windows — no-op."""
     try:
         import resource
-        # 256 MB
+        # 256 MB RAM
         resource.setrlimit(resource.RLIMIT_AS, (256*1024*1024, 256*1024*1024))
         resource.setrlimit(resource.RLIMIT_DATA, (256*1024*1024, 256*1024*1024))
+        # CPU time limit
+        resource.setrlimit(resource.RLIMIT_CPU, (cpu_sec, cpu_sec))
+        # Макс размер создаваемого файла 2 MB
+        resource.setrlimit(resource.RLIMIT_FSIZE, (2*1024*1024, 2*1024*1024))
+        # Макс открытых дескрипторов
+        resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
     except ImportError:
         pass
     except Exception:
@@ -153,18 +159,19 @@ def run_single(code, language='python', stdin_data='', timeout=5):
     language = alias.get(language, language)
     if language not in ALLOWED_RUN_LANGS:
         return f"Язык «{language}» отключен. Доступны: python, javascript, html, css.", False
-    # Прод-режим: гнать всё через Piston/Judge0, без локального subprocess (изоляция из коробки)
+    # Внешний Piston только при настроенном self-hosted инстансе (публичный emkc.org отключён: HTTP 401)
     try:
         from django.conf import settings
-        if getattr(settings, 'CODE_USE_PISTON_ONLY', False):
-            # html/css — всё равно preview, остальное — Piston
+        piston_url = (getattr(settings, 'PISTON_URL', '') or '').strip()
+        use_piston = getattr(settings, 'CODE_USE_PISTON_ONLY', False) and piston_url and ('emkc.org' not in piston_url.lower())
+        if use_piston:
             if language in ('html', 'css'):
                 return code[:3000], True
-            return _piston_single(language, code, stdin_data)
-        if getattr(settings, 'CODE_USE_DOCKER', False):
-            # Заглушка для Docker — пока делегируем в Piston
-            return _piston_single(language, code, stdin_data)
-    except: pass
+            out_p, ok_p = _piston_single(language, code, stdin_data)
+            if ok_p or ('HTTP 401' not in out_p and 'сеть недоступна' not in out_p):
+                return out_p, ok_p
+    except Exception:
+        pass
     has_input = 'input(' in code if language=='python' else False
     if has_input:
         hint = check_stdin(code, stdin_data)
@@ -189,10 +196,10 @@ def run_single(code, language='python', stdin_data='', timeout=5):
             with open(fname, 'w', encoding='utf-8') as f:
                 f.write(code)
             env = _get_run_env(tmpdir)
-            # На Linux — лимит памяти через preexec_fn, на Windows — через env
+            # На Linux — лимит памяти/CPU через preexec_fn; -I изолирует окружение, -X utf8 гарантирует UTF-8 для кириллицы
             preexec = _limit_memory if os.name != 'nt' else None
             result = subprocess.run(
-                [sys.executable, fname], input=stdin_data,
+                [sys.executable, '-I', '-X', 'utf8', fname], input=stdin_data,
                 capture_output=True, text=True, encoding='utf-8', errors='replace',
                 timeout=timeout, env=env, cwd=tmpdir, preexec_fn=preexec
             )
@@ -202,7 +209,12 @@ def run_single(code, language='python', stdin_data='', timeout=5):
             with open(fname, 'w', encoding='utf-8') as f:
                 f.write(code)
             # env обязателен: без него node получает полный os.environ хоста
-            result = subprocess.run(['node', fname], input=stdin_data, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout, cwd=tmpdir, env=_get_run_env(tmpdir))
+            # --disallow-code-generation-from-strings блокирует eval/new Function на уровне V8
+            result = subprocess.run(
+                ['node', '--disallow-code-generation-from-strings', '--max-old-space-size=128', fname],
+                input=stdin_data, capture_output=True, text=True, encoding='utf-8', errors='replace',
+                timeout=timeout, cwd=tmpdir, env=_get_run_env(tmpdir)
+            )
             return (result.stdout+result.stderr)[:5000], result.returncode==0
         elif language in ('html', 'css'):
             return code[:3000], True
@@ -348,10 +360,10 @@ def run_project(files, entry='main.py', requirements='', stdin_data='', timeout=
         if not os.path.exists(full_entry):
             return f"Entry {entry_file} не найден. Файлы: {', '.join(p for p,_ in norm)}", False
 
-        cmd = [sys.executable, full_entry] + entry_args
+        cmd = [sys.executable, '-X', 'utf8', full_entry] + entry_args
         # Для django runserver — делаем check вместо сервера (сервер — долгий процесс)
         if 'runserver' in entry_args:
-            cmd = [sys.executable, full_entry, 'check']
+            cmd = [sys.executable, '-X', 'utf8', full_entry, 'check']
 
         # 5. Запуск — спец-обработка Flask (app.run блокирует, делаем тест-клиент)
         flask_detected = any('from flask import' in c and 'Flask(' in c for _,c in norm)

@@ -62,24 +62,55 @@ const DICT: Record<string, Record<string, string>> = {
 }
 
 // [мы, Google Classroom, Kahoot, Moodle]: 2 = да, 1 = частично, 0 = нет
-const ROWS_RU = [
-  { name: '🧪 Тесты как в Google Forms (конструктор, автопроверка)', vals: [2, 0, 0, 1] },
-  { name: 'Работает без API-ключей (офлайн-генератор)', vals: [2, 2, 2, 0] },
-  { name: 'Доска 2D/3D с осями координат', vals: [2, 0, 0, 0] },
-  { name: 'Редактор кода с живым HTML-превью', vals: [2, 0, 0, 0] },
-  { name: 'Кыргызский язык интерфейса', vals: [2, 0, 0, 1] },
-  { name: 'Игры-тренажёры по предметам', vals: [2, 0, 2, 0] },
-  { name: 'Защита тестов от скриншотов', vals: [2, 0, 0, 0] },
-  { name: 'Всё в одном окне (урок+тест+презентация)', vals: [2, 1, 0, 1] },
-  { name: 'Мини-журнал: ручные колонки, оценки и средние', vals: [2, 2, 0, 1] },
-  { name: 'Работает на телефоне и интерактивной доске', vals: [2, 2, 2, 1] },
-  { name: 'Демо-вход без регистрации и сборок', vals: [2, 0, 0, 0] },
-  { name: 'Лёгкая для старых ноутбуков', vals: [2, 1, 2, 0] },
-]
+const ROWS_BY_LANG: Record<string, { name: string; vals: number[] }[]> = {
+  ru: [
+    { name: '🧪 Тесты как в Google Forms (конструктор, автопроверка)', vals: [2, 0, 0, 1] },
+    { name: 'Работает без API-ключей (офлайн-генератор)', vals: [2, 2, 2, 0] },
+    { name: 'Доска 2D/3D с осями координат', vals: [2, 0, 0, 0] },
+    { name: 'Редактор кода с живым HTML-превью', vals: [2, 0, 0, 0] },
+    { name: 'Кыргызский язык интерфейса', vals: [2, 0, 0, 1] },
+    { name: 'Игры-тренажёры по предметам', vals: [2, 0, 2, 0] },
+    { name: 'Защита тестов от скриншотов', vals: [2, 0, 0, 0] },
+    { name: 'Всё в одном окне (урок+тест+презентация)', vals: [2, 1, 0, 1] },
+    { name: 'Мини-журнал: ручные колонки, оценки и средние', vals: [2, 2, 0, 1] },
+    { name: 'Работает на телефоне и интерактивной доске', vals: [2, 2, 2, 1] },
+    { name: 'Демо-вход без регистрации и сборок', vals: [2, 0, 0, 0] },
+    { name: 'Лёгкая для старых ноутбуков', vals: [2, 1, 2, 0] },
+  ],
+  en: [
+    { name: '🧪 Google Forms-style quizzes (builder, auto-grading)', vals: [2, 0, 0, 1] },
+    { name: 'Works without API keys (offline generator)', vals: [2, 2, 2, 0] },
+    { name: '2D/3D whiteboard with coordinate axes & formulas', vals: [2, 0, 0, 0] },
+    { name: 'Code editor with Python/JS runner & live HTML preview', vals: [2, 0, 0, 0] },
+    { name: 'Kyrgyz, Russian & English interface out of the box', vals: [2, 0, 0, 1] },
+    { name: 'Subject learning games & 3D coding farm', vals: [2, 0, 2, 0] },
+    { name: 'Anti-screenshot test protection', vals: [2, 0, 0, 0] },
+    { name: 'All in one window (lesson + quiz + presentation)', vals: [2, 1, 0, 1] },
+    { name: 'Gradebook: custom columns, grades & averages', vals: [2, 2, 0, 1] },
+    { name: 'Works on smartphones and interactive whiteboards', vals: [2, 2, 2, 1] },
+    { name: 'Instant demo without setup or builds', vals: [2, 0, 0, 0] },
+    { name: 'Lightweight for older school laptops', vals: [2, 1, 2, 0] },
+  ],
+  kg: [
+    { name: '🧪 Google Forms сыяктуу тесттер (конструктор, авто-текшерүү)', vals: [2, 0, 0, 1] },
+    { name: 'API ачкычысыз иштейт (офлайн генератор)', vals: [2, 2, 2, 0] },
+    { name: 'Координат октору бар 2D/3D доска', vals: [2, 0, 0, 0] },
+    { name: 'Python/JS жана жандуу HTML-превью бар код редактору', vals: [2, 0, 0, 0] },
+    { name: 'Кыргыз тилиндеги интерфейс даяр', vals: [2, 0, 0, 1] },
+    { name: 'Предметтер боюнча окуу оюндары', vals: [2, 0, 2, 0] },
+    { name: 'Тесттерди скриншоттон коргоо', vals: [2, 0, 0, 0] },
+    { name: 'Баары бир терезеде (сабак+тест+презентация)', vals: [2, 1, 0, 1] },
+    { name: 'Журнал: кол колонкалары, баалар жана орточо балл', vals: [2, 2, 0, 1] },
+    { name: 'Телефондо жана интерактивдүү доскада иштейт', vals: [2, 2, 2, 1] },
+    { name: 'Тез демо-кирүү', vals: [2, 0, 0, 0] },
+    { name: 'Эски ноутбуктарда жеңил иштейт', vals: [2, 1, 2, 0] },
+  ],
+}
 
 export default function About() {
   const { lang, t } = useLang()
   const L = DICT[lang] || DICT.ru
+  const ROWS = ROWS_BY_LANG[lang] || ROWS_BY_LANG.ru
   const mark = (v: number) => v === 2
     ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"><Check size={15} strokeWidth={3}/></span>
     : v === 1
@@ -135,7 +166,7 @@ export default function About() {
               </tr>
             </thead>
             <tbody>
-              {ROWS_RU.map(r => (
+              {ROWS.map(r => (
                 <tr key={r.name} className="border-b border-slate-100 dark:border-slate-700/60 last:border-0">
                   <td className="p-3 dark:text-white">{r.name}</td>
                   {r.vals.map((v, i) => <td key={i} className="p-3 text-center">{mark(v)}</td>)}

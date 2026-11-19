@@ -3,10 +3,11 @@ import { useSearchParams } from 'react-router-dom'
 import client from '../api/client'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
-import { Medal, FolderKanban, TrendingUp, Star, Printer, Plus, Trash2, User as UserIcon, ChevronRight, X, FileText, Paperclip } from 'lucide-react'
+import { Medal, FolderKanban, TrendingUp, Star, Printer, Plus, Trash2, User as UserIcon, ChevronRight, X, FileText, Paperclip, Eye, Download, Loader2 } from 'lucide-react'
+import PdfModal from '../components/PdfModal'
 
-type Work = { assignment_id: number; title: string; kind: string; classroom: string; topic: string; score: number | null; max_score: number; pct: number; answer?: string; url?: string; submitted_at: string }
-type Ach = { id: number; title: string; kind: string; description: string; event_date: string | null; added_by_name: string; created_at: string; file?: string | null; is_image?: boolean }
+type Work = { assignment_id: number; title: string; kind: string; classroom: string; topic: string; score: number | null; max_score: number; pct: number | null; answer?: string; url?: string; submitted_at: string }
+type Ach = { id: number; title: string; kind: string; description: string; event_date: string | null; added_by_name: string; created_at: string; file?: string | null; file_name?: string; is_image?: boolean; is_pdf?: boolean }
 type Student = { id: number; username: string; first_name: string; classes?: string[] }
 type TopicRow = { topic_id: number; title: string; pct: number; status: string; subject_name?: string; grade?: string; criteria?: string; kr_grade?: number }
 type Data = {
@@ -15,14 +16,14 @@ type Data = {
   works: Work[]; achievements: Ach[]
 }
 
-const KIND_META: Record<string, { emoji: string; label: string }> = {
-  project: { emoji: '💻', label: 'Проект / реальная работа' },
-  skill: { emoji: '🎯', label: 'Освоенный навык' },
-  gramota: { emoji: '📜', label: 'Грамота' },
-  cubok: { emoji: '🏆', label: 'Кубок/место' },
-  blagodarnost: { emoji: '💌', label: 'Благодарность' },
-  olimpiad: { emoji: '🧠', label: 'Олимпиада' },
-  other: { emoji: '⭐', label: 'Другое' },
+const KIND_META: Record<string, { emoji: string; tKey: string }> = {
+  project: { emoji: '💻', tKey: 'pf_kind_project' },
+  skill: { emoji: '🎯', tKey: 'pf_kind_skill' },
+  gramota: { emoji: '📜', tKey: 'pf_kind_cert' },
+  cubok: { emoji: '🏆', tKey: 'pf_kind_olympiad' },
+  blagodarnost: { emoji: '💌', tKey: 'pf_kind_cert' },
+  olimpiad: { emoji: '🧠', tKey: 'pf_kind_olympiad' },
+  other: { emoji: '⭐', tKey: 'pf_kind_other' },
 }
 const pctCls = (p: number) => p >= 80 ? 'bg-emerald-500' : p >= 50 ? 'bg-sky-500' : 'bg-red-500'
 const pctTxt = (p: number) => p >= 80 ? 'text-emerald-600' : p >= 50 ? 'text-sky-600' : 'text-red-600'
@@ -44,6 +45,9 @@ export default function Portfolio() {
   const [nfile, setNfile] = useState<File | null>(null)
   const [nfileUrl, setNfileUrl] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
+  // встроенный просмотрщик PDF / фото
+  const [viewer, setViewer] = useState<{ title: string; fileName: string; blobUrl: string; isImage: boolean; revokeOnClose: boolean } | null>(null)
+  const [openingId, setOpeningId] = useState<number | null>(null)
   // комбобокс поиска ученика (учитель/админ)
   const [sq, setSq] = useState('')
   const [sOpen, setSOpen] = useState(false)
@@ -130,7 +134,45 @@ export default function Portfolio() {
     const ext = f.name.toLowerCase().split('.').pop() || ''
     if (!FILE_OK.includes(ext) || f.size > FILE_MAX) { toast(t('pf_ach_file_err'), 'error'); return }
     setNfile(f)
-    if (f.type.startsWith('image/')) setNfileUrl(URL.createObjectURL(f))
+    // Для предпросмотра создаём локальный URL и для фото, и для PDF
+    setNfileUrl(URL.createObjectURL(f))
+  }
+
+  const closeViewer = () => {
+    if (viewer?.revokeOnClose && viewer.blobUrl) URL.revokeObjectURL(viewer.blobUrl)
+    setViewer(null)
+  }
+
+  const openAchFile = async (a: Ach, downloadOnly = false) => {
+    const isImg = a.is_image != null ? a.is_image : /\.(jpe?g|png|webp|gif)$/i.test(a.file || '')
+    const isPdf = a.is_pdf != null ? a.is_pdf : /\.pdf$/i.test(a.file || '')
+    const fileName = a.file_name || (() => {
+      try { return decodeURIComponent((a.file || '').split('/').pop() || (isPdf ? 'document.pdf' : 'file')) } catch { return 'file' }
+    })()
+    setOpeningId(a.id)
+    try {
+      const r = await client.get(`/portfolio/achievements/${a.id}/file/`, { responseType: 'blob' })
+      const rawBlob = r.data as Blob
+      const blob = isPdf && rawBlob.type !== 'application/pdf'
+        ? new Blob([rawBlob], { type: 'application/pdf' })
+        : rawBlob
+      const blobUrl = URL.createObjectURL(blob)
+      if (downloadOnly) {
+        const link = document.createElement('a')
+        link.href = blobUrl
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000)
+      } else {
+        setViewer({ title: a.title, fileName, blobUrl, isImage: isImg, revokeOnClose: true })
+      }
+    } catch {
+      toast('Не удалось открыть файл', 'error')
+    } finally {
+      setOpeningId(null)
+    }
   }
 
   const addAch = async () => {
@@ -151,8 +193,9 @@ export default function Portfolio() {
       setAdding(false); setNtitle(''); setNdesc(''); setNdate(''); setNkind('gramota')
       toast(t('pf_ach_added'), 'success')
       load()
-    } catch {
-      toast(t('pf_ach_file_err'), 'error')
+    } catch (e: any) {
+      const msg = e?.response?.data?.file || e?.response?.data?.title || e?.response?.data?.detail || e?.response?.data?.error || t('pf_ach_file_err')
+      toast(String(msg), 'error')
     }
   }
 
@@ -269,10 +312,10 @@ export default function Portfolio() {
       <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 p-4">
         <div className="flex items-center gap-2 mb-3">
           <h2 className="font-bold text-sm dark:text-white flex items-center gap-1.5"><Star size={15} className="text-amber-500"/>Проекты, достижения и освоенные навыки</h2>
-          {((canAdd && user) || data.is_self) && (
+          {canAdd && (user || data.username) && (
             <button onClick={() => setAdding(v => !v)} data-testid="pf-add-ach-btn"
               className="ml-auto px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold flex items-center gap-1">
-              <Plus size={13}/>{data.is_self && !canAdd ? 'Добавить свой проект / работу' : t('pf_ach_add')}
+              <Plus size={13}/>{t('pf_ach_add')}
             </button>
           )}
         </div>
@@ -284,7 +327,7 @@ export default function Portfolio() {
                 data-testid="pf-ach-title" className="flex-1 min-w-40 px-3 py-2 rounded-xl border dark:border-slate-600 bg-white dark:bg-slate-900 dark:text-white text-sm"/>
               <select value={nkind} onChange={e => setNkind(e.target.value)} data-testid="pf-ach-kind"
                 className="px-3 py-2 rounded-xl border dark:border-slate-600 bg-white dark:bg-slate-900 dark:text-white text-sm">
-                {Object.entries(KIND_META).map(([k, m]) => <option key={k} value={k}>{m.emoji} {m.label}</option>)}
+                {Object.entries(KIND_META).map(([k, m]) => <option key={k} value={k}>{m.emoji} {t(m.tKey)}</option>)}
               </select>
               <input type="date" value={ndate} onChange={e => setNdate(e.target.value)} data-testid="pf-ach-date"
                 className="px-3 py-2 rounded-xl border dark:border-slate-600 bg-white dark:bg-slate-900 dark:text-white text-sm"/>
@@ -299,15 +342,24 @@ export default function Portfolio() {
                 <Paperclip size={14}/>{t('pf_ach_file')}
               </button>
               {nfile && (
-                <div className="mt-2 flex items-center gap-2" data-testid="pf-ach-file-preview">
-                  {nfileUrl ? (
+                <div className="mt-2 flex items-center gap-2 flex-wrap" data-testid="pf-ach-file-preview">
+                  {nfileUrl && nfile.type.startsWith('image/') ? (
                     <img src={nfileUrl} alt={nfile.name} className="w-10 h-10 rounded-lg object-cover border dark:border-slate-700"/>
                   ) : (
-                    <span className="w-10 h-10 rounded-lg border dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                    <span className="w-10 h-10 rounded-lg border dark:border-slate-700 bg-rose-50 dark:bg-rose-900/30 flex items-center justify-center text-rose-600 dark:text-rose-300">
                       <FileText size={18}/>
                     </span>
                   )}
-                  <span className="text-xs text-slate-500 dark:text-slate-300 truncate max-w-56">{nfile.name}</span>
+                  <span className="text-xs text-slate-600 dark:text-slate-300 truncate max-w-56 font-medium">{nfile.name}</span>
+                  {nfileUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setViewer({ title: ntitle || nfile.name, fileName: nfile.name, blobUrl: nfileUrl, isImage: nfile.type.startsWith('image/'), revokeOnClose: false })}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold flex items-center gap-1 hover:bg-indigo-100"
+                    >
+                      <Eye size={13}/> Посмотреть
+                    </button>
+                  )}
                   <button onClick={clearFile} data-testid="pf-ach-file-clear" className="p-0.5 text-slate-400 hover:text-red-500" aria-label="clear">
                     <X size={14}/>
                   </button>
@@ -330,27 +382,45 @@ export default function Portfolio() {
                 <div className="text-2xl">{meta.emoji}</div>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm dark:text-white">{a.title}</div>
-                  <div className="text-xs text-slate-500">{meta.label}{a.event_date ? ` · ${new Date(a.event_date).toLocaleDateString()}` : ''}{a.description ? ` · ${a.description}` : ''}</div>
+                  <div className="text-xs text-slate-500">{t(meta.tKey)}{a.event_date ? ` · ${new Date(a.event_date).toLocaleDateString()}` : ''}{a.description ? ` · ${a.description}` : ''}</div>
                 </div>
                 {a.file && (() => {
                   const isImg = a.is_image != null ? a.is_image : /\.(jpe?g|png|webp|gif)$/i.test(a.file as string)
-                  const fileName = (() => { try { return decodeURIComponent((a.file as string).split('/media/')[1]?.split('/').pop() || '') } catch { return a.file as string } })()
+                  const isPdf = a.is_pdf != null ? a.is_pdf : /\.pdf$/i.test(a.file as string)
+                  const fileName = a.file_name || (() => { try { return decodeURIComponent((a.file as string).split('/media/')[1]?.split('/').pop() || '') } catch { return a.file as string } })()
+                  const busy = openingId === a.id
                   return (
-                    <a href={a.file} target="_blank" rel="noreferrer" data-testid={`pf-ach-file-${a.id}`}
-                      className={`shrink-0 ${isImg ? '' : 'flex flex-col items-center gap-0.5 text-slate-500 hover:text-indigo-600 dark:text-slate-300'}`} title={isImg ? '' : fileName}>
-                      {isImg ? (
-                        <img src={a.file} alt={a.title} className="w-14 h-14 rounded-lg object-cover border border-amber-200 dark:border-amber-900/40"/>
-                      ) : (
-                        <>
-                          <FileText size={22}/>
-                          <span className="text-[10px] max-w-24 truncate">{fileName}</span>
-                        </>
-                      )}
-                    </a>
+                    <div className="shrink-0 flex items-center gap-1.5 print:hidden">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => openAchFile(a, false)}
+                        data-testid={`pf-ach-file-${a.id}`}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition ${
+                          isPdf
+                            ? 'bg-rose-50 dark:bg-rose-900/30 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200 hover:bg-rose-100'
+                            : 'bg-white dark:bg-slate-800 border-amber-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-indigo-400'
+                        }`}
+                        title={fileName}
+                      >
+                        {busy ? <Loader2 size={14} className="animate-spin"/> : isPdf ? <FileText size={15}/> : <Eye size={14}/>}
+                        <span className="max-w-28 truncate">{isPdf ? 'Открыть PDF' : isImg ? 'Фото' : fileName}</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => openAchFile(a, true)}
+                        className="p-1.5 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-indigo-600 dark:text-slate-300"
+                        title="Скачать файл"
+                        aria-label="Скачать файл"
+                      >
+                        <Download size={14}/>
+                      </button>
+                    </div>
                   )
                 })()}
                 {canAdd && a.added_by_name && (
-                  <button onClick={() => delAch(a.id)} data-testid={`pf-ach-del-${a.id}`} className="p-1.5 text-slate-300 hover:text-red-500 print:hidden" aria-label="Удалить достижении">
+                  <button onClick={() => delAch(a.id)} data-testid={`pf-ach-del-${a.id}`} className="p-1.5 text-slate-300 hover:text-red-500 print:hidden" aria-label="Удалить достижение">
                     <Trash2 size={14}/>
                   </button>
                 )}
@@ -389,12 +459,14 @@ export default function Portfolio() {
           {data.works.map((w) => (
             <div key={w.assignment_id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 space-y-1.5" data-testid={`pf-work-${w.assignment_id}`}>
               <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm text-white shrink-0 ${pctCls(w.pct)}`}>{Math.round(w.pct)}</div>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm text-white shrink-0 ${w.pct != null ? pctCls(w.pct) : 'bg-indigo-500'}`}>
+                  {w.pct != null ? `${Math.round(w.pct)}%` : '✓'}
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm dark:text-white truncate">{w.title}</div>
                   <div className="text-xs text-slate-400">{w.classroom}{w.topic ? ` · тема: ${w.topic}` : ''} · {new Date(w.submitted_at).toLocaleDateString()}</div>
                 </div>
-                {w.score != null && <div className="text-xs font-bold dark:text-white">{w.score}/{w.max_score}</div>}
+                {w.score != null ? <div className="text-xs font-bold dark:text-white">{w.score}/{w.max_score}</div> : <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-semibold">Сдано</span>}
               </div>
               {w.answer && (
                 <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap">
@@ -454,6 +526,16 @@ export default function Portfolio() {
           {diags.length === 0 && <div className="text-xs text-slate-400 py-1">{t('pf_diags_empty')}</div>}
         </div>
       </div>
+      {/* Модальное окно встроенного просмотрщика PDF / изображений */}
+      {viewer && (
+        <PdfModal
+          title={viewer.title}
+          fileName={viewer.fileName}
+          blobUrl={viewer.blobUrl}
+          isImage={viewer.isImage}
+          onClose={closeViewer}
+        />
+      )}
     </div>
   )
 }

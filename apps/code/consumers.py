@@ -37,6 +37,9 @@ def _limit_memory():
     try:
         import resource
         resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))
+        resource.setrlimit(resource.RLIMIT_CPU, (20, 20))
+        resource.setrlimit(resource.RLIMIT_FSIZE, (2 * 1024 * 1024, 2 * 1024 * 1024))
+        resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
     except Exception:
         pass
 
@@ -66,14 +69,14 @@ class RunSession:
             fname = os.path.join(self.tmpdir, 'main.py')
             with open(fname, 'w', encoding='utf-8') as f:
                 f.write(self.code)
-            # -u: без буферизации, иначе подсказки input() не видны до ввода
-            cmd = [sys.executable, '-u', fname]
+            # -I -u -X utf8: изолированный режим, без буферизации (для input()) и UTF-8 для кириллицы
+            cmd = [sys.executable, '-I', '-u', '-X', 'utf8', fname]
             preexec = _limit_memory if os.name != 'nt' else None
         else:
             fname = os.path.join(self.tmpdir, 'main.js')
             with open(fname, 'w', encoding='utf-8') as f:
                 f.write(self.code)
-            cmd = ['node', fname]
+            cmd = ['node', '--disallow-code-generation-from-strings', '--max-old-space-size=128', fname]
             preexec = None
         self.proc = subprocess.Popen(
             cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -173,8 +176,9 @@ class RunConsumer(AsyncWebsocketConsumer):
             await self.close(code=4401)
             return
         from django.conf import settings as _s
-        if getattr(_s, 'CODE_USE_PISTON_ONLY', False):
-            # в проде локальный subprocess без изоляции запрещён — интерактива нет
+        piston_url = (getattr(_s, 'PISTON_URL', '') or '').strip()
+        if getattr(_s, 'CODE_USE_PISTON_ONLY', False) and piston_url and ('emkc.org' not in piston_url.lower()):
+            # только если явно настроен свой self-hosted Piston-only
             await self.close(code=4403)
             return
         if _global_running >= MAX_GLOBAL_SESSIONS:

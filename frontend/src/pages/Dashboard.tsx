@@ -74,9 +74,24 @@ export default function Dashboard(){
           <h1 className="text-3xl md:text-4xl font-display font-extrabold animate-fadeIn dark:text-white" style={{animationDelay:'0.1s'}}>{me ? `${t('dash_hello')} ${me.username}` : t('welcome')}</h1>
           <p className="text-white/80 mt-2 max-w-2xl animate-fadeIn" style={{animationDelay:'0.2s'}}>{me ? `${t('dash_role_prefix')} ${me.role} ${t('dash_role_suffix')}` : t('dash_guest')}</p>
           <div className="flex flex-wrap gap-3 mt-6 animate-fadeIn" style={{animationDelay:'0.3s'}}>
-            <Link to="/lessons/new" className="px-6 py-3 rounded-xl bg-orange-500 text-white font-semibold flex items-center gap-2 btn-hover shadow-lg hover:bg-orange-400">{t('create_lesson')} <ArrowRight size={18} className="transition-transform group-hover:translate-x-1"/></Link>
-            {me?.role!=='admin' && <Link to="/presentations/new" className="px-5 py-3 rounded-xl bg-white/10 border border-white/20 font-semibold backdrop-blur hover:bg-white/20 transition-all btn-hover">{t('dash_new_pres')}</Link>}
-            <Link to="/tests/new" className="px-5 py-3 rounded-xl bg-white/10 border border-white/20 font-semibold backdrop-blur hover:bg-white/20 transition-all btn-hover">{t('dash_new_test')}</Link>
+            {!student && me?.role !== 'parent' ? (
+              <>
+                <Link to="/lessons/new" className="px-6 py-3 rounded-xl bg-orange-500 text-white font-semibold flex items-center gap-2 btn-hover shadow-lg hover:bg-orange-400">{t('create_lesson')} <ArrowRight size={18} className="transition-transform group-hover:translate-x-1"/></Link>
+                {me?.role!=='admin' && <Link to="/presentations/new" className="px-5 py-3 rounded-xl bg-white/10 border border-white/20 font-semibold backdrop-blur hover:bg-white/20 transition-all btn-hover">{t('dash_new_pres')}</Link>}
+                <Link to="/tests/new" className="px-5 py-3 rounded-xl bg-white/10 border border-white/20 font-semibold backdrop-blur hover:bg-white/20 transition-all btn-hover">{t('dash_new_test')}</Link>
+              </>
+            ) : me?.role === 'parent' ? (
+              <>
+                <Link to="/children" className="px-6 py-3 rounded-xl bg-orange-500 text-white font-semibold flex items-center gap-2 btn-hover shadow-lg hover:bg-orange-400">Мои дети <ArrowRight size={18}/></Link>
+                <Link to="/messages" className="px-5 py-3 rounded-xl bg-white/10 border border-white/20 font-semibold backdrop-blur hover:bg-white/20 transition-all btn-hover">{t('nav_messages')}</Link>
+              </>
+            ) : (
+              <>
+                <Link to="/classes" className="px-6 py-3 rounded-xl bg-orange-500 text-white font-semibold flex items-center gap-2 btn-hover shadow-lg hover:bg-orange-400">{t('classes')} <ArrowRight size={18}/></Link>
+                <Link to="/progress" className="px-5 py-3 rounded-xl bg-white/10 border border-white/20 font-semibold backdrop-blur hover:bg-white/20 transition-all btn-hover">{t('progress_t')}</Link>
+                <Link to="/games" className="px-5 py-3 rounded-xl bg-white/10 border border-white/20 font-semibold backdrop-blur hover:bg-white/20 transition-all btn-hover">{t('games')}</Link>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -118,10 +133,21 @@ export default function Dashboard(){
         <div className="bg-white rounded-2xl border border-slate-100 p-6 card-hover">
           <h3 className="font-bold flex items-center gap-2">{t('dash_quick')}</h3>
           <div className="grid grid-cols-2 gap-3 mt-4 stagger">
-            <Link to="/lessons/new" className="p-4 rounded-xl bg-indigo-600 text-white text-center font-medium flex flex-col items-center gap-2 shadow-md btn-hover"><Layers size={24}/>{t('dash_new_lesson')}</Link>
-            {me?.role!=='admin' && <Link to="/board" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-indigo-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><PenTool size={24}/>{t('board')}</Link>}
-            {me?.role!=='admin' && <Link to="/presentations/new" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-orange-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><Cuboid size={24}/>{t('dash_pres_one')}</Link>}
-            <Link to="/tests/new" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-rose-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><FlaskConical size={24}/>{t('dash_test_one')}</Link>
+            {!student && me?.role !== 'parent' ? (
+              <>
+                <Link to="/lessons/new" className="p-4 rounded-xl bg-indigo-600 text-white text-center font-medium flex flex-col items-center gap-2 shadow-md btn-hover"><Layers size={24}/>{t('dash_new_lesson')}</Link>
+                {me?.role!=='admin' && <Link to="/board" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-indigo-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><PenTool size={24}/>{t('board')}</Link>}
+                {me?.role!=='admin' && <Link to="/presentations/new" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-orange-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><Cuboid size={24}/>{t('dash_pres_one')}</Link>}
+                <Link to="/tests/new" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-rose-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><FlaskConical size={24}/>{t('dash_test_one')}</Link>
+              </>
+            ) : (
+              <>
+                <Link to="/classes" className="p-4 rounded-xl bg-indigo-600 text-white text-center font-medium flex flex-col items-center gap-2 shadow-md btn-hover"><GraduationCap size={24}/>{t('classes')}</Link>
+                <Link to={me?.role==='parent'?'/children':'/progress'} className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-indigo-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><BookOpenCheck size={24}/>{me?.role==='parent'?'Дневник':t('progress_t')}</Link>
+                <Link to="/portfolio" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-amber-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><BookOpen size={24}/>{t('pf_title')}</Link>
+                <Link to="/tests" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-rose-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><FlaskConical size={24}/>{t('tests')}</Link>
+              </>
+            )}
           </div>
         </div>
       </div>

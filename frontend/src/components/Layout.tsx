@@ -25,7 +25,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return ()=>{ window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline) }
   },[])
   const drawerRef=useRef<HTMLDivElement>(null)
+  const langMenuRef=useRef<HTMLDivElement>(null)
   const menuOpenerRef=useRef<HTMLElement | null>(null)
+  useEffect(()=>{
+    if(!showLang) return
+    const onDoc=(e:MouseEvent)=>{
+      if(langMenuRef.current && !langMenuRef.current.contains(e.target as Node)) setShowLang(false)
+    }
+    const onEsc=(e:KeyboardEvent)=>{ if(e.key==='Escape') setShowLang(false) }
+    document.addEventListener('mousedown', onDoc)
+    window.addEventListener('keydown', onEsc)
+    return ()=>{ document.removeEventListener('mousedown', onDoc); window.removeEventListener('keydown', onEsc) }
+  },[showLang])
   const isGameFull = /^\/games\/.+/.test(loc.pathname)
   const {theme,toggle:toggleTheme}=useTheme()
   const {lang,t,setLang}=useLang()
@@ -47,12 +58,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     ...(!student && !isParent ? [{ to: '/my-lessons', label: t('my_lessons'), icon: FolderLock }] : []),
     { to: '/presentations', label: t('presentations'), icon: Presentation },
     { to: '/classes', label: t('classes'), icon: GraduationCap },
-    ...(!student && !isParent ? [{ to: '/programs', label: 'Учебная программа', icon: ListTree }] : []),
-    ...(!student && !isParent ? [{ to: '/ai-assistant', label: 'ИИ-помощник и аналитика', icon: Sparkles }] : []),
+    ...(!student && !isParent ? [{ to: '/programs', label: t('prog_t'), icon: ListTree }] : []),
+    ...(!student && !isParent ? [{ to: '/ai-assistant', label: t('ai_nav'), icon: Sparkles }] : []),
     // Дневник ученика: все оценки по классам в одном месте
     ...(student ? [{ to: '/diary', label: t('diary'), icon: BookOpenCheck }] : []),
     // Путь обучения: диагностика, карта знаний, персональные задания
-    ...(student ? [{ to: '/progress', label: 'Мой прогресс', icon: TrendingUp }] : []),
+    ...(student ? [{ to: '/progress', label: t('progress_t'), icon: TrendingUp }] : []),
     // Страница родителя: дети + успеваемость
     ...(isParent ? [{ to: '/children', label: t('children_nav'), icon: UsersRound }] : []),
     // Сообщения родитель↔учитель (ученику нет)
@@ -135,14 +146,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       }catch{}
     }, 120)
     return ()=>clearTimeout(timer)
-  },[loc.pathname])
+  },[loc.pathname, lang])
   const logout = async () => {
     const refresh = localStorage.getItem('refresh')
     if (refresh) {
       try { await client.post('/auth/logout/', {refresh}) } catch {}
     }
-    // Выход не должен удалять локальные документы Word, черновики и настройки доступности.
+    // Выход чистит токены и оффлайн-кэш API (чтобы на общем школьном ПК не оставались чужие данные),
+    // но сохраняет локальные документы Word и настройки доступности.
     ;['access', 'refresh', 'token', 'user'].forEach(key => localStorage.removeItem(key))
+    try {
+      Object.keys(localStorage).forEach(k => { if (k.startsWith('offline_cache:')) localStorage.removeItem(k) })
+    } catch {}
     setMe(null); window.dispatchEvent(new Event('auth-change')); nav('/login')
   }
   const toggleSidebar = () => {
@@ -291,9 +306,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             {hideSidebar && <button onClick={toggleSidebar} className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-white border border-slate-200 text-xs font-medium btn-hover" aria-label={t('show_tabs')}><PanelLeft size={14}/> {t('menu')}</button>}
           </div>
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            <button onClick={()=>{ const next=!sfxOff; setSfxOff(next); setSfxMuted(next); if(!next) sfx('ui.click') }} aria-label={sfxOff?'Включить звуки интерфейса':'Выключить звуки интерфейса'} title={sfxOff?'Звуки: выкл':'Звуки: вкл'} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 hover:shadow-md transition-all flex items-center justify-center" data-testid="sfx-toggle">{sfxOff?<VolumeX size={16}/>:<Volume2 size={16}/>}</button>
+            <button onClick={()=>{ const next=!sfxOff; setSfxOff(next); setSfxMuted(next); if(!next) sfx('ui.click') }} aria-label={sfxOff?t('sfx_enable_aria'):t('sfx_disable_aria')} title={sfxOff?t('sfx_off'):t('sfx_on')} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 hover:shadow-md transition-all flex items-center justify-center" data-testid="sfx-toggle">{sfxOff?<VolumeX size={16}/>:<Volume2 size={16}/>}</button>
             <button onClick={toggleTheme} aria-label={theme==='dark' ? t('theme_light') : t('theme_dark')} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 hover:shadow-md transition-all flex items-center justify-center" title={theme==='dark'?t('light'):t('dark')}>{theme==='dark'?<Sun size={16}/>:<Moon size={16}/>}</button>
-            <div className="relative">
+            <div className="relative" ref={langMenuRef}>
               <button onClick={()=>setShowLang(v=>!v)} aria-label={t('change_lang')} aria-expanded={showLang} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 flex items-center justify-center gap-1 text-xs font-bold">{lang.toUpperCase()} <Languages size={12}/></button>
               {showLang && (
                 <div className="absolute right-0 top-full mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl p-1 z-50 min-w-[160px]">
@@ -321,7 +336,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         )}
         {isOffline && (
           <div className="bg-amber-500 text-slate-900 text-xs font-semibold px-4 py-1.5 text-center flex items-center justify-center gap-2">
-            <span>📶 Режим слабого интернета / офлайн: показываются сохранённые в памяти телефона/браузера данные.</span>
+            <span>📶 {t('offline_banner')}</span>
           </div>
         )}
         <main id="main-content" tabIndex={-1} key={loc.pathname} className={loc.pathname.startsWith('/board') ? 'flex-1 min-h-0 w-full page-enter' : isGameFull ? 'w-full min-h-screen pb-24 lg:pb-0 page-enter relative' : 'p-4 pb-28 lg:p-8 max-w-[1400px] mx-auto page-enter'}>{children}</main>

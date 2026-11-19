@@ -5,6 +5,7 @@ const resolveSrc = (src?: string) => src?.startsWith('/media') ? mediaUrl(src) :
 import { Plus, Trash2, Save, Eye, Play, Type, Image as ImgIcon, Square, Circle, Triangle, Star, Table, BarChart3, Video, Palette, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Copy, Layers, Maximize2, ZoomIn, ZoomOut, List, ListOrdered, Highlighter, WrapText, Undo2, Redo2, Move, Sparkles, Layout, Paintbrush, Wand2, Film, FileImage, Shapes, Hexagon, Diamond, Pentagon, BookOpen, Pencil } from 'lucide-react'
 import { SvgShape, PdfPage, FitBox } from '../components/pptxView'
 import { toast } from '../context/UIContext'
+import { useLang } from '../context/LangContext'
 
 // Потерянный файл картинки: прячем битую иконку, показываем плейсхолдер (CSS .img-missing)
 const imgMissing = (e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -93,6 +94,12 @@ function restyleParas(oldPs: any[], val: string) {
 }
 
 export default function PresentationEditor() {
+  const { t, lang } = useLang()
+  const PUI = {
+    ru: { imp: 'Импорт', prev: 'Предпросмотр', show: 'Слайд-шоу', full: 'На весь', exit: 'Выйти', home: 'Главная', insert: 'Вставка', design: 'Дизайн', trans: 'Переходы', anim: 'Анимации', pub: 'Публичная', priv: 'Приватная' },
+    en: { imp: 'Import', prev: 'Preview', show: 'Slideshow', full: 'Fullscreen', exit: 'Exit', home: 'Home', insert: 'Insert', design: 'Design', trans: 'Transitions', anim: 'Animations', pub: 'Public', priv: 'Private' },
+    kg: { imp: 'Импорт', prev: 'Алдын ала', show: 'Слайд-шоу', full: 'Толук экран', exit: 'Чыгуу', home: 'Башкы', insert: 'Киргизүү', design: 'Дизайн', trans: 'Өтүүлөр', anim: 'Анимация', pub: 'Ачык', priv: 'Жеке' },
+  }[lang] || { imp: 'Импорт', prev: 'Предпросмотр', show: 'Слайд-шоу', full: 'На весь', exit: 'Выйти', home: 'Главная', insert: 'Вставка', design: 'Дизайн', trans: 'Переходы', anim: 'Анимации', pub: 'Публичная', priv: 'Приватная' }
   const { id } = useParams()
   const nav = useNavigate()
   const isNew = !id
@@ -901,45 +908,45 @@ export default function PresentationEditor() {
     <div ref={fullscreenRef} className={`${isEditFullscreen ? 'fixed inset-0 z-50 bg-[#e9e9e9] flex flex-col' : 'flex flex-col h-[calc(100dvh-7.5rem)] -m-4 -mb-28 lg:h-[calc(100vh-64px)] lg:-m-8 lg:mb-0'}`}>
       <h1 className="sr-only">Редактор презентаций</h1>
       <div className="h-14 bg-[#f3f3f3] border-b flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 overflow-hidden">
-        <button onClick={() => nav(subjSlug ? `/subjects/${subjSlug}` : '/my-lessons')} className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs sm:text-sm font-semibold shrink-0 min-h-[38px] flex items-center justify-center" title="Назад"><span>←</span><span className="hidden sm:inline ml-1">Назад</span></button>
+        <button onClick={() => nav(subjSlug ? `/subjects/${subjSlug}` : '/my-lessons')} className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs sm:text-sm font-semibold shrink-0 min-h-[38px] flex items-center justify-center" title={t('back')}><span>←</span><span className="hidden sm:inline ml-1">{t('back')}</span></button>
         <div className="hidden sm:flex w-8 h-8 rounded bg-[#d24726] items-center justify-center text-white font-bold text-sm shrink-0">P</div>
-        <input value={title} onChange={e => { setTitle(e.target.value); setDirty(true) }} className="flex-1 min-w-[70px] sm:max-w-[280px] px-2 sm:px-3 py-1.5 sm:py-2 rounded border bg-white text-slate-900 font-semibold text-xs sm:text-sm truncate min-h-[38px]" title={title} placeholder="Название" />
-        <input value={desc} onChange={e => { setDesc(e.target.value); setDirty(true) }} placeholder="Описание" className="hidden xl:block flex-1 min-w-[160px] max-w-[260px] px-3 py-1.5 rounded border bg-white text-sm truncate" title={desc} />
-        <button onClick={() => setIsPublic(v => !v)} data-testid="pres-visibility" title={isPublic ? 'Публичная: видна всем в каталоге и по ссылке' : 'Приватная: только вы и уроки, где она назначена'}
+        <input value={title} onChange={e => { setTitle(e.target.value); setDirty(true) }} className="flex-1 min-w-[70px] sm:max-w-[280px] px-2 sm:px-3 py-1.5 sm:py-2 rounded border bg-white text-slate-900 font-semibold text-xs sm:text-sm truncate min-h-[38px]" title={title} placeholder={t('prog_title_ph')} />
+        <input value={desc} onChange={e => { setDesc(e.target.value); setDirty(true) }} placeholder={t('subj_add_desc')} className="hidden xl:block flex-1 min-w-[160px] max-w-[260px] px-3 py-1.5 rounded border bg-white text-sm truncate" title={desc} />
+        <button onClick={() => setIsPublic(v => !v)} data-testid="pres-visibility" title={isPublic ? PUI.pub : PUI.priv}
           className={`px-2 py-1.5 rounded-lg border text-xs font-medium whitespace-nowrap shrink-0 min-h-[38px] flex items-center justify-center ${isPublic ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'bg-white border-slate-300 text-slate-600'}`}>
           <span>{isPublic ? '🌐' : '🔒'}</span>
-          <span className="hidden md:inline ml-1">{isPublic ? 'Публичная' : 'Приватная'}</span>
+          <span className="hidden md:inline ml-1">{isPublic ? PUI.pub : PUI.priv}</span>
         </button>
-        <span className="hidden md:inline text-xs text-slate-500 whitespace-nowrap shrink-0">{slides.length} слайдов</span>
+        <span className="hidden md:inline text-xs text-slate-500 whitespace-nowrap shrink-0">{slides.length} {t('pres_slides_short')}</span>
         <div className="ml-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
-          <button onClick={() => pptxInputRef.current?.click()} disabled={importing} className="hidden md:flex px-2.5 py-1.5 rounded-lg bg-white border border-orange-200 text-orange-700 items-center gap-1 text-xs font-medium hover:bg-orange-50 whitespace-nowrap" title="Загрузить готовый .pptx/.pdf как слайды">{importing ? '⏳' : '⬆'}<span className="hidden lg:inline">Импорт</span></button>
+          <button onClick={() => pptxInputRef.current?.click()} disabled={importing} className="hidden md:flex px-2.5 py-1.5 rounded-lg bg-white border border-orange-200 text-orange-700 items-center gap-1 text-xs font-medium hover:bg-orange-50 whitespace-nowrap" title=".pptx/.pdf">{importing ? '⏳' : '⬆'}<span className="hidden lg:inline">{PUI.imp}</span></button>
           <input ref={pptxInputRef} type="file" accept=".pptx,.ppt,.pdf" className="hidden" onChange={handlePptxImport} />
-          <button onClick={undo} disabled={!history.length} title="Отменить (Ctrl+Z)" className="p-1.5 sm:p-2 rounded-lg bg-white border disabled:opacity-30 shrink-0 min-h-[36px] min-w-[36px] flex items-center justify-center"><Undo2 size={14} /></button>
-          <button onClick={redo} disabled={!redoStack.length} title="Вернуть (Ctrl+Y)" className="p-1.5 sm:p-2 rounded-lg bg-white border disabled:opacity-30 shrink-0 min-h-[36px] min-w-[36px] flex items-center justify-center"><Redo2 size={14} /></button>
-          <button onClick={() => setShowPreview(true)} className="hidden sm:flex px-3 py-1.5 rounded-lg bg-white border items-center gap-1.5 text-sm whitespace-nowrap"><Eye size={14} /> <span className="hidden lg:inline">Предпросмотр</span></button>
-          <button onClick={() => setSlideshow(true)} className="hidden sm:flex px-3 py-1.5 rounded-lg bg-slate-900 text-white items-center gap-1.5 text-sm whitespace-nowrap"><Play size={14} /> <span className="hidden lg:inline">Слайд-шоу</span></button>
-          <button onClick={toggleEditFullscreen} className="hidden sm:flex px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 items-center gap-1.5 text-sm whitespace-nowrap" title="Полный экран редактирования (F)"><Maximize2 size={14} /> <span className="hidden lg:inline">{isEditFullscreen ? 'Выйти' : 'На весь'}</span></button>
-          <button onClick={handleCancel} className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-white border border-slate-300 text-slate-700 font-semibold flex items-center justify-center text-xs sm:text-sm whitespace-nowrap hover:bg-slate-50 shrink-0 min-h-[38px]">Отмена</button>
-          <button onClick={() => save()} className="px-2.5 sm:px-3 py-1.5 sm:py-2 min-h-[38px] sm:min-h-[40px] rounded-lg bg-[#d24726] hover:bg-[#b83b1d] text-white font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm whitespace-nowrap shrink-0"><Save size={14} /> <span className="hidden sm:inline">Сохранить</span>{dirty && <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulseSoft" title="Есть несохранённые правки (autosave каждые 5с)" />}</button>
+          <button onClick={undo} disabled={!history.length} title="Undo (Ctrl+Z)" className="p-1.5 sm:p-2 rounded-lg bg-white border disabled:opacity-30 shrink-0 min-h-[36px] min-w-[36px] flex items-center justify-center"><Undo2 size={14} /></button>
+          <button onClick={redo} disabled={!redoStack.length} title="Redo (Ctrl+Y)" className="p-1.5 sm:p-2 rounded-lg bg-white border disabled:opacity-30 shrink-0 min-h-[36px] min-w-[36px] flex items-center justify-center"><Redo2 size={14} /></button>
+          <button onClick={() => setShowPreview(true)} className="hidden sm:flex px-3 py-1.5 rounded-lg bg-white border items-center gap-1.5 text-sm whitespace-nowrap"><Eye size={14} /> <span className="hidden lg:inline">{PUI.prev}</span></button>
+          <button onClick={() => setSlideshow(true)} className="hidden sm:flex px-3 py-1.5 rounded-lg bg-slate-900 text-white items-center gap-1.5 text-sm whitespace-nowrap"><Play size={14} /> <span className="hidden lg:inline">{PUI.show}</span></button>
+          <button onClick={toggleEditFullscreen} className="hidden sm:flex px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 items-center gap-1.5 text-sm whitespace-nowrap" title="Fullscreen (F)"><Maximize2 size={14} /> <span className="hidden lg:inline">{isEditFullscreen ? PUI.exit : PUI.full}</span></button>
+          <button onClick={handleCancel} className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-white border border-slate-300 text-slate-700 font-semibold flex items-center justify-center text-xs sm:text-sm whitespace-nowrap hover:bg-slate-50 shrink-0 min-h-[38px]">{t('cancel')}</button>
+          <button onClick={() => save()} className="px-2.5 sm:px-3 py-1.5 sm:py-2 min-h-[38px] sm:min-h-[40px] rounded-lg bg-[#d24726] hover:bg-[#b83b1d] text-white font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm whitespace-nowrap shrink-0"><Save size={14} /> <span className="hidden sm:inline">{t('save')}</span>{dirty && <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulseSoft" />}</button>
         </div>
       </div>
       <div className="px-3 py-2 bg-white border-b flex flex-nowrap overflow-x-auto lg:flex-wrap lg:overflow-visible items-center gap-2">
-        <span className="text-sm font-medium flex items-center gap-1 shrink-0"><BookOpen size={14} /> Предмет:</span>
+        <span className="text-sm font-medium flex items-center gap-1 shrink-0"><BookOpen size={14} /> {t('subj_label')}:</span>
         <select value={subject || ''} onChange={e => setSubject(e.target.value ? Number(e.target.value) : null)} className="px-3 py-2 rounded-lg border bg-slate-50 text-sm min-w-0 max-sm:flex-1 lg:min-w-[180px] shrink-0">
-          <option value="">Без предмета</option>
+          <option value="">{t('subj_no_subject')}</option>
           {subjects.map((s: any) => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
         </select>
         {subject ? (
-          <span className="shrink-0 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-1 rounded-full">Выбран: {subjects.find((x: any) => String(x.id) === String(subject))?.icon} {subjects.find((x: any) => String(x.id) === String(subject))?.name}</span>
+          <span className="shrink-0 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-1 rounded-full">{subjects.find((x: any) => String(x.id) === String(subject))?.icon} {subjects.find((x: any) => String(x.id) === String(subject))?.name}</span>
         ) : (
-          <span className="hidden sm:inline text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-full">Без предмета презентация не появится в уроках — можно выбрать позже</span>
+          <span className="hidden sm:inline text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-full">{t('subj_no_subject')}</span>
         )}
       </div>
 
       <div className="bg-white order-3 lg:order-2 border-t lg:border-t-0 border-b-0 lg:border-b shrink-0">
         <div className="flex gap-1 px-2 py-1 border-b overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {(['home', 'insert', 'design', 'transitions', 'animations'] as const).map(t => (
-            <button key={t} onClick={() => setRibbonTab(t)} className={`px-4 py-2 shrink-0 rounded text-sm font-medium capitalize whitespace-nowrap ${ribbonTab === t ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}`}>{t === 'home' ? 'Главная' : t === 'insert' ? 'Вставка' : t === 'design' ? 'Дизайн' : t === 'transitions' ? 'Переходы' : 'Анимации'}</button>
+          {(['home', 'insert', 'design', 'transitions', 'animations'] as const).map(rt => (
+            <button key={rt} onClick={() => setRibbonTab(rt)} className={`px-4 py-2 shrink-0 rounded text-sm font-medium whitespace-nowrap ${ribbonTab === rt ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}`}>{rt === 'home' ? PUI.home : rt === 'insert' ? PUI.insert : rt === 'design' ? PUI.design : rt === 'transitions' ? PUI.trans : PUI.anim}</button>
           ))}
           <div className="ml-auto flex items-center gap-1 text-xs text-slate-500 shrink-0 pr-1">
             <ZoomOut size={14} /> <input type="range" min={60} max={140} value={zoom} onChange={e => setZoom(parseInt(e.target.value))} className="w-20" /> <ZoomIn size={14} /> {zoom}%

@@ -121,7 +121,7 @@ def generate_with_gemini(text, count=5, api_key='', preferred_model='', instruct
                     'contents': [{'parts': [{'text': _prompt(text, count, instruction)}]}],
                     'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 16384},
                 },
-                timeout=60,
+                timeout=(3, 15),
             )
             if not r.ok:
                 last_err = f'HTTP {r.status_code}: {str(r.text)[:180]}'
@@ -137,6 +137,9 @@ def generate_with_gemini(text, count=5, api_key='', preferred_model='', instruct
             if questions:
                 return questions, model_name
             last_err = 'empty result'
+        except requests.exceptions.RequestException as e:
+            last_err = f'{type(e).__name__}: {e}'
+            break
         except Exception as e:
             last_err = f'{type(e).__name__}: {e}'
             continue

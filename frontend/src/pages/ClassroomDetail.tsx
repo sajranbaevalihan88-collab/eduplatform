@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import client, { mediaUrl } from '../api/client'
-import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles, Share2, Video, PenLine, FlaskConical, BookOpen, X, Wallet, Lock, CalendarCheck, CalendarDays, TrendingUp } from 'lucide-react'
+import { GraduationCap, Megaphone, ClipboardList, Users, BarChart3, Copy, Check, Plus, Clock, ExternalLink, MessageSquare, Send, Sparkles, Share2, Video, PenLine, FlaskConical, BookOpen, X, Wallet, Lock, CalendarCheck, CalendarDays, TrendingUp, Trash2, Settings, Medal, Download } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
 import AttendancePanel from '../components/AttendancePanel'
@@ -63,7 +63,16 @@ export default function ClassroomDetail(){
   const [atopic,setAtopic]=useState('')
   const [topics,setTopics]=useState<any[]>([])
   const [apersonal,setApersonal]=useState('')
+  const [amax,setAmax]=useState('100')
+  const [taskFilter,setTaskFilter]=useState<'all'|'todo'|'done'>('all')
   const [creating,setCreating]=useState(false)
+  // Редактирование класса (название, описание, предмет, цвет)
+  const [editClassOpen,setEditClassOpen]=useState(false)
+  const [ecTitle,setEcTitle]=useState('')
+  const [ecDesc,setEcDesc]=useState('')
+  const [ecSubject,setEcSubject]=useState('')
+  const [ecColor,setEcColor]=useState('#3B82F6')
+  const [subjectsList,setSubjectsList]=useState<any[]>([])
   // письменный ответ ученика (kind=write)
   const [wOpen,setWOpen]=useState<number|null>(null)
   const [wText,setWText]=useState('')
@@ -83,11 +92,13 @@ export default function ClassroomDetail(){
   const [colBusy,setColBusy]=useState(false)
   const [editCell,setEditCell]=useState<{a:number,s:number}|null>(null)
   const [editVal,setEditVal]=useState('')
+  const [editOrig,setEditOrig]=useState('')
   // Журнал: быстрый поиск по ученикам + сортировка (по имени или по успеваемости)
   const [gbq,setGbq]=useState('')
   const [gbSort,setGbSort]=useState<'name'|'avg'>('name')
-  // список «кто сдал» по заданию (как в Google Classroom): панель справа
+  // список «кто сдал» по заданию (как в Google Classroom): панель справа + быстрая оценка
   const [subListFor,setSubListFor]=useState<any>(null)
+  const [drawerScores,setDrawerScores]=useState<Record<number,string>>({})
   // конструктор теста «как Google Forms» прямо в классруме
   const [qbOpen,setQbOpen]=useState(false)
 
@@ -101,23 +112,37 @@ export default function ClassroomDetail(){
   // скрин чека от студента
   const [rcptFile,setRcptFile]=useState<File|null>(null)
   const [rcptPreview,setRcptPreview]=useState<string|null>(null)
-  // Массовый перенос учеников (списком / CSV)
+  // Массовый перенос учеников (списком / CSV) + показ выданных паролей
   const [bulkOpen,setBulkOpen]=useState(false)
   const [bulkText,setBulkText]=useState('')
   const [bulkBusy,setBulkBusy]=useState(false)
+  const [bulkResult,setBulkResult]=useState<{created_accounts:any[]; skipped:any[]; added_to_class:number}|null>(null)
 
   const importStudents = async ()=>{
     if(!bulkText.trim()){ toast('Вставь список учеников','error'); return }
     setBulkBusy(true)
     try{
       const r = await client.post(`/classrooms/${id}/import_students/`, { text: bulkText })
-      toast(`Перенесено в класс: +${r.data.added_to_class} (создано новых аккаунтов: ${r.data.created_users})`, 'success')
-      setBulkOpen(false); setBulkText(''); load()
+      const createdAccs = r.data.created_accounts || []
+      const skipped = r.data.skipped || []
+      toast(`Перенесено в класс: +${r.data.added_to_class} (новых аккаунтов: ${r.data.created_users})`, 'success')
+      setBulkResult({ created_accounts: createdAccs, skipped, added_to_class: r.data.added_to_class || 0 })
+      setBulkText(''); load()
+      if (!createdAccs.length && !skipped.length) setBulkOpen(false)
     }catch(e:any){ toast(e?.response?.data?.detail||'Ошибка импорта','error') }
     setBulkBusy(false)
   }
 
+  const downloadCreatedAccounts = ()=>{
+    if(!bulkResult?.created_accounts?.length) return
+    const lines = ['Логин;Пароль;Имя', ...bulkResult.created_accounts.map((a:any)=>`${a.username};${a.password};${a.first_name||''}`)]
+    const url = URL.createObjectURL(new Blob(['\uFEFF'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'}))
+    const a = document.createElement('a'); a.href = url; a.download = `students-passwords-${id}.csv`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const isParent = getRole() === 'parent'
+  const isAdmin = getRole() === 'admin'
 
   const load=()=>{
     client.get(`/classrooms/${id}/`).then(r=>setRoom(r.data)).catch(()=>nav(isParent ? '/children' : '/classes'))
@@ -151,12 +176,39 @@ export default function ClassroomDetail(){
   useEffect(()=>{
     if(akind==='lesson') client.get('/lessons/?owner=me').then(r=>setObjs(r.data.results||r.data||[])).catch(()=>{})
     else client.get('/tests/?owner=me').then(r=>setObjs(r.data.results||r.data||[])).catch(()=>{})
+    setAmax(akind==='test' ? '100' : '5')
   },[akind])
+  useEffect(()=>{
+    client.get('/subjects/', { params: { page_size: 100 } })
+      .then(r=>setSubjectsList(Array.isArray(r.data)?r.data:r.data.results||[])).catch(()=>{})
+  },[])
 
   if(!room) return <div className="p-8 text-center"><div className="skeleton h-32 rounded-2xl max-w-2xl mx-auto"/></div>
-  const isOwner = String(room.owner)===String(meId)
+  const isOwner = String(room.owner)===String(meId) || isAdmin
   // платный класс и текущий ученик ещё не подтверждён владельцем
   const needsPay = !isOwner && !isParent && room.is_paid && room.my_status==='pending'
+
+  const openEditClass = ()=>{
+    setEcTitle(room.title || '')
+    setEcDesc(room.description || '')
+    setEcSubject(room.subject ? String(room.subject) : '')
+    setEcColor(room.color || '#3B82F6')
+    setEditClassOpen(v=>!v)
+  }
+  const saveEditClass = async ()=>{
+    if(!ecTitle.trim()){ toast('Введите название класса','error'); return }
+    try{
+      await client.patch(`/classrooms/${id}/`, {
+        title: ecTitle.trim(),
+        description: ecDesc.trim(),
+        subject: ecSubject ? Number(ecSubject) : null,
+        color: ecColor,
+      })
+      toast('Класс обновлён','success')
+      setEditClassOpen(false)
+      load()
+    }catch(e:any){ toast(e?.response?.data?.detail||'Ошибка сохранения','error') }
+  }
 
   const markPaid=async()=>{
     setPBusy(true)
@@ -190,7 +242,7 @@ export default function ClassroomDetail(){
   const removeQr=async()=>{
     try{ await client.delete(`/classrooms/${id}/payment_qr_upload/`); toast('QR удалён','success'); load() }catch{}
   }
-  const savePaid=async(fields:Record<string,any>)=>{
+  const savePaid=async(fields:Record<string,any>, keepOpen = false)=>{
     setPBusy(true)
     try{
       const body:Record<string,any>={...fields}
@@ -204,7 +256,7 @@ export default function ClassroomDetail(){
         }
       }
       await client.patch(`/classrooms/${id}/`, body)
-      toast('Настройки курса сохранены','success'); setPaidOpen(false); load()
+      toast('Настройки курса сохранены','success'); if(!keepOpen) setPaidOpen(false); load()
     }catch(e:any){ toast(e?.response?.data?.detail||'err','error') } finally{ setPBusy(false) }
   }
   const approvePay=async(sid:any)=>{
@@ -220,18 +272,29 @@ export default function ClassroomDetail(){
     try{ await client.post('/announcements/', {classroom:id, text:text.trim()}); setText(''); load(); playUiSound('ui-notify') }
     catch(e:any){ toast(e?.response?.data?.detail||'err','error') }
   }
+  const delNote=async(nid:number)=>{
+    if(!confirm('Удалить это объявление?')) return
+    try{ await client.delete(`/announcements/${nid}/`); toast('Объявление удалено','success'); load() }
+    catch(e:any){ toast(e?.response?.data?.detail||'Ошибка удаления','error') }
+  }
+  const delTask=async(aid:number, title:string)=>{
+    if(!confirm(`Удалить задание «${title}»? Все сдачи по нему тоже будут удалены.`)) return
+    try{ await client.delete(`/assignments/${aid}/`); toast('Задание удалено','success'); load() }
+    catch(e:any){ toast(e?.response?.data?.detail||'Ошибка удаления','error') }
+  }
   const mkTask=async()=>{
     const dl = adlDate? new Date(`${adlDate}T${adlTime||'23:59'}`).toISOString(): null
+    const maxScore = Math.max(1, Number(amax) || (akind==='test' ? 100 : 5))
     try{
       if(akind==='link'){
         if(!aurl.trim()){ toast(t('cls_need_url'),'error'); return }
-        await client.post('/assignments/', {classroom:id, kind:'link', manual_title: atitle.trim()||t('cls_k_link'), url:aurl.trim(), instructions:ainstr, deadline:dl, topic: atopic||null, assigned_to: apersonal||null})
+        await client.post('/assignments/', {classroom:id, kind:'link', manual_title: atitle.trim()||t('cls_k_link'), url:aurl.trim(), instructions:ainstr, deadline:dl, max_score: maxScore, topic: atopic||null, assigned_to: apersonal||null})
       } else if(akind==='write'){
         if(!atitle.trim()){ toast(t('cls_need_task_title'),'error'); return }
-        await client.post('/assignments/', {classroom:id, kind:'write', manual_title: atitle.trim(), instructions:ainstr, deadline:dl, topic: atopic||null, assigned_to: apersonal||null})
+        await client.post('/assignments/', {classroom:id, kind:'write', manual_title: atitle.trim(), instructions:ainstr, deadline:dl, max_score: maxScore, topic: atopic||null, assigned_to: apersonal||null})
       } else {
         if(!aobj){ toast(t('cls_pick_obj'),'error'); return }
-        await client.post('/assignments/', {classroom:id, kind:akind, [akind]:Number(aobj), deadline:dl, instructions: ainstr, topic: atopic||null, assigned_to: apersonal||null})
+        await client.post('/assignments/', {classroom:id, kind:akind, [akind]:Number(aobj), deadline:dl, instructions: ainstr, max_score: maxScore, topic: atopic||null, assigned_to: apersonal||null})
       }
       setAobj(''); setAdlDate(''); setAdlTime(''); setAinstr(''); setAtitle(''); setAurl(''); setAtopic(''); setApersonal(''); setCreating(false); load()
       toast(t('cls_added'),'success')
@@ -240,8 +303,8 @@ export default function ClassroomDetail(){
   // тест создан в конструкторе — сразу превращаем его в задание класса (как Google Classroom + Forms)
   const onQuizCreated=async(testId:number)=>{
     const dl = adlDate? new Date(`${adlDate}T${adlTime||'23:59'}`).toISOString(): null
-    await client.post('/assignments/', {classroom:id, kind:'test', test:testId, deadline:dl, instructions:ainstr})
-    setAobj(''); setAdlDate(''); setAdlTime(''); setAinstr(''); setCreating(false); load()
+    await client.post('/assignments/', {classroom:id, kind:'test', test:testId, deadline:dl, instructions:ainstr, max_score: Math.max(1, Number(amax)||100), topic: atopic||null, assigned_to: apersonal||null})
+    setAobj(''); setAdlDate(''); setAdlTime(''); setAinstr(''); setAtopic(''); setApersonal(''); setCreating(false); load()
   }
   // письменная сдача задания (повторно — подставляем прежний ответ)
   const startWrite=async(aid:number)=>{
@@ -298,9 +361,10 @@ export default function ClassroomDetail(){
     }catch(e:any){ toast(e?.response?.data?.manual_title||e?.response?.data?.detail||'err','error') }
     setColBusy(false)
   }
-  const saveCell=async(aid:number,sid:number,val:string)=>{
+  const saveCell=async(aid:number,sid:number,val:string, skipIfSame?:string)=>{
     if(editCell && editCell.a===aid && editCell.s===sid) setEditCell(null)
     const v=val.trim()
+    if(skipIfSame !== undefined && v === skipIfSame.trim()) return
     const blank = v===''
     // число (запятая = десятичный разделитель) или текстовая пометка «нб» и т.п.
     const isNum = v!=='' && !isNaN(Number(v.replace(',','.')))
@@ -314,10 +378,14 @@ export default function ClassroomDetail(){
           ? (blank? {...c, score:null, mark:'', status:'pending'}
             : mark? {...c, score:null, mark, status:'submitted'}
             : {...c, score:numVal, mark:'', status:'submitted'}) : c)
+        const maxMap:Record<number,number> = {}
+        ;(g.assignments||[]).forEach((x:any)=>{ maxMap[x.id] = x.max_score || 100 })
         const sv=cells.filter((x:any)=>x.student===sid&&x.score!=null).map((x:any)=>x.score)
+        const sp=cells.filter((x:any)=>x.student===sid&&x.score!=null).map((x:any)=>Math.round((x.score/(maxMap[x.assignment]||100))*1000)/10)
         const av=cells.filter((x:any)=>x.assignment===aid&&x.score!=null).map((x:any)=>x.score)
         return {...g, cells,
           avg_student:{...g.avg_student, [String(sid)]: sv.length? Math.round(sv.reduce((p:number,c:number)=>p+c,0)/sv.length*10)/10 : null},
+          avg_student_pct:{...(g.avg_student_pct||{}), [String(sid)]: sp.length? Math.round(sp.reduce((p:number,c:number)=>p+c,0)/sp.length*10)/10 : null},
           avg_assignment:{...g.avg_assignment, [String(aid)]: av.length? Math.round(av.reduce((p:number,c:number)=>p+c,0)/av.length*10)/10 : null}}
       })
       toast(t('cls_g_saved'),'success')
@@ -330,25 +398,15 @@ export default function ClassroomDetail(){
     try{ await client.delete(`/assignments/${aid}/?kind=manual`); load(); toast(t('cls_g_del'),'success') }
     catch(e:any){ toast(e?.response?.data?.detail||'err','error') }
   }
-  const exportCSV=()=>{
-    if(!gb) return
-    const q=(v:string)=>'"'+String(v).replace(/"/g,'""')+'"'
-    const num=(v:any)=> v!=null? String(Math.round(v*10)/10).replace('.',',') : ''
-    const head=[t('cls_student'), ...gb.assignments.map((a:any)=>a.title), t('cls_g_avg')].map(q).join(';')
-    const rows=gb.students.map((s:any)=>[
-      s.username,
-      ...gb.assignments.map((a:any)=>{
-        const c=gb.cells.find((x:any)=>x.assignment===a.id&&x.student===s.id)
-        return c?.mark || num(c?.score)
-      }),
-      num(gb.avg_student?.[String(s.id)])
-    ].map(q).join(';'))
-    const csv='\uFEFF'+[head,...rows].join('\r\n')
-    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}))
-    const aEl=document.createElement('a')
-    aEl.href=url
-    aEl.download=((room?.title||'gradebook').replace(/[\\/:*?"<>|]+/g,'').trim().slice(0,40)||'gradebook')+'.csv'
-    aEl.click(); URL.revokeObjectURL(url)
+  const exportCSV=async()=>{
+    try{
+      const r = await client.get(`/classrooms/${id}/export_csv/`, { params:{ type:'gradebook' }, responseType:'blob' })
+      const url = URL.createObjectURL(new Blob([r.data], { type:'text/csv;charset=utf-8' }))
+      const aEl = document.createElement('a')
+      aEl.href = url
+      aEl.download = ((room?.title||'gradebook').replace(/[\\/:*?"<>|]+/g,'').trim().slice(0,40)||'gradebook')+'.csv'
+      aEl.click(); URL.revokeObjectURL(url)
+    }catch(e:any){ toast(e?.response?.data?.detail||'Ошибка экспорта CSV','error') }
   }
 
   const toggleComments=async(nid:number)=>{
@@ -429,16 +487,47 @@ export default function ClassroomDetail(){
         <div className="flex items-center gap-2">
           {isOwner && (
             <>
-              <button onClick={shareCode} className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-white/15 border border-white/30 flex items-center justify-center" title={t('cls_share')} aria-label={t('cls_share')}>
+              <button onClick={openEditClass} className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-white/15 border border-white/30 flex items-center justify-center hover:bg-white/25" title="Настройки класса" aria-label="Настройки класса">
+                <Settings size={16}/>
+              </button>
+              <button onClick={shareCode} className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-white/15 border border-white/30 flex items-center justify-center hover:bg-white/25" title={t('cls_share')} aria-label={t('cls_share')}>
                 <Share2 size={16}/>
               </button>
-              <button onClick={copy} className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-white/15 border border-white/30 font-mono font-bold text-sm" title={t('cls_copy_code')} aria-label={t('cls_copy_code')}>
+              <button onClick={copy} className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-white/15 border border-white/30 font-mono font-bold text-sm hover:bg-white/25" title={t('cls_copy_code')} aria-label={t('cls_copy_code')}>
                 {fmtCode(room.invite_code)} {copied? <Check size={16}/> : <Copy size={16}/>}
               </button>
             </>
           )}
         </div>
       </div>
+
+      {isOwner && editClassOpen && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 p-4 space-y-3 shadow-sm" data-testid="edit-class-form">
+          <div className="font-bold text-sm dark:text-white flex items-center justify-between">
+            <span>⚙️ Редактировать класс</span>
+            <button onClick={()=>setEditClassOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-2.5">
+            <input value={ecTitle} onChange={e=>setEcTitle(e.target.value)} placeholder="Название класса" className="px-3 py-2 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white text-sm"/>
+            <select value={ecSubject} onChange={e=>setEcSubject(e.target.value)} className="px-3 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white text-sm">
+              <option value="">Без привязки к предмету</option>
+              {subjectsList.map((s:any)=><option key={s.id} value={s.id}>{s.icon||''} {s.name}</option>)}
+            </select>
+          </div>
+          <textarea value={ecDesc} onChange={e=>setEcDesc(e.target.value)} rows={2} placeholder="Описание класса" className="w-full px-3 py-2 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white text-sm"/>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex gap-1.5">
+              {['#3B82F6','#8B5CF6','#10B981','#F59E0B','#EF4444','#EC4899'].map(c=>(
+                <button key={c} type="button" onClick={()=>setEcColor(c)} className={`w-8 h-8 rounded-full ${ecColor===c?'ring-2 ring-offset-2 ring-indigo-500':''}`} style={{background:c}} aria-label={c}/>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={saveEditClass} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Сохранить</button>
+              <button onClick={()=>setEditClassOpen(false)} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white text-sm font-semibold">Отмена</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {needsPay && (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 p-4 sm:p-5" data-testid="pay-banner">
@@ -534,6 +623,11 @@ export default function ClassroomDetail(){
                     <button onClick={()=>toggleComments(n.id)} className="ml-auto font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1" data-testid={`comm-btn-${n.id}`}>
                       <MessageSquare size={13}/> {t('cls_comments')} {(cmList[n.id]?.length || n.comments_count || 0) ? `(${cmList[n.id]?.length ?? n.comments_count ?? 0})` : ''}
                     </button>
+                    {isOwner && (
+                      <button onClick={()=>delNote(n.id)} className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg" title="Удалить объявление" aria-label="Удалить объявление">
+                        <Trash2 size={14}/>
+                      </button>
+                    )}
                   </div>
                   {cmOpen[n.id] && (
                     <div className="mt-2 space-y-2 border-t dark:border-slate-700 pt-2" data-testid={`comm-list-${n.id}`}>
@@ -623,14 +717,27 @@ export default function ClassroomDetail(){
                       <FlaskConical size={17}/>{t('cls_new_quiz')}
                     </button>
                   )}
-                  {topics.length>0 && (
-                    <select value={atopic} onChange={e=>setAtopic(e.target.value)}
-                      data-testid="task-topic" aria-label="Тема из учебной программы"
-                      className="w-full px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white outline-none">
-                      <option value="">Тема учебной программы (необязательно)</option>
-                      {topics.map((tp:any)=><option key={tp.id} value={tp.id}>{tp.num}. {tp.title}</option>)}
-                    </select>
-                  )}
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {topics.length>0 && (
+                      <select value={atopic} onChange={e=>setAtopic(e.target.value)}
+                        data-testid="task-topic" aria-label="Тема из учебной программы"
+                        className="w-full px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white outline-none text-sm">
+                        <option value="">Тема учебной программы (необязательно)</option>
+                        {topics.map((tp:any)=><option key={tp.id} value={tp.id}>{tp.num}. {tp.title}</option>)}
+                      </select>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">Макс. балл:</span>
+                      {['5','10','100'].map(v=>(
+                        <button key={v} type="button" onClick={()=>setAmax(v)}
+                          className={`px-3 py-2 rounded-xl text-xs font-bold border ${amax===v?'bg-indigo-600 text-white border-indigo-600':'bg-white dark:bg-slate-900 dark:text-slate-200 dark:border-slate-700'}`}>
+                          {v}
+                        </button>
+                      ))}
+                      <input value={amax} onChange={e=>setAmax(e.target.value.replace(/\D/g,''))} aria-label="Максимум баллов"
+                        className="w-16 px-2 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white text-center text-xs font-bold"/>
+                    </div>
+                  </div>
                   {members.length>0 && (
                     <select value={apersonal} onChange={e=>setApersonal(e.target.value)}
                       data-testid="task-personal" aria-label="Персонально ученику"
@@ -660,52 +767,90 @@ export default function ClassroomDetail(){
                   </div>
                 </div>
               )}
-              {tasks.map(a=>{
+              {!isOwner && tasks.length > 0 && (
+                <div className="flex gap-1.5 flex-wrap">
+                  {([['all','Все'],['todo','К выполнению'],['done','Сдано']] as const).map(([k,lbl])=>(
+                    <button key={k} onClick={()=>setTaskFilter(k)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border ${taskFilter===k?'bg-indigo-600 text-white border-indigo-600':'bg-white dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700'}`}>
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {tasks.filter((a:any)=>{
+                if(isOwner || taskFilter==='all') return true
+                const st = myTasks[a.id]?.status || 'pending'
+                const isDone = st==='submitted' || st==='late'
+                return taskFilter==='done' ? isDone : !isDone
+              }).map(a=>{
                 const my = myTasks[a.id]
                 const st = my?.status || 'pending'
-                // урок/тест мог быть удалён (SET_NULL) — кнопка «Открыть» тогда не врёт ссылкой в /lessons/null
                 const gone = (a.kind==='lesson' && !a.lesson) || (a.kind==='test' && !a.test)
                 const openTo = a.kind==='lesson' ? `/lessons/${a.lesson}` : `/tests/${a.test}/take`
                 const cd = countdown(a.deadline)
                 const kindCls = a.kind==='test'? 'bg-rose-100 text-rose-700' : a.kind==='link'? 'bg-violet-100 text-violet-700' : a.kind==='write'? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'
                 const kindLbl = a.kind==='test'? t('tests') : a.kind==='lesson'? t('lessons') : a.kind==='link'? t('cls_k_link') : t('cls_k_write')
                 const sm = a.submitted_count ?? 0
+                const totalTarget = a.assigned_to ? 1 : (room.members_count ?? 0)
                 return (
                   <div key={a.id} className="p-4 rounded-xl border dark:border-slate-700 flex flex-wrap items-center gap-3">
                     <div className="flex-1 min-w-[200px]">
                       <div className="font-bold flex items-center gap-2 dark:text-white flex-wrap">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full ${kindCls}`}>{kindLbl}</span>
-                        {a.title}
-                        {/* «Гугл-классрум»-фичa: учитель сразу видит, сколько кто сдал */}
+                        <span>{a.title}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-semibold">max {a.max_score || 100}</span>
+                        {a.topic_title && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 font-semibold">📚 {a.topic_title}</span>
+                        )}
+                        {a.assigned_to_name && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-700 dark:text-fuchsia-300 font-semibold">🎯 Персонально: @{a.assigned_to_name}</span>
+                        )}
                         {isOwner && room && (
                           <button onClick={()=>setSubListFor(a)} title={t('cls_who_title')}
                             className={`text-[10px] px-2 py-0.5 rounded-full font-bold cursor-pointer hover:ring-2 hover:ring-emerald-400/60 transition ${sm>0?'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300':'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}
                             data-testid={`subm-count-${a.id}`}>
-                            {t('cls_submitted_of').replace('{x}', String(sm)).replace('{y}', String(room.members_count ?? 0))}
+                            {t('cls_submitted_of').replace('{x}', String(sm)).replace('{y}', String(totalTarget))}
                           </button>
                         )}
                       </div>
+                      {a.topic_criteria && <div className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">✓ Критерий КР: {a.topic_criteria}</div>}
                       {a.url && <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-600 underline break-all mt-1 inline-block max-w-full">{a.url}</a>}
                       {a.instructions && <div className="text-sm text-slate-500 dark:text-slate-400 mt-1 whitespace-pre-wrap">{a.instructions}</div>}
                       <div className="text-xs text-slate-400 mt-1 flex items-center gap-2">
                         <span className="flex items-center gap-1"><Clock size={12}/>{fmtDl(a.deadline)}</span>
                         {cd && <span className="font-semibold text-indigo-600">{cd}</span>}
-                        {st==='overdue' && <span className="font-semibold text-red-600">{t('cls_overdue')}</span>}
+                        {!isOwner && st==='overdue' && <span className="font-semibold text-red-600">{t('cls_overdue')}</span>}
                       </div>
                       {!isOwner && wOpen===a.id && (
-                        <div className="mt-2 flex gap-2">
-                          <textarea autoFocus value={wText} onChange={e=>setWText(e.target.value)} rows={2} placeholder={t('cls_ans_ph')}
-                            className="flex-1 min-w-0 px-3 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white dark:placeholder-slate-500 outline-none"/>
-                          <button onClick={()=>sendAnswer(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-semibold shrink-0">{t('cls_submit')}</button>
+                        <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                          <textarea autoFocus value={wText} onChange={e=>setWText(e.target.value)} rows={3} placeholder={t('cls_ans_ph')}
+                            className="flex-1 min-w-0 px-3 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white dark:placeholder-slate-500 outline-none text-sm"/>
+                          <div className="flex sm:flex-col gap-1.5 shrink-0">
+                            <button onClick={()=>sendAnswer(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-semibold">{t('cls_submit')}</button>
+                            <button onClick={()=>setWOpen(null)} className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs font-semibold">Отмена</button>
+                          </div>
                         </div>
                       )}
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full border ${ST_CLS[st]}`}>{ST_TXT[st]} {my?.score!=null? `${my.score}`:''}</span>
+                    {!isOwner && (
+                      <span className={`text-xs px-2.5 py-1 rounded-full border font-semibold ${ST_CLS[st]}`}>
+                        {ST_TXT[st]} {my?.score!=null? `${my.score}/${a.max_score||100}`:''}
+                      </span>
+                    )}
+                    {isOwner && (
+                      <button onClick={()=>delTask(a.id, a.title)} className="p-2 text-slate-400 hover:text-red-500 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20" title="Удалить задание" aria-label="Удалить задание">
+                        <Trash2 size={16}/>
+                      </button>
+                    )}
                     {!isOwner && a.kind==='link' && a.url && <a href={a.url} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 min-h-[44px] rounded-xl bg-violet-50 text-violet-700 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14}/></a>}
                     {!isOwner && (a.kind==='lesson'||a.kind==='test') && (gone
                       ? <span className="px-3 py-2.5 min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 text-sm font-semibold flex items-center gap-1" title={t('cls_material_gone')}>{t('cls_material_gone')}</span>
                       : <Link to={openTo} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-50 text-indigo-700 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14}/></Link>)}
-                    {!isOwner && !isParent && st!=='submitted' && st!=='late' && a.kind==='write' && wOpen!==a.id && <button onClick={()=>startWrite(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-amber-500 text-white text-sm font-semibold">{t('cls_write_do')}</button>}
+                    {!isOwner && !isParent && a.kind==='write' && wOpen!==a.id && (
+                      st!=='submitted' && st!=='late'
+                        ? <button onClick={()=>startWrite(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-amber-500 text-white text-sm font-semibold">{t('cls_write_do')}</button>
+                        : my?.score==null && <button onClick={()=>startWrite(a.id)} className="px-3 py-2 min-h-[40px] rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold">Изменить ответ</button>
+                    )}
                     {!isOwner && !isParent && st!=='submitted' && st!=='late' && a.kind!=='write' && <button onClick={()=>submit(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-semibold">{t('cls_submit')}</button>}
                   </div>
                 )
@@ -732,7 +877,7 @@ export default function ClassroomDetail(){
                   {paidOpen && (
                     <div className="mt-3 space-y-3">
                       <label className="flex items-center gap-2 text-sm dark:text-white">
-                        <input type="checkbox" checked={!!room.is_paid} onChange={e=>savePaid({is_paid:e.target.checked})} className="w-4 h-4"/>
+                        <input type="checkbox" checked={!!room.is_paid} onChange={e=>savePaid({is_paid:e.target.checked}, true)} className="w-4 h-4"/>
                         Включить платный доступ
                       </label>
                       <div className="text-xs text-slate-500 dark:text-slate-400 -mt-2">При включении <b>все текущие ученики</b> перейдут в статус «ждёт оплаты» — кто уже заплатил, подтверди кнопкой «Оплату принял» в списке ниже.</div>
@@ -810,14 +955,54 @@ export default function ClassroomDetail(){
                     </button>
                   </div>
                   {bulkOpen && (
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border dark:border-slate-700 space-y-2">
-                      <div className="text-xs text-slate-500">Вставь список учеников (каждый с новой строки: <code className="font-mono">логин;Имя Фамилия;пароль</code>). Если аккаунта ещё нет — он создастся автоматически!</div>
-                      <textarea value={bulkText} onChange={e=>setBulkText(e.target.value)} rows={4} placeholder={"asanov_a;Асанов Адилет;123456\nbekova_a;Бекова Айдана;123456"}
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border dark:border-slate-700 space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">Формат строк: <code className="font-mono">логин;Имя Фамилия;пароль (≥8 символов)</code>. Если аккаунта нет — создастся автоматически!</div>
+                        <label className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border dark:border-slate-600 text-xs font-semibold cursor-pointer hover:border-indigo-400 dark:text-slate-200">
+                          📎 Загрузить .csv
+                          <input type="file" accept=".csv,.txt" className="hidden" onChange={async e=>{
+                            const f=e.target.files?.[0]; if(!f) return
+                            setBulkText(await f.text()); e.target.value=''
+                          }}/>
+                        </label>
+                      </div>
+                      <textarea value={bulkText} onChange={e=>setBulkText(e.target.value)} rows={4} placeholder={"asanov_a;Асанов Адилет;School2026!\nbekova_a;Бекова Айдана;School2026!"}
                         className="w-full px-3 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white text-xs font-mono"/>
                       <div className="flex gap-2">
                         <button onClick={importStudents} disabled={bulkBusy} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold">{bulkBusy?'Импорт…':'Перенести учеников'}</button>
-                        <button onClick={()=>setBulkOpen(false)} className="px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs font-semibold dark:text-white">Отмена</button>
+                        <button onClick={()=>{setBulkOpen(false); setBulkResult(null)}} className="px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs font-semibold dark:text-white">Закрыть</button>
                       </div>
+                      {bulkResult && (bulkResult.created_accounts.length>0 || bulkResult.skipped.length>0) && (
+                        <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 space-y-2" data-testid="bulk-created-passwords">
+                          {bulkResult.created_accounts.length>0 && (
+                            <>
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-emerald-800 dark:text-emerald-200">🔑 Сохрани выданные пароли (показываются один раз):</span>
+                                <div className="flex gap-1.5">
+                                  <button type="button" onClick={()=>{
+                                    const txt = bulkResult.created_accounts.map((a:any)=>`${a.username} / ${a.password}`).join('\n')
+                                    navigator.clipboard?.writeText(txt); toast('Логины и пароли скопированы','success')
+                                  }} className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border text-[11px] font-semibold dark:text-white flex items-center gap-1"><Copy size={12}/> Копировать</button>
+                                  <button type="button" onClick={downloadCreatedAccounts} className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold flex items-center gap-1"><Download size={12}/> Скачать CSV</button>
+                                </div>
+                              </div>
+                              <div className="max-h-36 overflow-auto text-xs font-mono bg-white dark:bg-slate-900 rounded-lg p-2 border dark:border-slate-700 space-y-0.5">
+                                {bulkResult.created_accounts.map((a:any, idx:number)=>(
+                                  <div key={idx} className="flex justify-between gap-2 dark:text-slate-200">
+                                    <span><b>{a.username}</b> {a.first_name ? `(${a.first_name})` : ''}</span>
+                                    <span className="text-indigo-600 dark:text-indigo-400 select-all">{a.password}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                          {bulkResult.skipped.length>0 && (
+                            <div className="text-xs text-amber-700 dark:text-amber-300">
+                              Пропущено строк: {bulkResult.skipped.length} ({bulkResult.skipped.slice(0,3).map((x:any)=>typeof x==='string'?x:`${x.line||''}: ${x.reason||''}`).join('; ')})
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -830,16 +1015,26 @@ export default function ClassroomDetail(){
                 {members.map((m:any)=>(
                   <div key={m.id} className="py-2.5 flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 dark:text-white flex items-center justify-center font-bold">{m.student_name?.[0]?.toUpperCase()}</div>
-                    <div className="font-semibold dark:text-white">{m.student_name}</div>
+                    <div className="min-w-0">
+                      <div className="font-semibold dark:text-white truncate">{m.student_first_name || m.student_name}</div>
+                      {m.student_first_name && <div className="text-[11px] text-slate-400">@{m.student_name}</div>}
+                    </div>
                     {m.status==='pending' && (m.receipt
                       ? <a href={mediaUrl(m.receipt)} target="_blank" rel="noopener noreferrer" title="Открыть чек"><span className="text-[11px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">чек отправлен 📎</span></a>
                       : <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">не оплатил</span>)}
                     {isOwner && (
                       <div className="ml-auto flex items-center gap-2">
+                        <Link to={`/portfolio?user=${encodeURIComponent(m.student_name)}`} className="px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-semibold flex items-center gap-1 hover:bg-amber-100">
+                          <Medal size={13}/> Портфолио
+                        </Link>
                         {m.status==='pending' && (
                           <button onClick={()=>approvePay(m.student)} data-testid={`approve-${m.student_name}`} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold">Оплату принял</button>
                         )}
-                        <button onClick={async()=>{ await client.post(`/classrooms/${id}/remove_member/`, {username:m.student_name}).catch(()=>{}); load() }} className="text-xs text-red-500 hover:text-red-700">✕</button>
+                        <button onClick={async()=>{
+                          if(!confirm(`Убрать ученика @${m.student_name} из класса?`)) return
+                          try{ await client.post(`/classrooms/${id}/remove_member/`, {username:m.student_name}); toast('Ученик убран из класса','success'); load() }
+                          catch(e:any){ toast(e?.response?.data?.detail||'Ошибка удаления','error') }
+                        }} className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" title="Убрать из класса">✕</button>
                       </div>
                     )}
                   </div>
@@ -861,7 +1056,14 @@ export default function ClassroomDetail(){
           )}
 
           {tab==='progress' && !isOwner && (
-            <div className="text-center text-slate-400 py-8">Прогресс по темам — ученику на странице «Мой прогресс»</div>
+            <div className="text-center py-8 space-y-3">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {isParent ? 'Прогресс, пробелы и диагностика ребёнка доступны в разделе «Дети»' : 'Подробная карта знаний, пробелы и персональные рекомендации — в разделе «Мой прогресс»'}
+              </p>
+              <Link to={isParent ? '/children' : '/progress'} className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+                <TrendingUp size={15}/> {isParent ? 'Открыть дневник ребёнка' : 'Открыть мой прогресс'}
+              </Link>
+            </div>
           )}
 
           {tab==='grades' && isOwner && (
@@ -967,23 +1169,31 @@ export default function ClassroomDetail(){
                         {gb.assignments.map((a:any)=>{
                           const c = gb.cells.find((x:any)=>x.assignment===a.id && x.student===s.id)
                           const isEdit = !!(editCell && editCell.a===a.id && editCell.s===s.id)
-                          if(isEdit) return (
+                          if(isEdit) {
+                            const quickVals = (a.max_score || 100) <= 5 ? [2, 3, 4, 5]
+                              : (a.max_score || 100) <= 10 ? [4, 6, 8, 10]
+                              : [50, 70, 85, 100]
+                            return (
                             <td key={a.id} className="p-2 border-b dark:border-slate-700 text-center">
                               <input autoFocus maxLength={8} value={editVal} onChange={e=>setEditVal(e.target.value)}
-                                onBlur={()=>saveCell(a.id,s.id,editVal)}
+                                onBlur={()=>saveCell(a.id, s.id, editVal, editOrig)}
                                 onKeyDown={e=>{
-                                  // Enter: сохранить и перейти к следующему ученику в этой колонке — оценка всего класса «не отрывая рук»
+                                  // Enter: сохранить и перейти к следующему ученику, ПОДСТАВИВ его реальную текущую оценку (без затирания!)
                                   if(e.key==='Enter'){
-                                    saveCell(a.id,s.id,editVal)
+                                    saveCell(a.id, s.id, editVal, editOrig)
                                     const nx=gbList[si+1]
-                                    if(nx){ setEditCell({a:a.id,s:nx.id}); setEditVal('') }
+                                    if(nx){
+                                      const nc = gb.cells.find((x:any)=>x.assignment===a.id && x.student===nx.id)
+                                      const nv = nc?.mark || (nc?.score!=null? String(Math.round(nc.score*10)/10) : '')
+                                      setEditCell({a:a.id,s:nx.id}); setEditVal(nv); setEditOrig(nv)
+                                    }
                                   }
                                   else if(e.key==='Escape') setEditCell(null)
                                 }}
                                 className="w-16 px-1 py-1 rounded-lg border-2 border-blue-500 text-center text-xs bg-white dark:bg-slate-800 dark:text-white"/>
-                              {/* Быстрая оценка 2–5 сразу как число: onMouseDown не даёт input'у blur'нуться, чтобы не было двойного POST */}
+                              {/* Быстрые оценки адаптируются под max_score колонки */}
                               <div className="mt-1 flex justify-center gap-1" data-testid={`gb-quick-${s.id}-${a.id}`}>
-                                {[2,3,4,5].map(n=>(
+                                {quickVals.map(n=>(
                                   <button key={n} type="button" onMouseDown={e=>e.preventDefault()}
                                     onClick={()=>saveCell(a.id,s.id,String(n))}
                                     className="px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white text-[11px] font-bold hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition"
@@ -996,11 +1206,14 @@ export default function ClassroomDetail(){
                                 </div>
                               )}
                             </td>
-                          )
+                          )}
                           return (
                             <td key={a.id} className="p-2 border-b dark:border-slate-700 text-center">
                               <button data-testid={`gb-cell-${s.id}-${a.id}`} title={a.title}
-                                onClick={()=>{ setEditCell({a:a.id,s:s.id}); setEditVal(c?.mark || (c?.score!=null? String(Math.round(c.score*10)/10) : '')) }}
+                                onClick={()=>{
+                                  const initV = c?.mark || (c?.score!=null? String(Math.round(c.score*10)/10) : '')
+                                  setEditCell({a:a.id,s:s.id}); setEditVal(initV); setEditOrig(initV)
+                                }}
                                 className={`inline-flex items-center justify-center min-w-[64px] px-2 py-1 rounded-lg border text-xs font-bold ${c?.mark? 'bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800' : ST_CLS[c?.status||'pending']} hover:ring-2 hover:ring-blue-200 dark:hover:ring-blue-700 transition cursor-pointer`}>
                                 {c?.mark || (c?.score!=null? Math.round(c.score*10)/10 : ST_TXT[c?.status||'pending'])}
                               </button>
@@ -1009,7 +1222,10 @@ export default function ClassroomDetail(){
                         })}
                         <td className="p-2 border-b dark:border-slate-700 text-center" data-testid={`gb-avg-${s.id}`}>
                           {gb.avg_student?.[String(s.id)]!=null
-                            ? <span className={`inline-block px-2 py-0.5 rounded-lg font-bold ${avgColor(gb.avg_student[String(s.id)])}`}>{gb.avg_student[String(s.id)]}</span>
+                            ? <span className={`inline-block px-2 py-0.5 rounded-lg font-bold ${avgColor(gb.avg_student_pct?.[String(s.id)] ?? gb.avg_student[String(s.id)])}`}>
+                                {gb.avg_student[String(s.id)]}
+                                {gb.avg_student_pct?.[String(s.id)] != null && <span className="text-[10px] opacity-75 ml-1">({Math.round(gb.avg_student_pct[String(s.id)])}%)</span>}
+                              </span>
                             : <span className="text-slate-400">—</span>}
                         </td>
                       </tr>
@@ -1040,30 +1256,59 @@ export default function ClassroomDetail(){
       {isOwner && subListFor && (
         <div className="fixed inset-0 z-50" data-testid="who-list">
           <div className="absolute inset-0 bg-black/40" onClick={()=>setSubListFor(null)} />
-          <div className="absolute right-0 top-0 h-full w-full max-w-sm bg-white dark:bg-slate-900 border-l dark:border-slate-700 shadow-2xl p-4 overflow-y-auto">
+          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white dark:bg-slate-900 border-l dark:border-slate-700 shadow-2xl p-4 overflow-y-auto">
             <div className="flex items-start gap-2 mb-4">
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{t('cls_who_title')}</div>
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{t('cls_who_title')} · max {subListFor.max_score || 100}</div>
                 <div className="font-bold dark:text-white break-words">{subListFor.title}</div>
                 <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-1"><Clock size={12}/>{fmtDl(subListFor.deadline)}</div>
               </div>
               <button onClick={()=>setSubListFor(null)} aria-label={t('close')} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-white shrink-0"><X size={18}/></button>
             </div>
-            <div className="space-y-2">
-              {(gb?.students || []).map((s:any)=>{
+            <div className="space-y-2.5">
+              {(gb?.students || []).filter((s:any)=> !subListFor.assigned_to || String(s.id)===String(subListFor.assigned_to)).map((s:any)=>{
                 const c = (gb?.cells || []).find((x:any)=>x.assignment===subListFor.id && x.student===s.id)
                 const st = c?.status || 'pending'
                 const lbl = st==='submitted' ? t('cls_w_sub') : st==='late' ? t('cls_w_late') : st==='overdue' ? t('cls_w_ov') : t('cls_w_no')
+                const mx = subListFor.max_score || 100
+                const quickBtns = mx <= 5 ? [2, 3, 4, 5] : mx <= 10 ? [4, 6, 8, 10] : [50, 70, 85, 100]
                 return (
-                  <div key={s.id} className="flex items-center gap-3 p-2.5 rounded-xl border dark:border-slate-700" data-testid={`who-st-${s.id}`}>
-                    <div className="w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0">{s.username?.[0]?.toUpperCase()}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm dark:text-white truncate">{s.username}</div>
-                      {c?.mark ? <div className="text-xs text-slate-400">{c.mark}</div> : null}
+                  <div key={s.id} className="p-3 rounded-xl border dark:border-slate-700 space-y-2" data-testid={`who-st-${s.id}`}>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0">{s.username?.[0]?.toUpperCase()}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm dark:text-white truncate">{s.first_name || s.username}</div>
+                        <div className="text-[11px] text-slate-400">@{s.username}{c?.mark ? ` · ${c.mark}` : ''}</div>
+                      </div>
+                      <span className={`text-[11px] px-2 py-1 rounded-full border whitespace-nowrap font-semibold ${ST_CLS[st]}`}>
+                        {ST_TXT[st]} {lbl}{c?.score!=null ? ` • ${c.score}/${mx}` : ''}
+                      </span>
                     </div>
-                    <span className={`text-[11px] px-2 py-1 rounded-full border whitespace-nowrap ${ST_CLS[st]}`}>
-                      {ST_TXT[st]} {lbl}{c?.score!=null ? ` • ${c.score}` : ''}
-                    </span>
+                    {c?.answer && (
+                      <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap max-h-48 overflow-auto">
+                        <span className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400 block mb-0.5">Ответ ученика:</span>
+                        {c.answer}
+                      </div>
+                    )}
+                    {/* Быстрая оценка прямо из панели «Кто сдал» */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="text-[11px] text-slate-400">Оценить:</span>
+                      {quickBtns.map(n=>(
+                        <button key={n} type="button" onClick={()=>saveCell(subListFor.id, s.id, String(n))}
+                          className={`px-2 py-1 rounded-lg border text-xs font-bold transition ${c?.score===n ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-800 dark:text-white dark:border-slate-600 hover:bg-indigo-50 dark:hover:bg-slate-700'}`}>
+                          {n}
+                        </button>
+                      ))}
+                      <input
+                        value={drawerScores[s.id] ?? ''}
+                        onChange={e=>setDrawerScores(m=>({...m, [s.id]: e.target.value}))}
+                        onKeyDown={e=>{ if(e.key==='Enter' && drawerScores[s.id]){ saveCell(subListFor.id, s.id, drawerScores[s.id]); setDrawerScores(m=>({...m,[s.id]:''})) } }}
+                        placeholder={`0–${mx}`}
+                        className="w-16 px-2 py-1 rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white text-xs text-center ml-auto"
+                      />
+                      <button type="button" onClick={()=>{ if(drawerScores[s.id]!=null && drawerScores[s.id]!==''){ saveCell(subListFor.id, s.id, drawerScores[s.id]); setDrawerScores(m=>({...m,[s.id]:''})) } }}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-semibold">OK</button>
+                    </div>
                   </div>
                 )
               })}

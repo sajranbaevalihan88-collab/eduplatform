@@ -4,7 +4,7 @@ import { useLang } from '../context/LangContext'
 import { sfx } from '../utils/sfx'
 import { AI_FEATURES, isTeacherAIAllowed } from '../utils/features'
 import { wordsFromText, WORD_PACKS } from '../utils/words'
-import { X, Trash2, Share2, Save, Play, Sparkles } from 'lucide-react'
+import { X, Trash2, Share2, Save, Play, Sparkles, RotateCcw } from 'lucide-react'
 
 const hum = (ms: number | number[]) => { try { navigator.vibrate && navigator.vibrate(ms) } catch {} }
 
@@ -14,27 +14,53 @@ const DIRS: Dir[] = [
   { dx: 1, dy: 1 }, { dx: 1, dy: -1 }, { dx: -1, dy: 1 }, { dx: -1, dy: -1 },
 ]
 
+const WORD_COLORS = [
+  'bg-emerald-500 text-white border-emerald-600',
+  'bg-amber-500 text-slate-950 border-amber-600',
+  'bg-violet-500 text-white border-violet-600',
+  'bg-sky-500 text-white border-sky-600',
+  'bg-rose-500 text-white border-rose-600',
+  'bg-teal-500 text-white border-teal-600',
+  'bg-orange-500 text-white border-orange-600',
+  'bg-pink-500 text-white border-pink-600',
+  'bg-blue-600 text-white border-blue-700',
+  'bg-lime-500 text-slate-950 border-lime-600',
+]
+
 const BANKS: Record<string, string[]> = {
-  ru: ['КОД', 'ФАЙЛ', 'РОБОТ', 'ПИКСЕЛЬ', 'СЕТКА', 'ЛОГИКА', 'ДАННЫЕ', 'МОДЕЛЬ', 'ГРАФИК', 'ТОЧКА', 'ЦИКЛ', 'АТОМ'],
-  kg: ['КОД', 'ФАЙЛ', 'БИЛИМ', 'ТОО', 'ТОР', 'СЕТКА', 'ЛОГИКА', 'ДАНА', 'БАЛА', 'ЭМГЕК', 'ЦИКЛ', 'ГРАФ'],
-  en: ['CODE', 'FILE', 'ROBOT', 'PIXEL', 'GRID', 'LOGIC', 'DATA', 'MODEL', 'GRAPH', 'DOT', 'LOOP', 'ATOM'],
+  ru: ['КОД', 'ФАЙЛ', 'РОБОТ', 'ПИКСЕЛЬ', 'СЕТКА', 'ЛОГИКА', 'ДАННЫЕ', 'МОДЕЛЬ', 'ГРАФИК', 'ТОЧКА', 'ЦИКЛ', 'АТОМ', 'ПАЙТОН', 'СПИСОК', 'СЕРВЕР', 'МАССИВ'],
+  kg: ['КОД', 'ФАЙЛ', 'БИЛИМ', 'ТОО', 'ТОР', 'СЕТКА', 'ЛОГИКА', 'ДАНА', 'БАЛА', 'ЭМГЕК', 'ЦИКЛ', 'ГРАФ', 'МЕКТЕП', 'КИТЕП', 'КОМУЗ', 'ЖАЙЛОО'],
+  en: ['CODE', 'FILE', 'ROBOT', 'PIXEL', 'GRID', 'LOGIC', 'DATA', 'MODEL', 'GRAPH', 'DOT', 'LOOP', 'ATOM', 'PYTHON', 'ARRAY', 'SERVER', 'STRING'],
 }
 
 const SIZE = 10
 const rnd = (n: number) => Math.floor(Math.random() * n)
-const KG_LETTERS = 'АБВГДЕЖЗИЙКЛМНОӨПРСТУҮФХЦЧШ'
+const KG_LETTERS = 'АБВГДЕЖЗИЙКЛМНОӨПРСТУҮФХЦЧШҢ'
 const RU_LETTERS = 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЭЮЯ'
 const EN_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 const CYR = new Set((RU_LETTERS + KG_LETTERS).split(''))
-const CYR_KG_ONLY = new Set('ҮӨҢӨ'.split(''))
 
 function letterPool(lang: string) {
   return lang === 'kg' ? KG_LETTERS : lang === 'en' ? EN_LETTERS : RU_LETTERS
 }
 
+function dirArrow(cells?: [number, number][]): string {
+  if (!cells || cells.length < 2) return '★'
+  const dx = Math.sign(cells[1][0] - cells[0][0])
+  const dy = Math.sign(cells[1][1] - cells[0][1])
+  if (dx === 1 && dy === 0) return '→'
+  if (dx === -1 && dy === 0) return '←'
+  if (dx === 0 && dy === 1) return '↓'
+  if (dx === 0 && dy === -1) return '↑'
+  if (dx === 1 && dy === 1) return '↘'
+  if (dx === 1 && dy === -1) return '↗'
+  if (dx === -1 && dy === 1) return '↙'
+  return '↖'
+}
+
 function placeWord(grid: (string | null)[][], word: string): { cells: [number, number][] } | null {
-  for (let a = 0; a < 200; a++) {
+  for (let a = 0; a < 220; a++) {
     const d = DIRS[rnd(DIRS.length)]
     const sx = rnd(SIZE), sy = rnd(SIZE)
     const ex = sx + d.dx * (word.length - 1)
@@ -64,8 +90,8 @@ function buildBoard(lang: string, level: number, customWords?: string[]) {
     pool = [...(BANKS[lang] || BANKS.ru)].sort(() => Math.random() - 0.5)
   }
   const want = customWords && customWords.length >= 2
-    ? Math.min(12, pool.length)
-    : Math.min(4 + Math.floor(level / 2), 8)
+    ? Math.min(14, pool.length)
+    : Math.min(4 + Math.floor(level / 2), 9)
   const words: string[] = []
   const src = pool.sort(() => Math.random() - 0.5)
   while (words.length < want && src.length) {
@@ -73,15 +99,19 @@ function buildBoard(lang: string, level: number, customWords?: string[]) {
   }
   const grid: (string | null)[][] = Array.from({ length: SIZE }, () => Array<string | null>(SIZE).fill(null))
   const placed: Record<string, [number, number][]> = {}
+  const actualWords: string[] = []
   for (const w of words) {
     const p = placeWord(grid, w)
-    if (p) placed[w] = p.cells
+    if (p) {
+      placed[w] = p.cells
+      actualWords.push(w)
+    }
   }
   const letters = letterPool(lang)
   for (let y = 0; y < SIZE; y++)
     for (let x = 0; x < SIZE; x++)
       if (!grid[y][x]) grid[y][x] = letters[rnd(letters.length)]
-  return { grid: grid as string[][], words, placed, level }
+  return { grid: grid as string[][], words: actualWords.length ? actualWords : words, placed, level }
 }
 
 type WsSet = { id: string; name: string; words: string[]; lang: string }
@@ -96,23 +126,27 @@ function loadSets(): WsSet[] {
 
 const PRESETS: Record<string, { label: string; words: string[] }[]> = {
   ru: [
+    { label: '🐍 Python и IT', words: ['ПАЙТОН', 'ФУНКЦИЯ', 'СПИСОК', 'СЛОВАРЬ', 'КОРТЕЖ', 'ИНДЕКС', 'МОДУЛЬ', 'ЦИКЛ'] },
+    { label: '🏔️ Кыргызстан', words: ['БИШКЕК', 'МАНАС', 'КОМУЗ', 'АЛАТОО', 'КАЛПАК', 'БУРАНА', 'НАРЫН', 'ТАЛАС'] },
+    { label: '🧬 Наука и Космос', words: ['АТОМ', 'КЛЕТКА', 'ОРБИТА', 'КОСМОС', 'МАГНИТ', 'ФОТОН', 'ЭНЕРГИЯ', 'ПЛАНЕТА'] },
     { label: '🏫 Школа', words: ['УРОК', 'МЕЛ', 'ПЕРО', 'КНИГА', 'КАРАНДАШ', 'ЛИНЕЙКА', 'ТЕТРАДЬ', 'ЗВОНОК'] },
     { label: '🐶 Животные', words: ['КОШКА', 'СОБАКА', 'КОРОВА', 'ЛОШАДЬ', 'ЛИСА', 'ВОЛК', 'ЗАЯЦ', 'ТЮЛЕНЬ'] },
     { label: '🍎 Еда', words: ['ЯБЛОКО', 'ГРУША', 'АРБУЗ', 'ХЛЕБ', 'СУП', 'КАША', 'МОРКОВЬ', 'ФАСОЛЬ'] },
   ],
   en: [
+    { label: '🐍 Python & Code', words: ['PYTHON', 'LOOP', 'LIST', 'STRING', 'OBJECT', 'CLASS', 'MODULE', 'ARRAY'] },
     { label: '🏫 School', words: ['BOOK', 'PEN', 'DESK', 'SCHOOL', 'PAPER', 'RULER', 'LESSON', 'BELL'] },
     { label: '🐶 Animals', words: ['CAT', 'DOG', 'COW', 'HORSE', 'FOX', 'WOLF', 'RABBIT', 'SHEEP'] },
     { label: '🍎 Food', words: ['APPLE', 'PEAR', 'MELON', 'BREAD', 'SOUP', 'NOODLE', 'CARROT', 'BEANS'] },
   ],
 }
 
-// кг-пресеты: слова из реального словаря WORD_PACKS (без выдуманных)
 try {
   const kgp = (WORD_PACKS.kg || WORD_PACKS.ru).words
     .filter(w => w.length >= 3 && w.length <= 10)
     .map(w => w.toUpperCase())
   PRESETS.kg = [
+    { label: '🏔️ Кыргызстан', words: ['БИШКЕК', 'МАНАС', 'КОМУЗ', 'АЛАТОО', 'КАЛПАК', 'ЖАЙЛОО', 'МЕКТЕП', 'БИЛИМ'] },
     { label: '📖 Сөздөр', words: [...new Set(kgp.slice(0, 10))].slice(0, 8) },
     { label: '📖 Дагы', words: [...new Set(kgp.slice(10, 20))].slice(0, 8) },
   ]
@@ -121,7 +155,7 @@ try {
 function detectLang(words: string[]): 'ru' | 'kg' | 'en' {
   const join = words.join('')
   if (!/[a-z]/i.test(join)) {
-    if (/[үөңс]/i.test(join)) return 'kg'
+    if (/[үөң]/i.test(join)) return 'kg'
     return 'ru'
   }
   return 'en'
@@ -144,9 +178,8 @@ export default function WordSearch() {
   const [custom, setCustom] = useState<WsSet | null>(null)
   const [round, setRound] = useState(0)
   const [panel, setPanel] = useState<null | 'build'>(null)
-  // стартовый выбор «как играем»: pick — мод входа (готовые / свой), ready — встроенные коллекции
   const [entry, setEntry] = useState<null | 'pick' | 'ready'>(null)
-  // Автоподбор слов в билдере
+
   const [aiOpen, setAiOpen] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiCount, setAiCount] = useState(10)
@@ -163,13 +196,18 @@ export default function WordSearch() {
   const [board, setBoard] = useState(() => buildBoard('ru', 1))
   const [found, setFound] = useState<Record<string, boolean>>({})
   const [foundCells, setFoundCells] = useState<[number, number][]>([])
+  const [cellColors, setCellColors] = useState<Record<string, string>>({})
+  const [wordColors, setWordColors] = useState<Record<string, string>>({})
   const [selPath, setSelPath] = useState<[number, number][]>([])
+  const [clickAnchor, setClickAnchor] = useState<[number, number] | null>(null)
   const [dragging, setDragging] = useState(false)
   const [wrongFlash, setWrongFlash] = useState(false)
   const [mistakes, setMistakes] = useState(0)
   const [hintsLeft, setHintsLeft] = useState(3)
   const [hintCell, setHintCell] = useState<[number, number] | null>(null)
+  const [hintArrow, setHintArrow] = useState<string>('')
   const [secs, setSecs] = useState(0)
+  const [score, setScore] = useState(0)
   const [best, setBest] = useState(() => Number(localStorage.getItem('edu-wordsearch-best') || 0))
   const boardRef = useRef<HTMLDivElement>(null)
   const hintTimer = useRef<any>(null)
@@ -179,26 +217,36 @@ export default function WordSearch() {
       .filter(s => s.length > 0))]
     const fail = (e: string) => ({ words, lang: 'ru', err: e })
     if (words.length < 3) return fail(t('ws_err_few'))
-    if (words.length > 12) return fail('≤ 12')
-    let langWarned = false
+    if (words.length > 14) return fail('≤ 14')
     for (const w of words) {
       if (w.length < 2 || w.length > 10) return fail(`“${w}” — 2–10`)
       const hasCyr = [...w].some(ch => CYR.has(ch))
       const hasLat = /[A-Z]/.test(w)
       if (hasCyr === hasLat) return fail(`“${w}” — ${t('ws_err_mixed')}`)
-      if (CYR_KG_ONLY.has(w[0])) langWarned = true
     }
-    // весь набор — один алфавит (сетка строится под один язык)
     if (words.some(w => [...w].some(ch => CYR.has(ch))) && words.some(w => /[A-Z]/.test(w)))
       return fail(t('ws_err_mixed'))
-    return { words: words.slice(0, 12), lang: detectLang(words), err: '' }
+    return { words: words.slice(0, 14), lang: detectLang(words), err: '' }
+  }
+
+  const resetProgressState = () => {
+    setFound({})
+    setFoundCells([])
+    setCellColors({})
+    setWordColors({})
+    setSelPath([])
+    setClickAnchor(null)
+    setSecs(0)
+    setMistakes(0)
+    setHintsLeft(3)
+    setHintCell(null)
+    setHintArrow('')
   }
 
   const applyCustom = (set: WsSet) => {
     setCustom(set)
     setRound(r => r + 1)
-    setFound({}); setFoundCells([]); setSelPath([]); setSecs(0)
-    setMistakes(0); setHintsLeft(3); setHintCell(null)
+    resetProgressState()
     setLevel(0)
   }
 
@@ -207,7 +255,6 @@ export default function WordSearch() {
     setPanel(null)
   }
 
-  // вход по ссылке ?c=<набор>
   useEffect(() => {
     const q = new URLSearchParams(location.search).get('c')
     if (q) {
@@ -227,7 +274,6 @@ export default function WordSearch() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // уроки для «из урока»
   useEffect(() => {
     client.get('/lessons/?owner=me').then(r => {
       const d = Array.isArray(r.data) ? r.data : r.data.results || []
@@ -235,20 +281,16 @@ export default function WordSearch() {
     }).catch(() => {})
   }, [])
 
-  // обычные уровни: пересборка
   useEffect(() => {
     if (custom) return
     setBoard(buildBoard(lang, level))
-    setFound({}); setFoundCells([]); setSelPath([]); setSecs(0)
-    setMistakes(0); setHintsLeft(3); setHintCell(null)
+    resetProgressState()
   }, [level, lang]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // кастомный набор: новый раунд при смене round
   useEffect(() => {
     if (!custom) return
     setBoard(buildBoard(custom.lang, 0, custom.words))
-    setFound({}); setFoundCells([]); setSelPath([]); setSecs(0)
-    setMistakes(0); setHintsLeft(3); setHintCell(null)
+    resetProgressState()
   }, [round]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => { if (hintTimer.current) clearTimeout(hintTimer.current) }, [])
@@ -266,20 +308,61 @@ export default function WordSearch() {
   })
 
   useEffect(() => {
+    if (allDone) return
     const iv = setInterval(() => setSecs(s => s + 1), 1000)
     return () => clearInterval(iv)
-  }, [])
+  }, [allDone])
 
   const cellFromPoint = (cx: number, cy: number): [number, number] | null => {
-    // на таче e.target остаётся стартовой клеткой (имплицитный захват указателя),
-    // поэтому текущую клетку ищем строго по координатам
     const el = document.elementFromPoint(cx, cy)?.closest('[data-c]') as HTMLElement | null
     if (!el) return null
     const [x, y] = (el as HTMLElement).dataset.c!.split(',').map(Number)
     return [x, y]
   }
 
-  // один жест = одна семья событий: pointerdown+touchstart прилетают вместе
+  const computeLinePath = (start: [number, number], end: [number, number]): [number, number][] | null => {
+    const [sx, sy] = start
+    const dx = end[0] - sx, dy = end[1] - sy
+    if (dx === 0 && dy === 0) return [start]
+    if (dx !== 0 && dy !== 0 && Math.abs(dx) !== Math.abs(dy)) return null
+    const len = Math.max(Math.abs(dx), Math.abs(dy))
+    const ux = Math.sign(dx), uy = Math.sign(dy)
+    const path: [number, number][] = []
+    for (let i = 0; i <= len; i++) path.push([sx + ux * i, sy + uy * i])
+    return path
+  }
+
+  const commitPath = (path: [number, number][]) => {
+    if (path.length < 2) { setSelPath([]); return }
+    const word = path.map(([x, y]) => board.grid[y][x]).join('')
+    const rev = [...word].reverse().join('')
+    const hit = board.words.find(w => (w === word || w === rev) && !found[w])
+    if (hit) {
+      sfx('ws.found')
+      hum(15)
+      const colorIdx = Object.keys(found).length % WORD_COLORS.length
+      const colorCls = WORD_COLORS[colorIdx]
+      setFound(f => ({ ...f, [hit]: true }))
+      setFoundCells(fc => [...fc, ...path])
+      setWordColors(wc => ({ ...wc, [hit]: colorCls }))
+      setCellColors(cc => {
+        const next = { ...cc }
+        path.forEach(([x, y]) => { next[`${x},${y}`] = colorCls })
+        return next
+      })
+      setScore(sc => sc + hit.length * 25 + Math.max(0, 60 - secs))
+      setClickAnchor(null)
+    } else {
+      sfx('ws.wrong')
+      hum(60)
+      setMistakes(m => m + 1)
+      setWrongFlash(true)
+      setTimeout(() => setWrongFlash(false), 450)
+      setClickAnchor(null)
+    }
+    setSelPath([])
+  }
+
   const gestureRef = useRef<{ active: boolean; src: 'pointer' | 'touch' | '' }>({ active: false, src: '' })
 
   const startSel = (c: [number, number] | null, src: 'pointer' | 'touch') => {
@@ -288,22 +371,25 @@ export default function WordSearch() {
     if (g.active) { if (g.src !== src) return } else { g.active = true; g.src = src }
     sfx('ws.select')
     setDragging(true)
+    // Если уже был выбран начальный якорь кликом и новая точка образует линию > 1 клетки
+    if (clickAnchor && (clickAnchor[0] !== c[0] || clickAnchor[1] !== c[1])) {
+      const line = computeLinePath(clickAnchor, c)
+      if (line && line.length >= 2) {
+        setSelPath(line)
+        return
+      }
+    }
     setSelPath([c])
   }
 
   const extendSel = (c: [number, number] | null) => {
     if (!c || !gestureRef.current.active) return
     setSelPath(p => {
-      const [sx, sy] = p[0]
-      const dx = c[0] - sx, dy = c[1] - sy
-      if (dx === 0 && dy === 0) return p
-      if (dx !== 0 && dy !== 0 && Math.abs(dx) !== Math.abs(dy)) return p
-      const len = Math.max(Math.abs(dx), Math.abs(dy))
-      const ux = Math.sign(dx), uy = Math.sign(dy)
-      const path: [number, number][] = []
-      for (let i = 0; i <= len; i++) path.push([sx + ux * i, sy + uy * i])
-      if (path.length === p.length && path.every((c2, i) => p[i][0] === c2[0] && p[i][1] === c2[1])) return p
-      return path
+      if (!p.length) return p
+      const line = computeLinePath(p[0], c)
+      if (!line) return p
+      if (line.length === p.length && line.every((c2, i) => p[i][0] === c2[0] && p[i][1] === c2[1])) return p
+      return line
     })
   }
 
@@ -314,26 +400,14 @@ export default function WordSearch() {
     g.src = ''
     setDragging(false)
     const path = selPath
-    if (path.length < 2) { setSelPath([]); return }
-    const word = path.map(([x, y]) => board.grid[y][x]).join('')
-    const rev = [...word].reverse().join('')
-    const hit = board.words.find(w => (w === word || w === rev) && !found[w])
-    if (hit) {
-      sfx('ws.found')
-      hum(15)
-      setFound(f => ({ ...f, [hit]: true }))
-      setFoundCells(fc => [...fc, ...path])
-    } else {
-      sfx('ws.wrong')
-      hum(60)
-      setMistakes(m => m + 1)
-      setWrongFlash(true)
-      setTimeout(() => setWrongFlash(false), 450)
+    if (path.length === 1) {
+      // Режим 2 кликов: первый клик запоминает стартовую букву
+      setClickAnchor(path[0])
+      return
     }
-    setSelPath([])
+    commitPath(path)
   }
 
-  // нативные touch-события: preventDefault не даёт браузеру отменить жест (pointercancel со скролла)
   useEffect(() => {
     const el = boardRef.current
     if (!el) return
@@ -350,8 +424,13 @@ export default function WordSearch() {
   }
 
   const onCellMove = (e: React.PointerEvent) => {
-    if (!dragging) return
-    extendSel(cellFromPoint(e.clientX, e.clientY))
+    const pt = cellFromPoint(e.clientX, e.clientY)
+    if (dragging) {
+      extendSel(pt)
+    } else if (clickAnchor && pt) {
+      const line = computeLinePath(clickAnchor, pt)
+      setSelPath(line || [clickAnchor])
+    }
   }
 
   const onTouchStart = (e: React.TouchEvent) => {
@@ -402,23 +481,44 @@ export default function WordSearch() {
     const left = board.words.filter(w => !found[w])
     if (!left.length) return
     const w = left[rnd(left.length)]
-    const c = board.placed[w]?.[0]
+    const cells = board.placed[w]
+    const c = cells?.[0]
     if (!c) return
     const nl = hintsLeft - 1
     setHintsLeft(nl)
     setHintCell(c)
+    setHintArrow(dirArrow(cells))
     sfx('ws.hint')
     if (hintTimer.current) clearTimeout(hintTimer.current)
-    hintTimer.current = setTimeout(() => setHintCell(null), 2000)
+    hintTimer.current = setTimeout(() => { setHintCell(null); setHintArrow('') }, 2600)
   }
 
-  // ——— конструктор набора ———
+  const parsePromptWordCount = (s: string, fallback: number): number => {
+    const m = s.toLowerCase().match(/\b(\d{1,2})\s*(?:слов\S*|сөз\S*|word\S*|вопрос\S*|шт\.?|штук\S*)/i)
+    if (m) {
+      const n = parseInt(m[1], 10)
+      if (n >= 3 && n <= 14) return n
+    }
+    const nums = (s.match(/\b(\d{1,2})\b/g) || []).map(Number).filter(n => n >= 3 && n <= 14)
+    if (nums.length > 0) return nums[nums.length - 1]
+    return Math.max(3, Math.min(14, fallback || 10))
+  }
+
+  const onAiPromptChange = (val: string) => {
+    setAiPrompt(val)
+    if (/\d/.test(val)) {
+      setAiCount(parsePromptWordCount(val, aiCount))
+    }
+  }
+
   const genWordsAI = async () => {
     if (aiBusy) return
-    if (aiPrompt.trim().length < 3) { setCErr(t('aiw_need_topic') || 'Напиши тему'); return }
+    if (aiPrompt.trim().length < 2) { setCErr(t('aiw_need_topic') || 'Напиши тему'); return }
+    const targetCount = parsePromptWordCount(aiPrompt, aiCount)
+    setAiCount(targetCount)
     setAiBusy(true); setCErr('')
     try {
-      const r = await client.post('/ai/words/', { prompt: aiPrompt.trim(), count: aiCount })
+      const r = await client.post('/ai/words/', { prompt: aiPrompt.trim(), count: targetCount })
       const words: string[] = (r.data.words || []).map(String)
       if (!words.length) throw new Error('empty')
       setCWords(words.join(', '))
@@ -496,61 +596,128 @@ export default function WordSearch() {
 
   const inSel = useCallback((x: number, y: number) => selPath.some(c => c[0] === x && c[1] === y), [selPath])
   const inFound = useCallback((x: number, y: number) => foundCells.some(c => c[0] === x && c[1] === y), [foundCells])
+  const currentSelectedWord = selPath.map(([x, y]) => board.grid[y]?.[x] || '').join('')
+  const foundCount = Object.keys(found).length
 
   return (
-    <div className="min-h-[calc(100vh-64px)] w-full bg-slate-100 dark:bg-slate-950 px-3 py-6 lg:px-8" data-page="wordsearch">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center gap-3">
+    <div className="min-h-[calc(100vh-64px)] w-full bg-slate-100 dark:bg-slate-950 px-3 py-5 lg:px-8" data-page="wordsearch">
+      <div className="max-w-5xl mx-auto space-y-3">
+        <div className="flex items-center justify-between gap-3">
           <a href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-indigo-600 dark:text-indigo-400">
             {t('hm_to_games')}
           </a>
+          {/* Быстрые тематические наборы прямо над полем */}
+          <div className="flex flex-wrap gap-1.5">
+            {(PRESETS[lang] || PRESETS.ru).slice(0, 4).map(pr => (
+              <button
+                key={pr.label}
+                type="button"
+                onClick={() => { playSaved({ id: 'preset', name: pr.label.replace(/^\S+\s/, ''), words: pr.words, lang }); sfx('ui.click') }}
+                className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 border dark:border-slate-700 text-xs font-bold dark:text-slate-200 hover:border-amber-400 transition"
+              >
+                {pr.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <h1 className="text-3xl font-extrabold text-center mb-1 text-slate-900 dark:text-white">🔎 {t('games_wordsearch')}</h1>
-        <p className="text-center text-slate-500 dark:text-slate-400 mb-4">{custom ? `✨ ${custom.name}` : t('ws_sub')}</p>
-        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-4 text-sm font-bold text-slate-700 dark:text-slate-200">
-          {!custom && <span className="px-3 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">{t('ws_level')}: {level}</span>}
+
+        <div className="text-center">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">🔎 {t('games_wordsearch')}</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{custom ? `✨ Набор: ${custom.name}` : t('ws_sub')}</p>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 text-sm font-bold text-slate-700 dark:text-slate-200">
+          {!custom && <span className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">{t('ws_level')}: {level}</span>}
           {custom && (
-            <button onClick={() => { setPanel('build'); setCErr(''); sfx('ui.click') }}
-              className="px-3 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 font-bold flex items-center gap-1">
-              ✏️ {t('ws_build')}
+            <button onClick={() => { setCustom(null); setLevel(1) }}
+              className="px-3 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 text-xs font-bold flex items-center gap-1">
+              ✨ {custom.name} <X size={13} />
             </button>
           )}
-          <span className="px-3 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">⏱ {t('ws_time')}: {secs}</span>
-          <span className="px-3 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">❌ {t('ws_mist')}: {mistakes}</span>
-          {!custom && <span className="px-3 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">🏆 {t('games_best')}: {best}</span>}
+          <span className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300">
+            Найдено: {foundCount}/{board.words.length}
+          </span>
+          <span className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">⏱ {t('ws_time')}: {secs}с</span>
+          <span className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">⭐ {score}</span>
+          <span className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">❌ {t('ws_mist')}: {mistakes}</span>
+          {!custom && <span className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">🏆 {t('games_best')}: {best}</span>}
           <button onClick={useHint} disabled={hintsLeft <= 0 || allDone} aria-label={t('ws_hint')}
-            className="px-3 py-1.5 min-h-[40px] rounded-lg bg-amber-400 text-amber-950 border border-amber-500 font-bold flex items-center gap-1 disabled:opacity-40">
+            className="px-3 py-1.5 min-h-[40px] rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 border border-amber-500 font-bold flex items-center gap-1 disabled:opacity-40">
             💡 {t('ws_hint')} ×{hintsLeft}
           </button>
-          {!custom && (
-            <button onClick={() => { setPanel('build'); setCErr(''); sfx('ui.click') }}
-              className="px-3 py-1.5 min-h-[40px] rounded-lg bg-indigo-600 text-white font-bold flex items-center gap-1 hover:scale-105 active:scale-95 transition-transform">
-              ✏️ {t('ws_build')}
-            </button>
+          <button onClick={() => { if (custom) setRound(r => r + 1); else { setBoard(buildBoard(lang, level)); resetProgressState() } }}
+            className="px-3 py-1.5 min-h-[40px] rounded-xl bg-white dark:bg-slate-800 border dark:border-slate-700 font-bold flex items-center gap-1"
+            title="Перемешать поле">
+            <RotateCcw size={15} />
+          </button>
+          <button onClick={() => { setPanel('build'); setCErr(''); sfx('ui.click') }}
+            className="px-3 py-1.5 min-h-[40px] rounded-xl bg-indigo-600 text-white font-bold flex items-center gap-1 hover:scale-105 active:scale-95 transition-transform">
+            ✏️ {t('ws_build')}
+          </button>
+        </div>
+
+        {/* Живое табло текущего выделения */}
+        <div className="h-8 flex items-center justify-center">
+          {currentSelectedWord ? (
+            <span className="px-4 py-1 rounded-full bg-indigo-600 text-white font-mono font-black text-sm tracking-widest shadow">
+              {currentSelectedWord}
+            </span>
+          ) : (
+            <span className="text-xs text-slate-400">
+              Проведи мышкой/пальцем по буквам или кликни первую и последнюю букву слова
+            </span>
           )}
         </div>
+
         <div className={wrongFlash ? 'animate-pulse' : ''}>
-          <div ref={boardRef} className="grid mx-auto select-none touch-none bg-white dark:bg-slate-900 rounded-2xl p-1.5 sm:p-2 shadow-lg border border-slate-200 dark:border-slate-700"
-            style={{ gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))`, maxWidth: 560 }}
+          <div ref={boardRef} className="grid gap-1 mx-auto select-none touch-none bg-white dark:bg-slate-900 rounded-3xl p-2.5 sm:p-3.5 shadow-xl border border-slate-200 dark:border-slate-700"
+            style={{ gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))`, maxWidth: 540 }}
             onPointerDown={onCellDown} onPointerMove={onCellMove} onPointerUp={finish} onPointerCancel={finish}
             onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={finish} onTouchCancel={finish}>
             {board.grid.map((row, y) => row.map((ch, x) => {
               const f = inFound(x, y), s = inSel(x, y)
               const isHint = !!hintCell && hintCell[0] === x && hintCell[1] === y
+              const cColor = cellColors[`${x},${y}`] || 'bg-emerald-500 text-white'
               return (
                 <div key={`${x},${y}`} data-c={`${x},${y}`}
-                  className={`flex items-center justify-center aspect-square font-bold uppercase transition-colors text-base sm:text-xl ${f ? 'bg-emerald-400 dark:bg-emerald-500 text-white' : s ? 'bg-indigo-400 dark:bg-indigo-500 text-white' : 'text-slate-700 dark:text-slate-300'} ${wrongFlash && s ? 'bg-rose-400' : ''} ${isHint ? 'ring-2 ring-amber-400 bg-amber-50 dark:bg-amber-900/30' : ''}`}>
+                  className={`relative flex items-center justify-center aspect-square rounded-xl font-display font-black uppercase transition-all text-base sm:text-xl cursor-pointer ${
+                    s
+                      ? (wrongFlash ? 'bg-rose-500 text-white scale-95' : 'bg-indigo-600 text-white scale-105 shadow-md z-10')
+                      : f
+                        ? `${cColor} shadow-sm`
+                        : 'bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-slate-800'
+                  } ${isHint ? 'ring-4 ring-amber-400 bg-amber-100 dark:bg-amber-900/50 animate-bounce z-20' : ''}`}>
                   {ch}
+                  {isHint && hintArrow && (
+                    <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-amber-400 text-slate-950 text-xs font-black flex items-center justify-center shadow">
+                      {hintArrow}
+                    </span>
+                  )}
                 </div>
               )
             }))}
           </div>
         </div>
-        <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2 mt-4" data-testid="ws-words">
-          {board.words.map(w => (
-            <span key={w} className={`px-2.5 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-bold tracking-wide ${found[w] ? 'line-through bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'}`}>{w}</span>
-          ))}
+
+        <div className="flex flex-wrap justify-center gap-2 pt-2" data-testid="ws-words">
+          {board.words.map(w => {
+            const isFound = !!found[w]
+            const wColor = wordColors[w] || 'bg-emerald-100 text-emerald-800'
+            return (
+              <span
+                key={w}
+                className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-extrabold tracking-wider transition-all ${
+                  isFound
+                    ? `${wColor} line-through shadow-sm scale-95`
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-2 border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                {isFound ? `✓ ${w}` : w}
+              </span>
+            )
+          })}
         </div>
+
         {allDone && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" data-testid="ws-done">
             <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 text-center shadow-2xl w-full max-w-sm" data-testid="ws-done-card">
@@ -559,6 +726,7 @@ export default function WordSearch() {
               <div className="mt-2 text-slate-500 dark:text-slate-400 flex justify-center gap-4 flex-wrap">
                 {custom ? <span>✨ {custom.name}</span> : <span>{t('ws_level')}: {level}</span>}
                 <span>⏱ {secs}{t('ws_sec')}</span>
+                <span>⭐ {score}</span>
                 <span>❌ {mistakes}</span>
               </div>
               <div className="mt-5 flex flex-col sm:flex-row gap-2">
@@ -622,7 +790,7 @@ export default function WordSearch() {
                   <button key={pr.label} onClick={() => { playSaved({ id: 'preset', name: pr.label.replace(/^\S+\s/, ''), words: pr.words, lang }); setEntry(null) }}
                     className="w-full text-left px-4 py-3 min-h-[64px] rounded-xl border dark:text-white bg-white dark:bg-slate-800 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-amber-900/20">
                     <div className="font-extrabold">{pr.label}</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">{pr.words.slice(0, 4).join(' · ')}…</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">{pr.words.slice(0, 5).join(' · ')}…</div>
                   </button>
                 ))}
               </div>
@@ -658,25 +826,25 @@ export default function WordSearch() {
                 className="w-full h-24 px-4 py-2.5 rounded-xl border bg-slate-50 dark:bg-slate-700 dark:text-white text-sm" />
               {cErr && <div className="text-sm text-rose-600 dark:text-rose-400 font-bold">⚠️ {cErr}</div>}
               {AI_FEATURES && isTeacherAIAllowed() && (
-              <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20 p-3 space-y-2" data-testid="ws-ai">
-                <button onClick={() => { setAiOpen(v => !v); sfx('ui.click') }}
-                  className="px-3 py-2 min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5">
-                  <Sparkles size={15} /> {t('aiw_title')} {aiOpen ? '▾' : '▸'}
-                </button>
-                {aiOpen && (
-                  <div className="flex flex-wrap items-center gap-2" data-testid="ws-ai-panel">
-                    <input value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} placeholder={t('aiw_ph')}
-                      className="flex-1 min-w-[180px] px-3 py-2.5 min-h-[48px] rounded-xl border bg-white dark:bg-slate-700 dark:text-white text-sm" />
-                    <input type="number" min={3} max={20} value={aiCount} onChange={e => setAiCount(Math.max(3, Math.min(20, parseInt(e.target.value) || 10)))}
-                      aria-label={t('aiw_count')} className="w-16 px-2 py-2.5 min-h-[48px] rounded-xl border bg-white dark:bg-slate-700 dark:text-white text-sm" />
-                    <button onClick={genWordsAI} disabled={aiBusy}
-                      className="px-4 py-2.5 min-h-[48px] rounded-xl bg-emerald-600 text-white font-bold disabled:opacity-50">
-                      {aiBusy ? '⏳' : t('aiw_gen')}
-                    </button>
-                    {aiSrc && <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 w-full">{t('aiw_src')}</span>}
-                  </div>
-                )}
-              </div>
+                <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20 p-3 space-y-2" data-testid="ws-ai">
+                  <button onClick={() => { setAiOpen(v => !v); sfx('ui.click') }}
+                    className="px-3 py-2 min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5">
+                    <Sparkles size={15} /> {t('aiw_title')} {aiOpen ? '▾' : '▸'}
+                  </button>
+                  {aiOpen && (
+                    <div className="flex flex-wrap items-center gap-2" data-testid="ws-ai-panel">
+                      <input value={aiPrompt} onChange={e => onAiPromptChange(e.target.value)} placeholder="Напр.: «сделай по пайтону 12 слов»"
+                        className="flex-1 min-w-[180px] px-3 py-2.5 min-h-[48px] rounded-xl border bg-white dark:bg-slate-700 dark:text-white text-sm" />
+                      <input type="number" min={3} max={14} value={aiCount} onChange={e => setAiCount(Math.max(3, Math.min(14, parseInt(e.target.value) || 10)))}
+                        aria-label={t('aiw_count')} className="w-16 px-2 py-2.5 min-h-[48px] rounded-xl border bg-white dark:bg-slate-700 dark:text-white text-sm text-center font-bold" />
+                      <button onClick={genWordsAI} disabled={aiBusy}
+                        className="px-4 py-2.5 min-h-[48px] rounded-xl bg-emerald-600 text-white font-bold disabled:opacity-50">
+                        {aiBusy ? '⏳' : t('aiw_gen')}
+                      </button>
+                      {aiSrc && <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 w-full">{t('aiw_src')}</span>}
+                    </div>
+                  )}
+                </div>
               )}
               <div className="flex flex-wrap gap-2">
                 <button onClick={playNow} className="px-4 py-2.5 min-h-[48px] rounded-xl bg-indigo-600 text-white font-bold flex items-center gap-1.5"><Play size={15} /> {t('ws_play_set')}</button>

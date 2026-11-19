@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Gamepad2, Zap, Layers, MonitorUp, ChevronRight } from 'lucide-react'
 import { useLang } from '../context/LangContext'
+import { canTeach } from '../utils/role'
 
 function best(key: string): string | null {
   try { return localStorage.getItem(key) } catch { return null }
@@ -35,12 +36,26 @@ export default function Games() {
   const hangBest = best('edu-hangman-best')
   const wsBest = best('edu-wordsearch-best')
   const farmerBest = best('edu-farmer-best')
+  const mbBest = best('edu-mathbattle-best')
+  const smBest = best('edu-soundmem-best')
+  const c4Best = best('edu-c4-best')
+  const isHost = canTeach()
 
   const cards = [
     {
       to: '/games/arkan', icon: '🤼', title: 'Аркан тартыш',
       desc: t('games_arkan_desc'),
       best: arkanBest ? `🏆 ${arkanBest}` : null, ready: true,
+    },
+    {
+      to: '/games/sound-memory', icon: '🎵', title: t('games_soundmem'),
+      desc: t('games_soundmem_desc'),
+      best: smBest ? `🏆 ${t('mem_level')} ${smBest}` : null, ready: true,
+    },
+    {
+      to: '/games/connect-four', icon: '🔴', title: t('games_c4'),
+      desc: t('games_c4_desc'),
+      best: c4Best ? `🏆 ${c4Best}` : null, ready: true,
     },
     {
       to: '/games/sprint', icon: '⌨️', title: t('games_sprint'),
@@ -71,6 +86,16 @@ export default function Games() {
       to: '/games/farmer', icon: '🧑‍🌾', title: t('games_farmer'),
       desc: t('fb_hub_desc'),
       best: farmerBest ? `🏆 ${farmerBest} ⭐` : null, ready: true,
+    },
+    {
+      to: '/games/math-battle', icon: '⚔️', title: t('games_mathbattle'),
+      desc: t('games_mathbattle_desc'),
+      best: mbBest ? `🏆 ${mbBest}` : null, ready: true,
+    },
+    {
+      to: isHost ? '/live/host' : '/live', icon: '⚡', title: t('games_livequiz'),
+      desc: t('games_livequiz_desc'),
+      best: '📡 PIN + QR Live', ready: true,
     },
   ]
 

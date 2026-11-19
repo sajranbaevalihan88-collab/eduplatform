@@ -69,7 +69,7 @@ export default function Programs(){
   const saveTopic = async ()=>{
     const title = form.title.trim()
     if(!title){ toast(t('prog_need_title'),'error'); return }
-    if(!subject){ toast(t('prog_need_subject'),'error'); return }
+    if(!edit && !subject){ toast(t('prog_need_subject'),'error'); return }
     try{
       if(edit){
         await client.patch(`/topics/${edit.id}/`, { title, num: form.num, description: form.description.trim() })
@@ -179,10 +179,12 @@ export default function Programs(){
               className="px-4 py-2 min-h-[44px] rounded-xl bg-indigo-600 text-white text-sm font-semibold flex items-center gap-1 hover:bg-indigo-700">
               <Plus size={15}/>{t('prog_add')}
             </button>
-            <button onClick={seedKR} disabled={busy} data-testid="topic-seed-kr" title={t('prog_seed_tip')}
-              className="px-4 py-2 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-semibold flex items-center gap-1 hover:bg-emerald-700 disabled:opacity-50">
-              <Award size={15}/>{t('prog_seed_btn')}
-            </button>
+            {(me?.role === 'admin' || me?.is_staff) && (
+              <button onClick={seedKR} disabled={busy} data-testid="topic-seed-kr" title={t('prog_seed_tip')}
+                className="px-4 py-2 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-semibold flex items-center gap-1 hover:bg-emerald-700 disabled:opacity-50">
+                <Award size={15}/>{t('prog_seed_btn')}
+              </button>
+            )}
             <label className="px-4 py-2 min-h-[44px] rounded-xl bg-white dark:bg-slate-800 border dark:border-slate-700 text-sm font-semibold inline-flex items-center gap-1 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-white">
               <Upload size={15}/>{t('prog_csv')}
               <input type="file" accept=".csv,.txt,.tsv" className="hidden" onChange={e=>{ const f=e.target.files?.[0]; if(f) importCsv(f); e.target.value='' }}/>
@@ -249,6 +251,14 @@ export default function Programs(){
                 </div>
               ))}
             </div>
+            {Array.isArray(standards?.competencies) && standards.competencies.length > 0 && (
+              <div className="pt-2 border-t dark:border-slate-800 flex flex-wrap gap-1.5 items-center text-xs">
+                <span className="font-bold text-slate-600 dark:text-slate-300">Ключевые компетенции ГОС КР:</span>
+                {standards.competencies.map((comp: string, idx: number) => (
+                  <span key={idx} className="px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-medium">{comp}</span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

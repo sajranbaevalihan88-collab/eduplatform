@@ -29,6 +29,8 @@ services:
           property: connectionString
       - key: PYTHON_VERSION
         value: "3.11.0"
+      - key: CODE_USE_PISTON_ONLY
+        value: "False"
       # Gemini для ИИ-генерации вопросов. Значение НЕ храним в репо:
       # Render попросит ввести его в дашборде (sync: false = секрет).
       - key: GEMINI_API_KEY

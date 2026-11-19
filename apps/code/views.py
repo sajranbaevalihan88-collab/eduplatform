@@ -22,10 +22,15 @@ BLOCKED_PY = [
 ]
 BLOCKED_JS = ['require(','process.','fs.','child_process','eval(','Function(','import(','globalThis','.constructor(','["constructor"]',"['constructor']"]
 
-# Модули, импорт которых запрещён всегда (сеть, процессы, низкоуровневый доступ, обход через загрузчики)
-_BLOCKED_MODULES = {'subprocess','socket','ctypes','pickle','importlib','runpy','multiprocessing',
-                    'sqlite3','builtins','marshal','pty','signal','threading','_thread','asyncio',
-                    'urllib','http','ftplib','smtplib','telnetlib','webbrowser','code','codeop','gc','inspect'}
+# Модули, импорт которых запрещён всегда (ФС, сеть, процессы, низкоуровневый доступ, обход через загрузчики)
+_BLOCKED_MODULES = {
+    'os', 'shutil', 'pathlib', 'glob', 'tempfile', 'platform', 'getpass', 'pwd', 'grp',
+    'resource', 'fcntl', 'mmap', 'codecs', 'sysconfig', 'site', 'pip', 'ensurepip',
+    'subprocess', 'socket', 'ctypes', 'pickle', 'importlib', 'runpy', 'multiprocessing',
+    'sqlite3', 'builtins', 'marshal', 'pty', 'signal', 'threading', '_thread', 'asyncio',
+    'urllib', 'http', 'requests', 'ftplib', 'smtplib', 'telnetlib', 'webbrowser',
+    'code', 'codeop', 'gc', 'inspect', 'venv', 'distutils', 'setuptools',
+}
 # «Безопасные» dunder-атрибуты, без которых не работают обычные ученические программы (классы, ООП)
 _ALLOWED_DUNDER = {'__init__','__name__','__str__','__repr__','__len__','__eq__','__lt__','__gt__',
                    '__le__','__ge__','__add__','__sub__','__mul__','__iter__','__next__','__getitem__',
@@ -210,9 +215,14 @@ def _is_safe_code(code: str, lang: str):
                     return False, f"Доступ к {node.attr} запрещен"
                 if isinstance(node, ast.Name) and node.id in ('__builtins__', '__loader__', '__spec__'):
                     return False, f"Доступ к {node.id} запрещен"
-                # os.environ — слив секретов через env
-                if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == 'os' and node.attr == 'environ':
-                    return False, "Доступ к os.environ запрещен"
+                # os.environ / опасные атрибуты sys и io — слив секретов или обход песочницы
+                if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+                    if node.value.id == 'os' and node.attr == 'environ':
+                        return False, "Доступ к os.environ запрещен"
+                    if node.value.id == 'sys' and node.attr in ('modules', '_getframe', '_current_frames', 'meta_path', 'path_hooks'):
+                        return False, f"Доступ к sys.{node.attr} запрещен"
+                    if node.value.id == 'io' and node.attr in ('open', 'FileIO', 'open_code'):
+                        return False, f"Вызов io.{node.attr}() запрещен"
         except SyntaxError:
             pass
     elif lang == 'javascript':
@@ -340,10 +350,20 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             return Response({'error': 'files должен быть списком'}, status=400)
         if len(files) > 99:
             return Response({'error': 'Слишком много файлов (макс 99)'}, status=400)
-        # Эндпоинт требует IsAuthenticated, поэтому анонимных запросов сюда не доходит —
-        # прежняя ветка с временной мутацией settings.CODE_USE_PISTON_ONLY была
-        # недостижимым кодом и небезопасна (settings — общий на процесс, не per-request).
-        # Изоляция для прода регулируется самим CODE_USE_PISTON_ONLY в settings.py.
+        # Проверка безопасности (AST + denylist) для каждого файла проекта перед запуском
+        for fitem in files:
+            if not isinstance(fitem, dict):
+                continue
+            fpath = str(fitem.get('path') or fitem.get('name') or fitem.get('filename') or '').lower()
+            fcontent = str(fitem.get('content') or fitem.get('code') or '')
+            if fpath.endswith('.py'):
+                safe, msg = _is_safe_code(fcontent, 'python')
+                if not safe:
+                    return Response({'output': f'Блокировка ({fpath}): {msg}', 'passed': False}, status=400)
+            elif fpath.endswith('.js'):
+                safe, msg = _is_safe_code(fcontent, 'javascript')
+                if not safe:
+                    return Response({'output': f'Блокировка ({fpath}): {msg}', 'passed': False}, status=400)
         try:
             from .services.runner import run_project as runner_run_project
             output, passed = runner_run_project(files, entry=entry, requirements=requirements, stdin_data=stdin_data)

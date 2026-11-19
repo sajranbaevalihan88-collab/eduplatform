@@ -5,6 +5,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from apps.catalog.views import SubjectViewSet, CourseViewSet
 from apps.content.views import UploadedFileViewSet, PresentationViewSet, SlideViewSet
 from apps.assessments.views import TestViewSet, AttemptViewSet, WordGenView
+from apps.assessments.live_quiz import LiveQuizCreateView, LiveQuizCheckView
 from apps.lessons.views import LessonViewSet
 from apps.code.views import CodeTaskViewSet, CodeSubmissionViewSet, SharedCodeView
 from apps.board.views import BoardViewSet
@@ -13,7 +14,7 @@ from apps.notes.views import NoteViewSet
 from apps.word.views import WordDocumentViewSet
 from apps.school.views import TopicViewSet, TeacherAIAssistantView
 from apps.messages.views import MessageViewSet
-from apps.portfolio.views import PortfolioView, PortfolioStudentsView, AchievementCreateView, AchievementDeleteView
+from apps.portfolio.views import PortfolioView, PortfolioStudentsView, AchievementCreateView, AchievementDeleteView, AchievementFileView
 
 router = DefaultRouter()
 router.register(r'subjects', SubjectViewSet)
@@ -55,6 +56,7 @@ urlpatterns = [
     path('portfolio/students/', PortfolioStudentsView.as_view(), name='portfolio-students'),
     path('portfolio/achievements/', AchievementCreateView.as_view(), name='achievement-create'),
     path('portfolio/achievements/<int:pk>/', AchievementDeleteView.as_view(), name='achievement-delete'),
+    path('portfolio/achievements/<int:pk>/file/', AchievementFileView.as_view(), name='achievement-file'),
     path('auth/bootstrap-admin/', bootstrap_admin_view, name='bootstrap-admin'),
     path('auth/jwt/create/', ThrottledTokenObtainPairView.as_view(), name='jwt-create'),
     path('auth/jwt/refresh/', TokenRefreshView.as_view(), name='jwt-refresh'),
@@ -63,5 +65,7 @@ urlpatterns = [
     path('shared/<str:token>/', SharedCodeView.as_view(), name='shared-detail'),
     path('ai/words/', WordGenView.as_view(), name='ai-words'),
     path('ai/teacher-assistant/', TeacherAIAssistantView.as_view(), name='ai-teacher-assistant'),
+    path('live-quiz/create/', LiveQuizCreateView.as_view(), name='live-quiz-create'),
+    path('live-quiz/check/<str:pin>/', LiveQuizCheckView.as_view(), name='live-quiz-check'),
     path('', include(router.urls)),
 ]

@@ -32,15 +32,33 @@ export default function TestBuilder(){
   const [subjects,setSubjects]=useState<any[]>([])
   const [mode,setMode]=useState<'pick'|'form'|null>(isNew? 'pick' : 'form')
   const justPick=mode==='pick'
+  const parsePromptCount=(s:string,fallback:number):number=>{
+    const m=s.toLowerCase().match(/\b(\d{1,2})\s*(?:вопрос\S*|вопр\.?|суроо\S*|question\S*|задани\S*|шт\.?|штук\S*)/i)
+    if(m){ const n=parseInt(m[1],10); if(n>=1&&n<=40) return n }
+    const cleaned=s.toLowerCase().replace(/\b\d{1,2}\s*[-–]?\s*(?:класс\S*|кл\.?|grade\S*)/gi,'').replace(/python\s*3/gi,'')
+    const nums=(cleaned.match(/\b(\d{1,2})\b/g)||[]).map(Number).filter(n=>n>=1&&n<=40)
+    if(nums.length>0) return nums[nums.length-1]
+    return Math.max(1,Math.min(40,fallback||5))
+  }
+  const onPromptChange=(val:string)=>{
+    setGenPrompt(val)
+    if(/\d/.test(val)){
+      const c=parsePromptCount(val,genCount)
+      if(c>=1&&c<=40) setGenCount(c)
+    }
+  }
   const doGenerate=async()=>{
-    if(genPrompt.trim().length < 10){ alert(t('tb_gen_prompt_min')); return }
+    if(genPrompt.trim().length < 2){ alert(t('tb_gen_prompt_min')); return }
+    const targetCount=parsePromptCount(genPrompt,genCount)
+    setGenCount(targetCount)
     setGenerating(true)
     try{
-      const payload:any={count:genCount, prompt:genPrompt.trim().slice(0,2000)}
+      const payload:any={count:targetCount, prompt:genPrompt.trim().slice(0,2000)}
       const r=await client.post('/tests/generate/',payload)
-      const got=(r.data.questions||[]).map((q:any,i:number)=>({text:q.text,type:q.type,points:q.points||1,explanation:q.explanation||'',options:(q.options||[]).map((o:any)=>({text:o.text,is_correct:!!o.is_correct}))}))
+      const got=(r.data.questions||[]).map((q:any)=>({text:q.text,type:q.type,points:q.points||1,explanation:q.explanation||'',options:(q.options||[]).map((o:any)=>({text:o.text,is_correct:!!o.is_correct}))}))
       setQuestions(qs=>[...qs,...got])
       setGenSource(typeof r.data.source==='string' ? r.data.source : null)
+      toast(`✨ Сгенерировано вопросов: ${got.length}`, 'success')
       setShowGen(false)
     }catch(e:any){ alert(e.response?.data?.error||t('tb_gen_fail')) }
     setGenerating(false)
@@ -230,7 +248,7 @@ export default function TestBuilder(){
           <div onClick={e=>e.stopPropagation()} className="relative w-[560px] max-w-full bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 p-5 space-y-3 animate-scaleIn modal-safe">
             <button onClick={()=>setShowGen(false)} aria-label={t('close')} title={t('close')} className="absolute top-2 right-2 inline-flex items-center justify-center w-11 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-white text-lg font-bold">✕</button>
             <div className="font-bold dark:text-white">{t('tb_gen_title')}</div>
-            <textarea value={genPrompt} onChange={e=>setGenPrompt(e.target.value)} placeholder={t('tb_gen_ph')} className="w-full h-28 px-3 py-2 rounded-xl border bg-indigo-50/50 dark:bg-slate-700 dark:text-white text-sm" aria-label={t('tb_gen_aria')}/>
+            <textarea value={genPrompt} onChange={e=>onPromptChange(e.target.value)} placeholder="Напр.: «сделай мне вопросы по пайтону 14 вопросов»" className="w-full h-28 px-3 py-2 rounded-xl border bg-indigo-50/50 dark:bg-slate-700 dark:text-white text-sm" aria-label={t('tb_gen_aria')}/>
             <div className="flex items-center gap-3">
               <label className="text-sm dark:text-slate-300">{t('tb_gen_count')}</label>
               <input type="number" min={1} max={40} value={genCount} onChange={e=>setGenCount(Math.max(1, Math.min(40, parseInt(e.target.value)||5)))} className="w-20 px-3 py-2 rounded-xl border dark:bg-slate-700 dark:text-white"/>

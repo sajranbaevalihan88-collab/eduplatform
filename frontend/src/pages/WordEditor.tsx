@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import client from '../api/client'
 import { useAccessibility, toast } from '../context/UIContext'
+import { useLang } from '../context/LangContext'
 import { sanitizeWordHtml as sanitize } from '../utils/sanitize'
 import {
   Bold, Italic, Underline, Strikethrough, List, ListOrdered,
@@ -77,6 +78,12 @@ const hasDocumentContent = (body: string) =>
 
 export default function WordEditor() {
   const { poor } = useAccessibility()
+  const { t, lang } = useLang()
+  const WUI = {
+    ru: { newBtn: 'Новый', imp: 'Импорт', dl: 'Скачать', home: 'Главная', insert: 'Вставка', img: 'Картинка', tbl: 'Таблица', page: 'Стр.' },
+    en: { newBtn: 'New', imp: 'Import', dl: 'Download', home: 'Home', insert: 'Insert', img: 'Picture', tbl: 'Table', page: 'Page' },
+    kg: { newBtn: 'Жаңы', imp: 'Импорт', dl: 'Жүктөө', home: 'Башкы', insert: 'Киргизүү', img: 'Сүрөт', tbl: 'Таблица', page: 'Бет' },
+  }[lang] || { newBtn: 'Новый', imp: 'Импорт', dl: 'Скачать', home: 'Главная', insert: 'Вставка', img: 'Картинка', tbl: 'Таблица', page: 'Стр.' }
   const editRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const sheetScrollRef = useRef<HTMLDivElement>(null)
@@ -1549,22 +1556,22 @@ export default function WordEditor() {
           <button onClick={newDoc} title="Чистый лист: начать новый документ. Текущий не удаляется — несохранённое уедет в черновик."
             aria-label="Создать новый документ"
             className="w-full px-3 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold flex items-center justify-center gap-2">
-            <Plus size={16} /> Новый
+            <Plus size={16} /> {WUI.newBtn}
           </button>
           {hasDraft && (
             <button onClick={restoreDraft} title="Вернуть несохранённый черновик" className="mt-2 w-full px-3 py-2 rounded-xl bg-amber-100 text-amber-800 text-sm font-semibold">
-              Черновик • восстановить
+              {t('board_draft_chip')} • ↺
             </button>
           )}
           {/* Файл: открыть .docx / сохранить в .docx — как в Word файловые операции */}
           <div className="mt-2 grid grid-cols-2 gap-2" role="group" aria-label="Файл">
             <button onClick={() => fileRef.current?.click()} disabled={busy} title="Открыть .docx (до 20МБ)"
               className="px-2 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
-              <Upload size={13} /> Импорт
+              <Upload size={13} /> {WUI.imp}
             </button>
             <button onClick={onExport} disabled={busy} title="Сохранить документ как .docx"
               className="min-h-[44px] px-2 py-2.5 rounded-xl bg-white border dark:bg-slate-700 dark:text-white dark:border-slate-600 text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
-              <Download size={13} /> Скачать
+              <Download size={13} /> {WUI.dl}
             </button>
           </div>
           <input ref={fileRef} type="file" accept=".docx" className="hidden" onChange={onImport} />
@@ -1591,9 +1598,9 @@ export default function WordEditor() {
               <input value={title} onChange={e => { setTitle(e.target.value); setDirty(true) }}
                 aria-label="Название документа" placeholder="Название документа"
                 className="flex-1 min-w-0 px-3 h-10 sm:h-10 rounded-xl border bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 font-bold text-sm" />
-              <button onClick={save} disabled={busy} title="Сохранить" aria-label="Сохранить документ"
+              <button onClick={save} disabled={busy} title={t('save')} aria-label={t('save')}
                 className="flex items-center justify-center gap-1.5 px-3.5 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm shrink-0 disabled:opacity-50 min-h-[40px] transition-colors">
-                <Save size={16} /> <span>{busy ? '…' : 'Сохранить'}</span>
+                <Save size={16} /> <span>{busy ? '…' : t('save')}</span>
               </button>
             </div>
             <div className="flex items-center justify-between sm:justify-end gap-1 shrink-0">
@@ -1607,7 +1614,7 @@ export default function WordEditor() {
                 {!online && <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 shrink-0">офлайн</span>}
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400 px-2 font-mono whitespace-nowrap" aria-live="polite">Стр. {curPage}/{pages}</span>
+                <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400 px-2 font-mono whitespace-nowrap" aria-live="polite">{WUI.page} {curPage}/{pages}</span>
                 <button onClick={() => setFull(f => !f)} title={full ? 'Выйти из полного экрана (Esc)' : 'Во весь экран'}
                   aria-label={full ? 'Выйти из полного экрана' : 'Полный экран'}
                   className="h-10 w-10 min-h-[40px] min-w-[40px] rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white shrink-0 flex items-center justify-center">
@@ -1672,16 +1679,16 @@ export default function WordEditor() {
               {/* табы ленты */}
               <div role="tablist" aria-label="Вкладки ленты" className="flex items-center gap-1 px-2 pt-1 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 overflow-x-auto">
                 <button role="tab" aria-selected={tab === 'home'} onClick={() => setTab('home')}
-                  className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'home' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Главная</button>
+                  className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'home' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>{WUI.home}</button>
                 <button role="tab" aria-selected={tab === 'insert'} onClick={() => setTab('insert')}
-                  className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'insert' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Вставка</button>
+                  className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'insert' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>{WUI.insert}</button>
                 {selImg && (
                   <button role="tab" aria-selected={tab === 'img'} onClick={() => setTab('img')}
-                    className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'img' ? 'bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-amber-600 dark:text-amber-400/80 hover:text-amber-800'}`}>Картинка</button>
+                    className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'img' ? 'bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-amber-600 dark:text-amber-400/80 hover:text-amber-800'}`}>{WUI.img}</button>
                 )}
                 {(inTable && !selImg) && (
                   <button role="tab" aria-selected={tab === 'tbl'} onClick={() => setTab('tbl')}
-                    className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'tbl' ? 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-emerald-600 dark:text-emerald-400/80 hover:text-emerald-800'}`}>Таблица</button>
+                    className={`px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap ${tab === 'tbl' ? 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-b-0 border-slate-200 dark:border-slate-700' : 'text-emerald-600 dark:text-emerald-400/80 hover:text-emerald-800'}`}>{WUI.tbl}</button>
                 )}
               </div>
 

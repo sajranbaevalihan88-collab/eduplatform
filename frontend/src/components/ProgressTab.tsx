@@ -1,54 +1,58 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import client from '../api/client'
-import { toast } from '../context/UIContext'
-import { TrendingUp, Target, AlertTriangle, Sparkles } from 'lucide-react'
+import { useLang } from '../context/LangContext'
+import { Target, AlertTriangle, Sparkles } from 'lucide-react'
 
 /**
  * Аналитика пути обучения класса (только владелец):
  * кто отстаёт, по каким темам, сколько диагностик пройдено.
  */
 export default function ProgressTab({ classId }:{ classId:number|any }){
+  const { t } = useLang()
   const [data, setData] = useState<any>(null)
+  const [err, setErr] = useState(false)
 
   useEffect(()=>{
+    setErr(false)
     client.get(`/classrooms/${classId}/class_progress/`)
-      .then(r=>setData(r.data)).catch(()=>setData(null))
+      .then(r=>setData(r.data)).catch(()=>{ setData(null); setErr(true) })
   },[classId])
 
+  if(err) return <div className="p-6 text-center text-sm text-slate-400">Не удалось загрузить аналитику прогресса класса.</div>
   if(data===null) return <div className="skeleton h-24 rounded-2xl"/>
 
   const rows = data.students || []
-  const laggards = rows.filter((r:any)=> r.avg!=null && r.avg<50)
+  const laggards = rows.filter((r:any)=> (r.avg!=null && r.avg<60) || (r.gaps && r.gaps.length>0))
   const notTested = rows.filter((r:any)=> r.tested_topics===0)
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 font-semibold dark:text-slate-200">
-          Учеников: {rows.length}
+          {t('pt_students')} {rows.length}
         </span>
         <span className="px-3 py-1.5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-semibold">
-          ⚠️ Отстают: {laggards.length}
+          ⚠️ {t('pt_lagging')} {laggards.length}
         </span>
         <span className="px-3 py-1.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-semibold">
-          Не проверены: {notTested.length}
+          {t('pt_untested')} {notTested.length}
         </span>
         <Link to="/ai-assistant" className="ml-auto px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-semibold flex items-center gap-1 hover:bg-indigo-700">
-          <Sparkles size={13}/> ИИ-разбор оценок и персональные задания
+          <Sparkles size={13}/> {t('pt_ai_btn')}
         </Link>
       </div>
 
       {laggards.length>0 && (
         <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40">
           <div className="text-sm font-bold text-red-700 dark:text-red-300 flex items-center gap-1.5 mb-1">
-            <AlertTriangle size={15}/>Кто отстаёт — дай персональные задания по этим темам
+            <AlertTriangle size={15}/>{t('pt_lag_title')}
           </div>
           {laggards.map((r:any)=>(
             <div key={r.student} className="flex flex-wrap items-center gap-2 text-sm py-1" data-testid={`laggard-${r.student}`}>
               <b className="dark:text-white">{r.username}</b>
               <span className="text-red-600 font-bold">{r.avg}%</span>
-              <span className="text-xs text-slate-500">пробелы:</span>
+              <span className="text-xs text-slate-500">{t('pt_gaps')}</span>
               {r.gaps.map((g:string)=><span key={g} className="text-[11px] px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300">{g}</span>)}
             </div>
           ))}
@@ -58,13 +62,17 @@ export default function ProgressTab({ classId }:{ classId:number|any }){
       <div className="overflow-auto">
         <table className="w-full text-sm min-w-[520px] dark:text-slate-100">
           <thead><tr className="text-left text-xs text-slate-400">
-            <th className="p-2">Ученик</th><th className="p-2">Средний %</th><th className="p-2">Тем проверено</th>
-            <th className="p-2">Диагностик</th><th className="p-2">Что уже умеет (≥80%)</th><th className="p-2">Пробелы (&lt;50%)</th>
+            <th className="p-2">{t('pt_student')}</th><th className="p-2">{t('pt_avg')}</th><th className="p-2">{t('pt_tested')}</th>
+            <th className="p-2">{t('pt_diags')}</th><th className="p-2">{t('pt_mastered')}</th><th className="p-2">{t('pt_gaps_col')}</th>
           </tr></thead>
           <tbody>
             {rows.map((r:any)=>(
               <tr key={r.student} className="border-t dark:border-slate-700" data-testid={`prog-st-${r.student}`}>
-                <td className="p-2 font-semibold">{r.first_name || r.username}</td>
+                <td className="p-2 font-semibold">
+                  <Link to={`/portfolio?user=${encodeURIComponent(r.username)}`} className="text-indigo-600 dark:text-indigo-400 hover:underline">
+                    {r.first_name || r.username}
+                  </Link>
+                </td>
                 <td className="p-2">
                   {r.avg!=null
                     ? <span className={`font-bold ${r.avg>=80?'text-emerald-600': r.avg>=50?'text-sky-600':'text-red-600'}`}>{r.avg}%</span>
@@ -74,7 +82,10 @@ export default function ProgressTab({ classId }:{ classId:number|any }){
                 <td className="p-2">{r.diagnostics_taken}</td>
                 <td className="p-2">
                   <div className="flex flex-wrap gap-1">
-                    {(r.mastered_topics||[]).map((m:string)=><span key={m} className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">{m}</span>)}
+                    {(r.mastered_topics||[]).map((m:any)=>{
+                      const lbl = typeof m === 'string' ? m : m.title
+                      return <span key={lbl} className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">{lbl}</span>
+                    })}
                     {(!r.mastered_topics || r.mastered_topics.length===0) && <span className="text-slate-400">—</span>}
                   </div>
                 </td>
@@ -87,7 +98,7 @@ export default function ProgressTab({ classId }:{ classId:number|any }){
               </tr>
             ))}
             {rows.length===0 && (
-              <tr><td colSpan={6} className="p-4 text-center text-slate-400">В классе нет учеников</td></tr>
+              <tr><td colSpan={6} className="p-4 text-center text-slate-400">{t('att_no_students')}</td></tr>
             )}
           </tbody>
         </table>
@@ -96,12 +107,12 @@ export default function ProgressTab({ classId }:{ classId:number|any }){
       {(data.class_gaps||[]).length>0 && (
         <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40">
           <div className="text-sm font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5 mb-1">
-            <Target size={15}/>Частые пробелы класса
+            <Target size={15}/>{t('pt_common_gaps')}
           </div>
           {data.class_gaps.map((g:any)=>(
             <div key={g.topic_id} className="text-sm py-0.5 flex items-center gap-2">
               <b className="dark:text-white">{g.title}</b>
-              <span className="text-xs text-slate-500">— {g.students.length} ученик(ов): {g.students.slice(0,5).join(', ')}</span>
+              <span className="text-xs text-slate-500">— {g.students.length} {t('pt_stu_cnt')} {g.students.slice(0,5).join(', ')}</span>
             </div>
           ))}
         </div>

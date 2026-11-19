@@ -331,23 +331,29 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
                         else ('overdue' if (a.deadline and a.deadline < now) else 'pending')),
              'score': (sub_map[(a.id, e.student.id)].score if (a.id, e.student.id) in sub_map else None),
              'mark': (sub_map[(a.id, e.student.id)].mark if (a.id, e.student.id) in sub_map else ''),
-             'answer': ((sub_map[(a.id, e.student.id)].answer or '')[:300] if (a.id, e.student.id) in sub_map else '')}
+             'answer': ((sub_map[(a.id, e.student.id)].answer or '')[:4000] if (a.id, e.student.id) in sub_map else '')}
             for a in assignments for e in students
         ]
+        max_by_a = {a.id: (a.max_score or 100) for a in assignments}
         avgs_s = {}
+        avgs_s_pct = {}
         for e in students:
             vals = [c['score'] for c in cells if c['student'] == e.student.id and c['score'] is not None]
+            pcts = [round((c['score'] / max_by_a.get(c['assignment'], 100)) * 100, 1)
+                    for c in cells if c['student'] == e.student.id and c['score'] is not None]
             avgs_s[str(e.student.id)] = round(sum(vals) / len(vals), 1) if vals else None
+            avgs_s_pct[str(e.student.id)] = round(sum(pcts) / len(pcts), 1) if pcts else None
         avgs_a = {}
         for a in assignments:
             vals = [c['score'] for c in cells if c['assignment'] == a.id and c['score'] is not None]
             avgs_a[str(a.id)] = round(sum(vals) / len(vals), 1) if vals else None
         return Response({
-            'students': [{'id': e.student.id, 'username': e.student.username} for e in students],
+            'students': [{'id': e.student.id, 'username': e.student.username, 'first_name': e.student.first_name or ''} for e in students],
             'assignments': [{'id': a.id, 'title': a.title, 'kind': a.kind,
                              'deadline': a.deadline, 'max_score': a.max_score} for a in assignments],
             'cells': cells,
             'avg_student': avgs_s,
+            'avg_student_pct': avgs_s_pct,
             'avg_assignment': avgs_a,
         })
 
@@ -504,8 +510,9 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
                 continue
             if s.score is not None:
                 ps['scores'].append(s.score)
-            ps['done' if s.status == 'submitted' else 'late'] += 1 if s.status in ('submitted', 'late') else 0
-            if s.status == 'late':
+            if s.status == 'submitted':
+                ps['done'] += 1
+            elif s.status == 'late':
                 ps['late'] += 1
         now = timezone.now()
         for a in assignments:
@@ -661,10 +668,10 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         для письменного задания нужен текст ответа."""
         a = self.get_object()
         u = request.user
-        if not a.classroom.is_member(u):
-            raise PermissionDenied('Ты не участник класса')
-        if a.classroom.owner_id == u.id:
-            raise PermissionDenied('Владелец не сдаёт свои задания')
+        if not a.classroom.has_access(u):
+            raise PermissionDenied('Нет доступа к заданиям класса')
+        if a.classroom.owner_id == u.id or _is_admin(u):
+            raise PermissionDenied('Учитель или администратор не сдаёт задания как ученик')
         score = request.data.get('score')
         answer = str(request.data.get('answer') or '').strip()
         if a.kind == 'write' and not answer:
@@ -679,7 +686,7 @@ class AssignmentViewSet(viewsets.ModelViewSet):
             from apps.assessments.models import TestAttempt
             attempt = TestAttempt.objects.filter(test_id=a.test_id, user=u).order_by('-created_at').first()
             if attempt is not None:
-                score = attempt.score
+                score = round((attempt.score / 100.0) * (a.max_score or 100), 1)
         now = timezone.now()
         late = bool(a.deadline and now > a.deadline)
         existing = Submission.objects.filter(assignment=a, student=u).first()
@@ -721,8 +728,13 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        qs = Announcement.objects.select_related('author', 'classroom').filter(
-            classroom__in=_visible_classrooms(self.request.user))
+        u = self.request.user
+        rooms = _visible_classrooms(u)
+        if not (_is_admin(u) or getattr(u, 'role', None) == 'parent'):
+            rooms = rooms.filter(
+                Q(owner=u) | Q(is_paid=False) | Q(enrollments__student=u, enrollments__access_granted=True)
+            ).distinct()
+        qs = Announcement.objects.select_related('author', 'classroom').filter(classroom__in=rooms)
         room = self.request.query_params.get('classroom')
         if room:
             qs = qs.filter(classroom_id=room)

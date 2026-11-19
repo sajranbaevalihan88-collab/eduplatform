@@ -19,7 +19,8 @@ export default function Classes(){
   const [search,setSearch]=useState('')
   const [code,setCode]=useState('')
   const [creating,setCreating]=useState(false)
-  const [form,setForm]=useState({title:'',description:'',color:'#3B82F6'})
+  const [form,setForm]=useState({title:'',description:'',color:'#3B82F6',subject:''})
+  const [subjects,setSubjects]=useState<any[]>([])
   const [copied,setCopied]=useState<number|null>(null)
   const role = getRole()
   const isAdmin = role === 'admin'
@@ -46,11 +47,21 @@ export default function Classes(){
     return () => clearTimeout(timer)
   }, [search])
 
+  useEffect(() => {
+    if (teach) {
+      client.get('/subjects/', { params: { page_size: 100 } })
+        .then(r => setSubjects(Array.isArray(r.data) ? r.data : (r.data?.results || [])))
+        .catch(() => {})
+    }
+  }, [teach])
+
   const create=async()=>{
     if(!form.title.trim()){ toast(t('cls_need_title'),'error'); return }
     try{
-      await client.post('/classrooms/', form)
-      setForm({title:'',description:'',color:'#3B82F6'}); setCreating(false); load()
+      const payload: any = { title: form.title.trim(), description: form.description, color: form.color }
+      if (form.subject) payload.subject = Number(form.subject)
+      await client.post('/classrooms/', payload)
+      setForm({title:'',description:'',color:'#3B82F6',subject:''}); setCreating(false); load()
       toast(t('cls_created'),'success')
     }catch(e:any){ toast(e?.response?.data?.detail||t('cls_err'),'error') }
   }
@@ -85,12 +96,12 @@ export default function Classes(){
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h1 className="text-2xl font-bold flex items-center gap-2 dark:text-white">
-          <GraduationCap/>{isParent ? 'Классы моих детей' : isAdmin ? 'Все классы платформы' : t('classes')}
+          <GraduationCap/>{isParent ? t('cls_parent_title') : isAdmin ? t('cls_admin_title') : t('classes')}
         </h1>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
           {isParent ? (
             <Link to="/children" className="px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5">
-              <UsersRound size={16}/> Мои дети и дневник
+              <UsersRound size={16}/> {t('cls_parent_diary')}
             </Link>
           ) : !isAdmin ? (
             <div className="flex rounded-xl border dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900 w-full sm:w-auto">
@@ -108,14 +119,14 @@ export default function Classes(){
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Поиск по никнейму (учитель / ученик) или названию..."
+          placeholder={t('cls_search_ph')}
           className="w-full pl-10 pr-10 py-2.5 min-h-[44px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-400"
         />
         {search && (
           <button
             onClick={() => setSearch('')}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold p-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
-            title="Очистить поиск"
+            title={t('cls_clear_search')}
           >
             ✕
           </button>
@@ -124,7 +135,14 @@ export default function Classes(){
 
       {creating && teach && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 p-5 space-y-3">
-          <input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder={t('cls_title_ph')} className="w-full px-4 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-indigo-400"/>
+          <div className="grid sm:grid-cols-2 gap-2.5">
+            <input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder={t('cls_title_ph')} className="w-full px-4 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-indigo-400"/>
+            <select value={form.subject} onChange={e=>setForm({...form,subject:e.target.value})} aria-label="Предмет класса"
+              className="w-full px-3 py-2.5 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white outline-none focus:border-indigo-400">
+              <option value="">Предмет программы (необязательно)</option>
+              {subjects.map((s:any)=><option key={s.id} value={s.id}>{s.icon||''} {s.name}</option>)}
+            </select>
+          </div>
           <textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder={t('cls_desc_ph')} rows={2} className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-indigo-400"/>
           <div className="flex flex-wrap items-center gap-2 justify-between">
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -148,14 +166,15 @@ export default function Classes(){
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {rooms.map(r=>(
           <div key={r.id} className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 overflow-hidden card-hover">
-            <div className="h-20 flex items-end p-4" style={{background:r.color}}>
+            <div className="h-20 flex items-end justify-between p-4" style={{background:r.color}}>
               <GraduationCap className="text-white/90" size={28}/>
+              {r.subject_name && <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-black/20 text-white backdrop-blur-sm">{r.subject_name}</span>}
             </div>
             <div className="p-4 space-y-2">
               <div>
                 <Link to={`/classes/${r.id}`} className="font-bold text-lg hover:text-indigo-700 dark:text-white dark:hover:text-indigo-400">{r.title}</Link>
                 <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
-                  <span>Учитель: <strong className="text-slate-700 dark:text-slate-300">@{r.owner_name || r.owner_username || '—'}</strong></span>
+                  <span>{t('cls_teacher_lbl')} <strong className="text-slate-700 dark:text-slate-300">@{r.owner_name || r.owner_username || '—'}</strong></span>
                   <span>•</span>
                   <span className="flex items-center gap-1"><Users size={12}/>{r.members_count ?? (r.students?.length || 0)}</span>
                   <span>•</span>
@@ -163,7 +182,7 @@ export default function Classes(){
                 </div>
                 {Array.isArray(r.students) && r.students.length > 0 && (
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-1">
-                    <span>Ученики: </span>
+                    <span>{t('cls_students_lbl')} </span>
                     <span className="font-mono text-slate-700 dark:text-slate-300">
                       {r.students.map((s: string) => `@${s}`).join(', ')}
                     </span>
@@ -190,9 +209,9 @@ export default function Classes(){
         <div className="text-center text-slate-500 dark:text-slate-400 py-12 space-y-3">
           <div>
             {search
-              ? `Ничего не найдено по запросу «${search}»`
+              ? `${t('cls_not_found_q')} «${search}»`
               : isParent
-              ? 'У привязанных детей пока нет активных классов. Перейдите в раздел «Мои дети», чтобы привязать ребёнка или посмотреть дневник.'
+              ? t('cls_parent_empty')
               : t('cls_empty')}
           </div>
           {search && (
@@ -200,12 +219,12 @@ export default function Classes(){
               onClick={() => setSearch('')}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             >
-              Сбросить поиск
+              {t('cls_reset_search')}
             </button>
           )}
           {isParent && !search && (
             <Link to="/children" className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold">
-              <UsersRound size={16}/> Открыть «Мои дети»
+              <UsersRound size={16}/> {t('cls_open_children')}
             </Link>
           )}
         </div>

@@ -556,19 +556,21 @@ export default function Profile(){
             }} className="px-3.5 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700">
               💾 Скачать резервную копию (JSON)
             </button>
-            <label className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-slate-200 border dark:border-slate-700 text-xs font-semibold cursor-pointer hover:bg-slate-200">
-              📥 Восстановить из копии
-              <input type="file" accept=".json" className="hidden" onChange={async e=>{
-                const f = e.target.files?.[0]; e.target.value=''
-                if(!f) return
-                try{
-                  const txt = await f.text()
-                  const data = JSON.parse(txt)
-                  const r = await client.post('/classrooms/restore_backup/', data)
-                  toast(`Восстановлено тем учебной программы: ${r.data.restored_topics}`, 'success')
-                }catch{ toast('Некорректный файл резервной копии','error') }
-              }}/>
-            </label>
+            {(me?.role === 'admin' || me?.is_staff) && (
+              <label className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-slate-200 border dark:border-slate-700 text-xs font-semibold cursor-pointer hover:bg-slate-200">
+                📥 Восстановить программу из копии (Админ)
+                <input type="file" accept=".json" className="hidden" onChange={async e=>{
+                  const f = e.target.files?.[0]; e.target.value=''
+                  if(!f) return
+                  try{
+                    const txt = await f.text()
+                    const data = JSON.parse(txt)
+                    const r = await client.post('/classrooms/restore_backup/', data)
+                    toast(`Восстановлено тем учебной программы: ${r.data.restored_topics}`, 'success')
+                  }catch(err:any){ toast(err?.response?.data?.detail || 'Некорректный файл резервной копии','error') }
+                }}/>
+              </label>
+            )}
           </div>
         </div>
         <div className="grid sm:grid-cols-3 gap-3 text-xs text-slate-600 dark:text-slate-300">

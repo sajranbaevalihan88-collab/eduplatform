@@ -533,7 +533,7 @@ export default function VSCodeEditor(){
                 </div>
               </div>
               <div className="px-2 py-1 text-xs font-bold text-slate-300 flex items-center gap-1">
-                <span className="text-slate-500 text-[10px]">▾</span> EDUPATFORM
+                <span className="text-slate-500 text-[10px]">▾</span> EDUPLATFORM
                 <span className={`ml-auto text-[10px] font-mono ${files.length>=MAX_FILES?'text-red-400':'text-slate-500'}`}>{files.length}/{MAX_FILES}</span>
               </div>
               {showNew && (
@@ -590,10 +590,10 @@ export default function VSCodeEditor(){
 
         {/* Editor */}
         <div className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e]">
-          <div className="h-8 bg-[#252526] flex items-stretch border-b border-[#2d2d2d] shrink-0">
-            <div className="flex-1 flex items-center min-w-0 overflow-x-auto">
+          <div className="h-9 bg-[#252526] flex items-stretch border-b border-[#2d2d2d] shrink-0">
+            <div className="flex-1 flex items-center min-w-0 overflow-x-auto tab-scroll">
             {files.map(f=>(
-              <div key={f.id} onClick={()=>setActiveId(f.id)} className={`h-full flex items-center gap-1.5 px-2 border-r border-[#2d2d2d] cursor-pointer text-xs whitespace-nowrap shrink-0 ${activeId===f.id?'bg-[#1e1e1e] text-white':'bg-[#2d2d2d] text-slate-500 hover:text-white'}`}>
+              <div key={f.id} onClick={()=>setActiveId(f.id)} className={`h-full flex items-center gap-1.5 px-2.5 border-r border-[#2d2d2d] cursor-pointer text-xs whitespace-nowrap shrink-0 ${activeId===f.id?'bg-[#1e1e1e] text-white border-t-2 border-t-[#007acc]':'bg-[#2d2d2d] text-slate-400 hover:text-white'}`}>
                 <FileIcon name={f.name}/>
                 <span className="font-mono text-xs">{f.name}</span>
                 <button onClick={(e)=>{e.stopPropagation(); handleDelete(f.id)}} className="ml-1 p-0.5 rounded hover:bg-white/10"><X size={10}/></button>
