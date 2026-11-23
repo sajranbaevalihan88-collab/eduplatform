@@ -1129,7 +1129,11 @@ class SchoolMixin:
             classes_data.append({
                 'id': rm.id,
                 'title': rm.title,
+                'description': rm.description,
+                'color': rm.color,
                 'subject': rm.subject.slug if rm.subject else '',
+                'subject_name': rm.subject.name if rm.subject else '',
+                'owner': rm.owner.username if rm.owner else '',
                 'invite_code': rm.invite_code,
                 'students': [
                     {'username': e.student.username, 'first_name': e.student.first_name}
@@ -1142,6 +1146,7 @@ class SchoolMixin:
                 ],
                 'assignments': [
                     {'id': a.id, 'title': a.title, 'kind': a.kind, 'max_score': a.max_score,
+                     'instructions': a.instructions, 'url': a.url,
                      'topic': a.topic.title if a.topic else '',
                      'deadline': a.deadline.isoformat() if a.deadline else None}
                     for a in rm.assignments.select_related('topic')
@@ -1164,7 +1169,7 @@ class SchoolMixin:
                 'attendance_count': rm.attendance.count(),
             })
         payload = {
-            'version': '2.0-kr',
+            'version': '2.1-kr',
             'exported_at': timezone.now().isoformat(),
             'exported_by': u.username,
             'topics_count': len(topics_data),
@@ -1179,13 +1184,22 @@ class SchoolMixin:
 
     @action(detail=False, methods=['post'])
     def restore_backup(self, request):
-        """Восстановление тем учебной программы из JSON резервной копии.
-        Перезаписывает общую программу — только администратор."""
+        """Безопасное восстановление из JSON резервной копии (атомарно).
+        - Администратор: может восстанавливать учебную программу (topics) и классы (расписание, замены, задания, журнал, посещаемость).
+        - Учитель: может восстанавливать только свои классы (без изменения общей учебной программы и чужих классов)."""
         u = request.user
-        if not _is_admin(u):
-            raise PermissionDenied('Восстановление общей программы из копии доступно администратору')
+        is_adm = _is_admin(u)
+        if not (is_adm or getattr(u, 'role', None) == 'teacher'):
+            raise PermissionDenied('Восстановление из резервной копии доступно учителям и администрации')
+
         import json as _json
+        from datetime import date as _date, datetime as _dt
+        from django.contrib.auth import get_user_model
+        from django.db import transaction
         from apps.catalog.models import Subject
+        from apps.classroom.models import Assignment, Enrollment, Submission
+
+        UserModel = get_user_model()
         data = request.data
         f = request.FILES.get('file')
         if f:
@@ -1195,27 +1209,327 @@ class SchoolMixin:
                 data = _json.loads(f.read().decode('utf-8-sig', errors='replace'))
             except Exception:
                 raise ValidationError({'file': 'Некорректный JSON-файл резервной копии'})
-        topics_list = data.get('topics') if isinstance(data, dict) else []
+
+        if not isinstance(data, dict):
+            raise ValidationError({'file': 'Ожидается JSON-объект резервной копии'})
+
+        topics_list = data.get('topics', [])
+        classes_list = data.get('classes', [])
         if not isinstance(topics_list, list):
             raise ValidationError({'topics': 'Ожидается список тем'})
-        restored_topics = 0
-        for tp in topics_list[:5000]:
-            if not isinstance(tp, dict):
-                continue
-            slug = str(tp.get('subject_slug') or '')
-            subj = Subject.objects.filter(slug=slug).first() or Subject.objects.filter(name__iexact=str(tp.get('subject_name') or '')).first()
-            if not subj or not tp.get('title'):
-                continue
-            try:
-                num = int(tp.get('num') or 1)
-            except (TypeError, ValueError):
-                continue
-            Topic.objects.update_or_create(
-                subject=subj, grade=str(tp.get('grade') or '')[:10], num=num,
-                defaults={'title': str(tp['title'])[:500], 'description': str(tp.get('description') or '')[:2000], 'created_by': u}
-            )
-            restored_topics += 1
-        return Response({'ok': True, 'restored_topics': restored_topics})
+        if not isinstance(classes_list, list):
+            raise ValidationError({'classes': 'Ожидается список классов'})
+        if not topics_list and not classes_list:
+            raise ValidationError({'file': 'В файле нет ни тем программы, ни классов для восстановления'})
+
+        def _as_bool(val, default=True):
+            if val is None:
+                return default
+            if isinstance(val, bool):
+                return val
+            return str(val).strip().lower() not in ('0', 'false', 'no', 'off')
+
+        opt_topics = _as_bool(request.query_params.get('restore_topics', data.get('restore_topics')), True)
+        opt_classes = _as_bool(request.query_params.get('restore_classes', data.get('restore_classes')), True)
+
+        stats = {
+            'ok': True,
+            'restored_topics': 0,
+            'restored_classes': 0,
+            'restored_schedule': 0,
+            'restored_substitutions': 0,
+            'restored_enrollments': 0,
+            'restored_assignments': 0,
+            'restored_submissions': 0,
+            'restored_attendance': 0,
+            'skipped_unknown_students': 0,
+            'topics_skipped_not_admin': bool(topics_list and opt_topics and not is_adm),
+        }
+
+        subjects_by_slug = {s.slug: s for s in Subject.objects.all()}
+        subjects_by_name = {s.name.lower(): s for s in subjects_by_slug.values()}
+
+        def _find_subject(slug_val='', name_val=''):
+            slug_s = str(slug_val or '').strip()
+            name_s = str(name_val or '').strip().lower()
+            return subjects_by_slug.get(slug_s) or (subjects_by_name.get(name_s) if name_s else None)
+
+        with transaction.atomic():
+            # 1. Учебная программа (только администратор — общая таблица)
+            if is_adm and opt_topics and topics_list:
+                for tp in topics_list[:5000]:
+                    if not isinstance(tp, dict):
+                        continue
+                    subj = _find_subject(tp.get('subject_slug'), tp.get('subject_name'))
+                    if not subj or not tp.get('title'):
+                        continue
+                    try:
+                        num = max(1, int(tp.get('num') or 1))
+                    except (TypeError, ValueError):
+                        continue
+                    Topic.objects.update_or_create(
+                        subject=subj, grade=str(tp.get('grade') or '')[:10], num=num,
+                        defaults={
+                            'title': str(tp['title'])[:500],
+                            'description': str(tp.get('description') or '')[:2000],
+                            'created_by': u,
+                        }
+                    )
+                    stats['restored_topics'] += 1
+
+            # 2. Классы, расписание, замены, ученики, задания, оценки и посещаемость
+            if opt_classes and classes_list:
+                # Предзагрузка существующих пользователей по username для избежания N+1
+                wanted_usernames = set()
+                for cd in classes_list[:200]:
+                    if not isinstance(cd, dict):
+                        continue
+                    if cd.get('owner'):
+                        wanted_usernames.add(str(cd['owner']).strip())
+                    for st in (cd.get('students') or []):
+                        if isinstance(st, dict) and st.get('username'):
+                            wanted_usernames.add(str(st['username']).strip())
+                    for sb in (cd.get('submissions') or []):
+                        if isinstance(sb, dict) and sb.get('student'):
+                            wanted_usernames.add(str(sb['student']).strip())
+                    for at in (cd.get('attendance') or []):
+                        if isinstance(at, dict) and at.get('student'):
+                            wanted_usernames.add(str(at['student']).strip())
+
+                users_by_name = {
+                    usr.username: usr
+                    for usr in UserModel.objects.filter(username__in=list(wanted_usernames))
+                }
+                topics_by_title = {
+                    (t.subject_id, t.title.lower()): t
+                    for t in Topic.objects.all()
+                }
+                valid_att_statuses = {c[0] for c in Attendance.STATUS_CHOICES}
+                valid_sub_statuses = {c[0] for c in Submission.STATUS_CHOICES}
+                from django.core.validators import URLValidator
+                _url_validator = URLValidator(schemes=['http', 'https'])
+                # Безопасность: не-админ учитель может зачислять только своих уже существующих учеников
+                # (защита от «захвата чужих учеников» и утечки их портфолио/оценок/родителей).
+                my_student_ids = None if is_adm else set(
+                    Enrollment.objects.filter(classroom__owner=u).values_list('student_id', flat=True)
+                )
+
+                for cd in classes_list[:200]:
+                    if not isinstance(cd, dict):
+                        continue
+                    title = str(cd.get('title') or '').strip()[:300]
+                    if not title:
+                        continue
+                    subj = _find_subject(cd.get('subject'), cd.get('subject_name'))
+                    code = str(cd.get('invite_code') or '').strip()[:12]
+
+                    # Определяем целевой класс без возможности перезаписать чужой класс
+                    room = None
+                    if code:
+                        existing = Classroom.objects.filter(invite_code=code).first()
+                        if existing:
+                            if is_adm or existing.owner_id == u.id:
+                                room = existing
+                            else:
+                                # Чужой invite_code — создадим новый класс с новым кодом, не трогая чужой
+                                code = ''
+
+                    if room is None:
+                        owner_user = u
+                        if is_adm and cd.get('owner') and str(cd['owner']).strip() in users_by_name:
+                            cand = users_by_name[str(cd['owner']).strip()]
+                            if getattr(cand, 'role', None) in ('teacher', 'admin') or cand.is_staff:
+                                owner_user = cand
+                        existing_same = Classroom.objects.filter(owner=owner_user, title=title).first()
+                        if existing_same:
+                            room = existing_same
+                        else:
+                            room = Classroom.objects.create(
+                                title=title,
+                                description=str(cd.get('description') or '')[:2000],
+                                color=str(cd.get('color') or '#3B82F6')[:20],
+                                subject=subj,
+                                owner=owner_user,
+                                invite_code=code,
+                            )
+                    else:
+                        updated_fields = []
+                        if room.title != title:
+                            room.title = title
+                            updated_fields.append('title')
+                        if subj and room.subject_id != subj.id:
+                            room.subject = subj
+                            updated_fields.append('subject')
+                        if cd.get('description') is not None:
+                            room.description = str(cd.get('description') or '')[:2000]
+                            updated_fields.append('description')
+                        if updated_fields:
+                            room.save(update_fields=updated_fields)
+
+                    stats['restored_classes'] += 1
+
+                    # Зачисление существующих учеников (строго с проверкой роли и прав учителя)
+                    for st in (cd.get('students') or [])[:500]:
+                        if not isinstance(st, dict):
+                            continue
+                        uname = str(st.get('username') or '').strip()
+                        stu = users_by_name.get(uname)
+                        if not stu or getattr(stu, 'role', None) != 'student':
+                            if uname:
+                                stats['skipped_unknown_students'] += 1
+                            continue
+                        if not is_adm and stu.id not in my_student_ids:
+                            stats['skipped_unknown_students'] += 1
+                            continue
+                        _, created = Enrollment.objects.get_or_create(classroom=room, student=stu)
+                        if created:
+                            stats['restored_enrollments'] += 1
+
+                    # Множество легитимно зачисленных в этот класс учеников (для оценок и посещаемости)
+                    room_student_ids = set(
+                        Enrollment.objects.filter(classroom=room).values_list('student_id', flat=True)
+                    )
+
+                    # Недельное расписание
+                    for sl in (cd.get('schedule') or [])[:200]:
+                        if not isinstance(sl, dict):
+                            continue
+                        try:
+                            wd = int(sl.get('weekday') or 0)
+                            num = int(sl.get('num') or 0)
+                        except (TypeError, ValueError):
+                            continue
+                        if not (1 <= wd <= 6 and 1 <= num <= 12):
+                            continue
+                        sl_subj = _find_subject(sl.get('subject'))
+                        LessonSlot.objects.update_or_create(
+                            classroom=room, weekday=wd, num=num,
+                            defaults={'subject': sl_subj, 'room': str(sl.get('room') or '')[:50]},
+                        )
+                        stats['restored_schedule'] += 1
+
+                    # Замены уроков
+                    for sub_it in (cd.get('substitutions') or [])[:500]:
+                        if not isinstance(sub_it, dict):
+                            continue
+                        try:
+                            dt = _date.fromisoformat(str(sub_it.get('date') or '')[:10])
+                            num = int(sub_it.get('num') or 0)
+                        except (TypeError, ValueError):
+                            continue
+                        if not (1 <= num <= 12):
+                            continue
+                        sub_subj = _find_subject(sub_it.get('subject'))
+                        Substitution.objects.update_or_create(
+                            classroom=room, date=dt, num=num,
+                            defaults={
+                                'subject': sub_subj,
+                                'note': str(sub_it.get('note') or '')[:200],
+                                'created_by': u,
+                            },
+                        )
+                        stats['restored_substitutions'] += 1
+
+                    # Задания (маппинг старого assignment_id -> нового объекта для восстановления оценок)
+                    assign_map = {}
+                    for a_it in (cd.get('assignments') or [])[:500]:
+                        if not isinstance(a_it, dict):
+                            continue
+                        a_title = str(a_it.get('title') or '').strip()[:300]
+                        if not a_title:
+                            continue
+                        raw_kind = str(a_it.get('kind') or 'manual')
+                        # lesson/test в резервной копии не содержат сами сущности Lesson/Test,
+                        # поэтому безопасно сохраняем колонку журнала как manual (сохраняя оценки!)
+                        kind = raw_kind if raw_kind in ('manual', 'link', 'write') else 'manual'
+                        try:
+                            max_score = max(1, min(1000, int(a_it.get('max_score') or 100)))
+                        except (TypeError, ValueError):
+                            max_score = 100
+                        deadline_val = None
+                        if a_it.get('deadline'):
+                            try:
+                                deadline_val = _dt.fromisoformat(str(a_it['deadline']).replace('Z', '+00:00'))
+                            except Exception:
+                                deadline_val = None
+                        topic_obj = None
+                        t_title = str(a_it.get('topic') or '').strip().lower()
+                        if t_title and room.subject_id:
+                            topic_obj = topics_by_title.get((room.subject_id, t_title))
+
+                        safe_url = str(a_it.get('url') or '').strip()[:500]
+                        if safe_url:
+                            try:
+                                _url_validator(safe_url)
+                            except Exception:
+                                safe_url = ''
+                        a_obj, _ = Assignment.objects.update_or_create(
+                            classroom=room,
+                            manual_title=a_title,
+                            defaults={
+                                'kind': kind,
+                                'max_score': max_score,
+                                'instructions': str(a_it.get('instructions') or '')[:5000],
+                                'url': safe_url,
+                                'topic': topic_obj,
+                                'deadline': deadline_val,
+                            },
+                        )
+                        if a_it.get('id') is not None:
+                            assign_map[a_it['id']] = a_obj
+                        stats['restored_assignments'] += 1
+
+                    # Оценки / сдачи (только для зачисленных в класс учеников)
+                    for s_it in (cd.get('submissions') or [])[:3000]:
+                        if not isinstance(s_it, dict):
+                            continue
+                        a_obj = assign_map.get(s_it.get('assignment_id'))
+                        stu = users_by_name.get(str(s_it.get('student') or '').strip())
+                        if not a_obj or not stu or stu.id not in room_student_ids:
+                            continue
+                        raw_st = str(s_it.get('status') or 'submitted')
+                        st_val = raw_st if raw_st in valid_sub_statuses else 'submitted'
+                        score_val = s_it.get('score')
+                        try:
+                            score_val = float(score_val) if score_val is not None else None
+                        except (TypeError, ValueError):
+                            score_val = None
+                        Submission.objects.update_or_create(
+                            assignment=a_obj, student=stu,
+                            defaults={
+                                'status': st_val,
+                                'score': score_val,
+                                'mark': str(s_it.get('mark') or '')[:8],
+                            },
+                        )
+                        stats['restored_submissions'] += 1
+
+                    # Посещаемость (только для зачисленных в класс учеников)
+                    for at_it in (cd.get('attendance') or [])[:2000]:
+                        if not isinstance(at_it, dict):
+                            continue
+                        stu = users_by_name.get(str(at_it.get('student') or '').strip())
+                        if not stu or stu.id not in room_student_ids:
+                            continue
+                        try:
+                            dt = _date.fromisoformat(str(at_it.get('date') or '')[:10])
+                            lnum = max(0, min(12, int(at_it.get('lesson_num') or 0)))
+                        except (TypeError, ValueError):
+                            continue
+                        st_val = str(at_it.get('status') or '')
+                        if st_val not in valid_att_statuses:
+                            continue
+                        Attendance.objects.update_or_create(
+                            classroom=room, student=stu, date=dt, lesson_num=lnum,
+                            defaults={
+                                'status': st_val,
+                                'note': str(at_it.get('note') or '')[:200],
+                                'marked_by': u,
+                            },
+                        )
+                        stats['restored_attendance'] += 1
+
+        return Response(stats)
 
 
 from rest_framework.views import APIView

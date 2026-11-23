@@ -1,11 +1,12 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info, Database, Volume2, VolumeX, FolderLock, BookOpenCheck, UsersRound, ListTree, TrendingUp, MessageSquare, Medal } from 'lucide-react'
+import { BookOpen, LayoutDashboard, PenTool, Presentation, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info, Database, Volume2, VolumeX, Music, FolderLock, BookOpenCheck, UsersRound, ListTree, TrendingUp, MessageSquare, Medal, Download, RefreshCw } from 'lucide-react'
 import A11yPanel from './A11yPanel'
 import { useState, useEffect, useRef } from 'react'
 import client, { mediaSrc } from '../api/client'
 import { useTheme, useAccessibility } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
-import { isSfxMuted, setSfxMuted, sfx } from '../utils/sfx'
+import { isSfxMuted, setSfxMuted, sfx, startBgMusic, stopBgMusic, getBgMusicStyle, type BgMusicStyle } from '../utils/sfx'
+import { usePWA, clearPwaApiCache } from '../hooks/usePWA'
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const loc = useLocation()
@@ -16,7 +17,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [showLang,setShowLang]=useState(false)
   const [showA11y,setShowA11y]=useState(false)
   const [sfxOff,setSfxOff]=useState(()=>isSfxMuted())
+  const [musicStyle,setMusicStyle]=useState<BgMusicStyle | null>(()=>getBgMusicStyle())
   const [isOffline,setIsOffline]=useState(()=>typeof navigator !== 'undefined' && !navigator.onLine)
+  const pwa = usePWA()
+  useEffect(()=>{
+    const syncAudio=()=>{ setSfxOff(isSfxMuted()); setMusicStyle(getBgMusicStyle()) }
+    window.addEventListener('audio-state-change', syncAudio)
+    return ()=>window.removeEventListener('audio-state-change', syncAudio)
+  },[])
   useEffect(()=>{
     const onOnline=()=>setIsOffline(false)
     const onOffline=()=>setIsOffline(true)
@@ -38,6 +46,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return ()=>{ document.removeEventListener('mousedown', onDoc); window.removeEventListener('keydown', onEsc) }
   },[showLang])
   const isGameFull = /^\/games\/.+/.test(loc.pathname)
+  // Подходящая фоновая музыка для каждой игры (SoundMemory — слуховая игра, без фона)
+  const gameTrack: BgMusicStyle | null =
+    loc.pathname.startsWith('/games/arkan') ? 'arkan'
+    : loc.pathname.startsWith('/games/math-battle') ? 'battle'
+    : loc.pathname.startsWith('/games/farmer') ? 'farm'
+    : loc.pathname.startsWith('/games/sprint') ? 'sprint'
+    : loc.pathname.startsWith('/games/colormatch') ? 'arcade'
+    : loc.pathname.startsWith('/games/memory') || loc.pathname.startsWith('/games/word-search') || loc.pathname.startsWith('/games/hangman') ? 'puzzle'
+    : loc.pathname.startsWith('/games/connect-four') || loc.pathname.startsWith('/games/blocade') ? 'strategy'
+    : null
+  // При уходе со страницы игры музыка автоматически останавливается; при переходе в другую игру — плавно меняется трек
+  useEffect(()=>{
+    const active = getBgMusicStyle()
+    if (!loc.pathname.startsWith('/games/') && !loc.pathname.startsWith('/live')) {
+      if (active) stopBgMusic()
+    } else if (loc.pathname.startsWith('/games/')) {
+      if (!gameTrack && active) stopBgMusic()
+      else if (gameTrack && active && active !== gameTrack) startBgMusic(gameTrack)
+    }
+  },[loc.pathname, gameTrack])
   const {theme,toggle:toggleTheme}=useTheme()
   const {lang,t,setLang}=useLang()
   const {poor}=useAccessibility()
@@ -93,15 +121,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { to: '/games', label: t('games'), icon: Gamepad2 },
       ].filter(it => adminLimited ? ADMIN_ALLOWED.has(it.to) : true)
   useEffect(()=>{
-    const token=localStorage.getItem('token')
-    if(token){
-      client.get('/auth/me/').then(r=>setMe(r.data)).catch(()=>{
+    const fetchMe = () => {
+      const token=localStorage.getItem('token')
+      if(token){
         const raw=localStorage.getItem('user')
         if(raw) try{ setMe(JSON.parse(raw)) }catch{}
-      })
-    } else {
-      setMe(null)
+        client.get('/auth/me/').then(r=>setMe(r.data)).catch(()=>{})
+      } else {
+        setMe(null)
+      }
     }
+    fetchMe()
     const onStorage=()=> {
       const t=localStorage.getItem('token')
       if(!t) setMe(null)
@@ -117,11 +147,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     window.addEventListener('storage', onStorage)
     window.addEventListener('auth-change', onStorage as any)
     window.addEventListener('toggle-sidebar', onToggleSidebar as any)
+    return ()=> { window.removeEventListener('storage', onStorage); window.removeEventListener('auth-change', onStorage as any); window.removeEventListener('toggle-sidebar', onToggleSidebar as any) }
+  },[])
+  useEffect(()=>{
     // авто-скрывать на доске если ранее скрыли
     if(loc.pathname.startsWith('/board') && localStorage.getItem('board-hide-sidebar')==='1'){
       setHideSidebar(true)
     }
-    return ()=> { window.removeEventListener('storage', onStorage); window.removeEventListener('auth-change', onStorage as any); window.removeEventListener('toggle-sidebar', onToggleSidebar as any) }
   },[loc.pathname])
   // Слепой режим: при смене страницы — фокус в контент + нативное объявление
   // заголовка скринридеру (без нашего голоса — так правильно для NVDA/JAWS).
@@ -158,6 +190,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     try {
       Object.keys(localStorage).forEach(k => { if (k.startsWith('offline_cache:')) localStorage.removeItem(k) })
     } catch {}
+    clearPwaApiCache()
     setMe(null); window.dispatchEvent(new Event('auth-change')); nav('/login')
   }
   const toggleSidebar = () => {
@@ -230,13 +263,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div aria-live="assertive" aria-atomic="true" role="status" className="sr-only">{announce}</div>
       {/* Sidebar desktop */}
       {(!isGameFull && !hideSidebar) ? (
-      <aside aria-label={t('main_navigation')} className="hidden lg:flex w-[280px] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-r border-slate-200/60 dark:border-slate-700/60 flex-col sticky top-0 h-screen shadow-sm animate-slideIn">
+      <aside aria-label={t('main_navigation')} className="hidden lg:flex w-[280px] bg-white/95 dark:bg-slate-900/95 border-r border-slate-200/80 dark:border-slate-800 flex-col sticky top-0 h-screen shadow-sm">
         <div className="h-[64px] flex items-center gap-3 px-6 border-b border-slate-100 dark:border-slate-700">
           <img src="/logo.svg" alt="EduPlatform" className="w-10 h-10 shrink-0 drop-shadow-md" />
           <div className="flex-1 min-w-0"><div className="font-display font-bold leading-tight dark:text-white text-[15px]">EduPlatform</div><div className="text-xs text-slate-500 dark:text-slate-400">{t('tagline')}</div></div>
           <button onClick={toggleSidebar} aria-label={t('hide_tabs')} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 btn-hover" title={t('hide_tabs')}><PanelLeftClose size={18}/></button>
         </div>
-        <nav id="main-navigation" aria-label={t('main_navigation')} className="flex-1 p-3 space-y-1.5 overflow-auto scrollbar-thin stagger">
+        <nav id="main-navigation" aria-label={t('main_navigation')} className="flex-1 p-3 space-y-1.5 overflow-auto scrollbar-thin">
           {items.map(it => (
             <Link key={it.to} to={it.to} aria-current={isActive(it.to) ? 'page' : undefined} aria-label={it.label} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive(it.to) ? 'bg-indigo-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-100 dark:hover:border-slate-700'}`}>
               <span className={`p-1.5 rounded-lg ${isActive(it.to) ? 'bg-white/15' : 'bg-slate-50 dark:bg-slate-800'}`}><it.icon size={16} /></span> {it.label}
@@ -244,6 +277,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/60 space-y-2">
+          {pwa.canInstall && (
+            <button
+              type="button"
+              onClick={() => pwa.install()}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors"
+            >
+              <Download size={14} className="text-indigo-600 dark:text-indigo-400" />
+              Установить приложение
+            </button>
+          )}
           {me ? (
             <Link to="/profile" className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium card-hover ${isActive('/profile') ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700' : 'bg-white dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-600 dark:text-white'}`}>
               {me.avatar ? (
@@ -281,7 +324,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <Link key={it.to} to={it.to} onClick={()=>setOpen(false)} aria-current={isActive(it.to) ? 'page' : undefined} className={`flex items-center gap-3 px-3 py-3 rounded-xl min-h-[48px] ${isActive(it.to)?'bg-indigo-600 text-white':'text-slate-600 dark:text-slate-300'}`}><it.icon size={18}/>{it.label}</Link>
               ))}
             </nav>
-            <div className="p-3 pb-[calc(12px+env(safe-area-inset-bottom))] border-t dark:border-slate-700 shrink-0">
+            <div className="p-3 pb-[calc(12px+env(safe-area-inset-bottom))] border-t dark:border-slate-700 shrink-0 space-y-2">
+              {pwa.canInstall && (
+                <button
+                  type="button"
+                  onClick={() => { setOpen(false); pwa.install() }}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-sm font-semibold"
+                >
+                  <Download size={16} /> Установить на телефон
+                </button>
+              )}
               {me ? (<>
                 <Link to="/profile" onClick={()=>setOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 dark:text-white">
                   {me.avatar ? (
@@ -302,7 +354,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       <div className={`flex-1 min-w-0 ${loc.pathname.startsWith('/board') ? 'flex flex-col h-screen' : ''}`}>
         {!loc.pathname.startsWith('/board') && !isGameFull && (
-        <header className="min-h-[calc(64px+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-1.5 sm:gap-2 px-2 sm:px-4 lg:px-8 sticky top-0 z-40 shadow-sm">
+        <header className="min-h-[calc(64px+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-200/70 dark:border-slate-800 flex items-center justify-between gap-1.5 sm:gap-2 px-2 sm:px-4 lg:px-8 sticky top-0 z-40 shadow-sm">
           <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
             <button className="lg:hidden shrink-0 w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-white hover:bg-white dark:hover:bg-slate-700 hover:shadow-md transition-all flex items-center justify-center" onClick={()=>setOpen(true)} aria-label={t('open_menu')} aria-expanded={open} aria-controls="mobile-drawer"><Menu size={18}/></button>
             {/* Логотип в мобильной шапке: скрываем текст на узких экранах (< sm), оставляя узнаваемую иконку */}
@@ -351,9 +403,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <span>📶 {t('offline_banner')}</span>
           </div>
         )}
+        {pwa.updateReady && (
+          <div className="bg-indigo-600 text-white text-xs font-medium px-4 py-2 flex items-center justify-center gap-3">
+            <span>Доступна новая версия EduPlatform</span>
+            <button
+              type="button"
+              onClick={pwa.applyUpdate}
+              className="px-2.5 py-1 rounded-lg bg-white text-indigo-700 font-bold flex items-center gap-1 hover:bg-indigo-50"
+            >
+              <RefreshCw size={12} /> Обновить
+            </button>
+          </div>
+        )}
         <main id="main-content" tabIndex={-1} key={loc.pathname} className={loc.pathname.startsWith('/board') ? 'flex-1 min-h-0 w-full page-enter' : isGameFull ? 'w-full min-h-screen pb-24 lg:pb-0 page-enter relative' : 'p-4 pb-28 lg:p-8 max-w-[1400px] mx-auto page-enter overflow-x-clip'}>{children}</main>
         {!loc.pathname.startsWith('/board') && !isGameFull && (
-          <nav id="bottom-navigation" aria-label={t('mobile_navigation')} className="lg:hidden fixed bottom-0 inset-x-0 z-30 flex items-stretch justify-around bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200/60 dark:border-slate-700/60 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(0,0,0,0.06)]">
+          <nav id="bottom-navigation" aria-label={t('mobile_navigation')} className="lg:hidden fixed bottom-0 inset-x-0 z-30 flex items-stretch justify-around bg-white/95 dark:bg-slate-900/95 border-t border-slate-200/80 dark:border-slate-800 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
             {bottomItems.map(it => (
               <Link key={it.to} to={it.to} aria-current={isActive(it.to) ? 'page' : undefined}
                 className={`flex-1 min-w-0 min-h-[56px] px-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${isActive(it.to) ? 'text-indigo-600 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-800'}`}>
@@ -364,15 +428,76 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </nav>
         )}
         {isGameFull && (
-          <button onClick={() => nav('/games')} aria-label={t('games')}
-            className="fixed left-3 bottom-3 z-30 p-3 rounded-full bg-slate-900/80 dark:bg-white/90 text-white dark:text-slate-900 shadow-xl hover:scale-110 active:scale-95 transition-transform backdrop-blur-sm">
-            <ChevronLeft size={20} />
-          </button>
+          <>
+            <button onClick={() => { stopBgMusic(); nav('/games') }} aria-label={t('games')}
+              className="fixed left-3 bottom-3 z-30 p-3 rounded-full bg-slate-900/85 dark:bg-white/90 text-white dark:text-slate-900 shadow-xl hover:scale-105 active:scale-95 transition-transform">
+              <ChevronLeft size={20} />
+            </button>
+            <div className="fixed right-3 bottom-3 z-30 flex items-center gap-1.5">
+              {gameTrack && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (musicStyle === gameTrack) { stopBgMusic() }
+                    else {
+                      if (sfxOff) { setSfxOff(false); setSfxMuted(false) }
+                      startBgMusic(gameTrack)
+                    }
+                  }}
+                  aria-label={musicStyle === gameTrack ? 'Выключить музыку игры' : 'Включить музыку игры'}
+                  aria-pressed={musicStyle === gameTrack}
+                  data-testid="game-music-toggle"
+                  className={`px-3.5 py-2.5 min-h-[44px] rounded-full text-xs font-bold shadow-xl flex items-center gap-1.5 transition-all ${
+                    musicStyle === gameTrack
+                      ? 'bg-indigo-600 text-white ring-2 ring-indigo-300/60'
+                      : 'bg-slate-900/85 dark:bg-white/90 text-white dark:text-slate-900 hover:opacity-95'
+                  }`}
+                >
+                  <Music size={15} />
+                  <span>{musicStyle === gameTrack ? 'Музыка: Вкл' : 'Музыка'}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => { const next = !sfxOff; setSfxOff(next); setSfxMuted(next); if (!next) sfx('ui.click') }}
+                aria-label={sfxOff ? t('sfx_enable_aria') : t('sfx_disable_aria')}
+                className="p-3 min-w-[44px] min-h-[44px] rounded-full bg-slate-900/85 dark:bg-white/90 text-white dark:text-slate-900 shadow-xl flex items-center justify-center"
+              >
+                {sfxOff ? <VolumeX size={17} /> : <Volume2 size={17} />}
+              </button>
+            </div>
+          </>
         )}
       </div>
       {/* Панель доступности — вне шапки: родитель с backdrop-blur создаёт containing block
           для position:fixed и overflow-hidden режет панель до 64px (казалось «не нажимается») */}
       <A11yPanel open={showA11y} onClose={()=>setShowA11y(false)} />
+      {/* Подсказка установки PWA для iOS Safari */}
+      {pwa.showIosGuide && (
+        <div
+          className="fixed inset-0 z-[90] bg-black/60 flex items-end sm:items-center justify-center p-3 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Установка приложения на iPhone/iPad"
+          onClick={() => pwa.setShowIosGuide(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-5 shadow-2xl space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-base text-slate-900 dark:text-white">Установка на iPhone / iPad</h2>
+              <button type="button" onClick={() => pwa.setShowIosGuide(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" aria-label="Закрыть"><X size={16} /></button>
+            </div>
+            <ol className="text-sm text-slate-600 dark:text-slate-300 space-y-2 list-decimal list-inside">
+              <li>Нажмите кнопку <b>«Поделиться»</b> (квадрат со стрелкой вверх) внизу Safari.</li>
+              <li>Выберите <b>«На экран „Домой“»</b> → <b>«Добавить»</b>.</li>
+            </ol>
+            <p className="text-xs text-slate-400">После установки EduPlatform откроется на весь экран как обычное приложение и будет сохранять уроки в памяти.</p>
+            <button type="button" onClick={() => pwa.setShowIosGuide(false)} className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold">Понятно</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

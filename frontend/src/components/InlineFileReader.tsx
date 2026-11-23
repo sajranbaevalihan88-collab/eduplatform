@@ -216,7 +216,7 @@ export default function InlineFileReader({ file, defaultOpen = true }: { file: F
         style={{ fontSize: `${docFontPx}px` }}
       >
         {docHtml ? (
-          <div dangerouslySetInnerHTML={{ __html: docHtml }} />
+          <div dangerouslySetInnerHTML={{ __html: sanitizeWordHtml(docHtml) }} />
         ) : (
           <div className="whitespace-pre-wrap">
             {(docText || '').trim() || 'Документ не содержит текстового содержимого — используй кнопку «Скачать».'}

@@ -9,7 +9,7 @@ import re
 
 import requests
 
-API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={k}'
+API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent'
 
 ALLOWED_TYPES = {'single', 'multiple', 'true_false'}
 MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-3-flash-preview']
@@ -116,7 +116,8 @@ def generate_with_gemini(text, count=5, api_key='', preferred_model='', instruct
     for model_name in models:
         try:
             r = requests.post(
-                API_URL.format(m=model_name, k=api_key),
+                API_URL.format(m=model_name),
+                headers={'x-goog-api-key': api_key},
                 json={
                     'contents': [{'parts': [{'text': _prompt(text, count, instruction)}]}],
                     'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 16384},

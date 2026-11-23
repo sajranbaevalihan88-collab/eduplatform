@@ -1,6 +1,6 @@
-// sfx.ts — Студийный WebAudio-движок продуктового уровня (в стиле Duolingo / Kahoot / Apple UI).
-// Тёплый динамический low-pass фильтр, мягкие ADSR-огибающие, обертоны маримбы/колокольчиков
-// и лёгкое пространственное эхо — никаких резких 8-битных писков.
+// sfx.ts — Продуктовый аудио-движок EduPlatform (CC0 студийные сэмплы + фоновая музыка).
+// Лёгкий для слабых ноутбуков: сэмплы подгружаются лениво один раз в память AudioBuffer,
+// музыка стримится через один <audio preload="none"> только по запросу пользователя.
 
 export type Sfx =
   | 'ui.click' | 'ui.win' | 'ui.lose'
@@ -15,72 +15,205 @@ export type Sfx =
   | 'mb.strike' | 'mb.crit' | 'mb.ko'
   | 'lq.join' | 'lq.tick' | 'lq.reveal' | 'lq.podium'
 
-let ctx: AudioContext | null = null
-let master: GainNode | null = null
-let dryBus: GainNode | null = null
-let wetBus: GainNode | null = null
-let muted = false
-try { muted = localStorage.getItem('edu-sfx-mute') === '1' } catch {}
+export type BgMusicStyle = 'arkan' | 'battle' | 'lobby' | 'farm' | 'sprint' | 'arcade' | 'puzzle' | 'strategy'
 
-function ac(): AudioContext | null {
+type SampleKey =
+  | 'click' | 'success' | 'save' | 'error' | 'notify' | 'hint'
+  | 'win' | 'lose' | 'bonus' | 'go' | 'tick' | 'key' | 'flip'
+  | 'hit' | 'crit' | 'plant'
+
+const SFX_MAP: Record<Sfx, { sample: SampleKey; gain?: number; rate?: number }> = {
+  // Интерфейс и уведомления
+  'ui.click':    { sample: 'click', gain: 0.65 },
+  'ui.success':  { sample: 'success', gain: 0.85 },
+  'ui.error':    { sample: 'error', gain: 0.8 },
+  'ui.notify':   { sample: 'notify', gain: 0.85 },
+  'ui.win':      { sample: 'win', gain: 0.9 },
+  'ui.lose':     { sample: 'lose', gain: 0.8 },
+
+  // Поиск слов / Виселица / Цвета
+  'ws.select':   { sample: 'click', gain: 0.55, rate: 1.08 },
+  'ws.found':    { sample: 'bonus', gain: 0.85 },
+  'ws.wrong':    { sample: 'error', gain: 0.7 },
+  'ws.hint':     { sample: 'hint', gain: 0.8 },
+  'ws.win':      { sample: 'win', gain: 0.9 },
+  'ws.go':       { sample: 'go', gain: 0.85 },
+
+  'hm.go':       { sample: 'go', gain: 0.85 },
+  'hm.hit':      { sample: 'success', gain: 0.8 },
+  'hm.miss':     { sample: 'error', gain: 0.75 },
+  'hm.hint':     { sample: 'hint', gain: 0.8 },
+  'hm.win':      { sample: 'win', gain: 0.9 },
+  'hm.lose':     { sample: 'lose', gain: 0.8 },
+
+  'cm.tap':      { sample: 'click', gain: 0.6 },
+  'cm.right':    { sample: 'success', gain: 0.85 },
+  'cm.wrong':    { sample: 'error', gain: 0.75 },
+  'cm.over':     { sample: 'lose', gain: 0.85 },
+
+  // Карточки / Память / Пары
+  'mem.flip':    { sample: 'flip', gain: 0.8 },
+  'mem.match':   { sample: 'success', gain: 0.85 },
+  'mem.miss':    { sample: 'error', gain: 0.65 },
+  'mem.bonus':   { sample: 'bonus', gain: 0.9 },
+  'mem.win':     { sample: 'win', gain: 0.9 },
+  'mem.lose':    { sample: 'lose', gain: 0.8 },
+  'pairs.flip':  { sample: 'flip', gain: 0.8 },
+  'pairs.match': { sample: 'success', gain: 0.85 },
+  'pairs.win':   { sample: 'win', gain: 0.9 },
+
+  // Спринт печати и таймер
+  'sprint.key':   { sample: 'key', gain: 0.5 },
+  'sprint.space': { sample: 'bonus', gain: 0.55, rate: 1.15 },
+  'sprint.miss':  { sample: 'error', gain: 0.55 },
+  'sprint.fin':   { sample: 'win', gain: 0.9 },
+  'clock':        { sample: 'tick', gain: 0.75 },
+
+  // Фермер Бала
+  'fb.plant':    { sample: 'plant', gain: 0.8 },
+  'fb.pick':     { sample: 'success', gain: 0.8 },
+  'fb.big':      { sample: 'hit', gain: 0.85 },
+  'fb.print':    { sample: 'save', gain: 0.75 },
+  'fb.chip':     { sample: 'click', gain: 0.6 },
+  'fb.level':    { sample: 'win', gain: 0.9 },
+
+  // Математический бой и Live-квиз (Кахут)
+  'mb.strike':   { sample: 'hit', gain: 0.9 },
+  'mb.crit':     { sample: 'crit', gain: 0.95 },
+  'mb.ko':       { sample: 'crit', gain: 0.95, rate: 0.9 },
+  'lq.join':     { sample: 'notify', gain: 0.8 },
+  'lq.tick':     { sample: 'tick', gain: 0.8 },
+  'lq.reveal':   { sample: 'bonus', gain: 0.9 },
+  'lq.podium':   { sample: 'win', gain: 0.95 },
+}
+
+const MUSIC_URLS: Record<BgMusicStyle, string> = {
+  arkan:    '/audio/music/arkan.mp3',
+  battle:   '/audio/music/battle.mp3',
+  lobby:    '/audio/music/lobby.mp3',
+  farm:     '/audio/music/farm.mp3',
+  sprint:   '/audio/music/sprint.mp3',
+  arcade:   '/audio/music/arcade.mp3',
+  puzzle:   '/audio/music/puzzle.mp3',
+  strategy: '/audio/music/strategy.mp3',
+}
+
+let ctx: AudioContext | null = null
+let masterGain: GainNode | null = null
+const bufferCache = new Map<SampleKey, AudioBuffer>()
+const pendingLoads = new Map<SampleKey, Promise<AudioBuffer | null>>()
+
+let muted = false
+let musicVolume = 0.24
+try {
+  muted = localStorage.getItem('edu-sfx-mute') === '1'
+  const savedVol = parseFloat(localStorage.getItem('edu-music-vol') || '')
+  if (!Number.isNaN(savedVol)) musicVolume = Math.max(0.05, Math.min(0.8, savedVol))
+} catch {}
+
+function emitAudioState() {
+  try { window.dispatchEvent(new Event('audio-state-change')) } catch {}
+}
+
+function getCtx(): AudioContext | null {
   try {
     if (!ctx) {
       const C = (window as any).AudioContext || (window as any).webkitAudioContext
       if (!C) return null
       ctx = new C()
-      master = ctx!.createGain()
-      master.gain.value = 0.82
-
-      // Мягкий студийный лимитер-компрессор
-      const comp = ctx!.createDynamicsCompressor()
-      comp.threshold.value = -16
-      comp.knee.value = 12
-      comp.ratio.value = 4
-      comp.attack.value = 0.004
-      comp.release.value = 0.18
-
-      // Сухая шина + тёплая пространственная комната (stereo feedback delay + lowpass)
-      dryBus = ctx!.createGain()
-      dryBus.gain.value = 0.9
-
-      wetBus = ctx!.createGain()
-      wetBus.gain.value = 0.16
-      const delayL = ctx!.createDelay(0.5)
-      delayL.delayTime.value = 0.055
-      const delayR = ctx!.createDelay(0.5)
-      delayR.delayTime.value = 0.092
-      const fb = ctx!.createGain()
-      fb.gain.value = 0.24
-      const damp = ctx!.createBiquadFilter()
-      damp.type = 'lowpass'
-      damp.frequency.value = 2400
-
-      wetBus.connect(delayL)
-      delayL.connect(delayR)
-      delayR.connect(damp)
-      damp.connect(fb)
-      fb.connect(delayL)
-      damp.connect(master)
-
-      dryBus.connect(master)
-      master.connect(comp)
-      comp.connect(ctx!.destination)
+      masterGain = ctx!.createGain()
+      masterGain.gain.value = 0.85
+      masterGain.connect(ctx!.destination)
     }
     if (ctx!.state === 'suspended') ctx!.resume().catch(() => {})
     return ctx
-  } catch { return null }
+  } catch {
+    return null
+  }
 }
 
-try {
-  if (typeof window !== 'undefined') {
-    const once = () => { ac(); window.removeEventListener('pointerdown', once) }
-    window.addEventListener('pointerdown', once, { once: true })
+async function loadSample(key: SampleKey, c: AudioContext): Promise<AudioBuffer | null> {
+  const cached = bufferCache.get(key)
+  if (cached) return cached
+  const inflight = pendingLoads.get(key)
+  if (inflight) return inflight
+
+  const p = fetch(`/audio/sfx/${key}.mp3`)
+    .then(r => {
+      if (!r.ok) throw new Error('audio fetch failed')
+      return r.arrayBuffer()
+    })
+    .then(buf => c.decodeAudioData(buf))
+    .then(decoded => {
+      bufferCache.set(key, decoded)
+      pendingLoads.delete(key)
+      return decoded
+    })
+    .catch(() => {
+      pendingLoads.delete(key)
+      return null
+    })
+
+  pendingLoads.set(key, p)
+  return p
+}
+
+function playFallbackTone(c: AudioContext, sample: SampleKey, vol: number) {
+  if (!masterGain) return
+  const t0 = c.currentTime
+  const osc = c.createOscillator()
+  const g = c.createGain()
+  const freq = sample === 'error' || sample === 'lose' ? 280 : sample === 'win' || sample === 'bonus' ? 784 : 587
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(freq, t0)
+  g.gain.setValueAtTime(0.0001, t0)
+  g.gain.linearRampToValueAtTime(Math.max(0.01, vol * 0.22), t0 + 0.01)
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16)
+  osc.connect(g)
+  g.connect(masterGain)
+  osc.start(t0)
+  osc.stop(t0 + 0.18)
+}
+
+function triggerBuffer(c: AudioContext, buf: AudioBuffer, vol: number, rate: number) {
+  if (!masterGain) return
+  const src = c.createBufferSource()
+  src.buffer = buf
+  src.playbackRate.value = Math.max(0.65, Math.min(1.6, rate))
+  const g = c.createGain()
+  g.gain.value = Math.max(0.02, Math.min(1.2, vol))
+  src.connect(g)
+  g.connect(masterGain)
+  src.start()
+}
+
+export function sfx(name: Sfx, volume = 1, pitchMul = 1) {
+  if (muted) return
+  const c = getCtx()
+  if (!c) return
+  const spec = SFX_MAP[name] || { sample: 'click' as SampleKey }
+  const vol = Math.max(0.05, Math.min(1.2, volume * (spec.gain ?? 0.85)))
+  const rate = (spec.rate ?? 1) * pitchMul
+
+  const cached = bufferCache.get(spec.sample)
+  if (cached) {
+    triggerBuffer(c, cached, vol, rate)
+    return
   }
-} catch {}
+
+  // Первый вызов подгружает лёгкий MP3 (3-15 КБ) и сразу проигрывает его
+  loadSample(spec.sample, c).then(buf => {
+    if (muted) return
+    if (buf) triggerBuffer(c, buf, vol, rate)
+    else playFallbackTone(c, spec.sample, vol)
+  })
+}
 
 export function sfxVolume(v: number) {
   muted = v <= 0
   try { localStorage.setItem('edu-sfx-mute', muted ? '1' : '0') } catch {}
+  if (muted) stopBgMusic()
+  emitAudioState()
 }
 
 export const isSfxMuted = () => muted
@@ -88,338 +221,98 @@ export const setSfxMuted = (m: boolean) => {
   muted = m
   try { localStorage.setItem('edu-sfx-mute', m ? '1' : '0') } catch {}
   if (m) stopBgMusic()
-}
-
-interface ToneSpec {
-  f0: number
-  f1?: number
-  t?: number
-  d: number
-  v?: number
-  type?: OscillatorType
-  lp0?: number       // начальная частота среза фильтра
-  lp1?: number       // конечная частота среза фильтра
-  attack?: number    // время атаки (с)
-  overtone?: number  // относительная громкость 2-й гармоники (маримба/колокольчик)
-  reverb?: boolean   // посылать ли в пространственную шину
-}
-
-/** Тёплый студийный тон с динамическим фильтром и мягким обертоном. */
-function playTone(c: AudioContext, s: ToneSpec, vol: number) {
-  const t0 = c.currentTime + (s.t || 0)
-  const dur = Math.max(0.025, s.d)
-  const v = Math.max(0.001, (s.v ?? 0.35) * vol)
-  const atk = s.attack ?? Math.min(0.012, dur * 0.18)
-
-  const o = c.createOscillator()
-  // Заменяем резкие square/sawtooth на благородные triangle/sine с фильтрацией
-  const rawType = s.type || 'triangle'
-  o.type = rawType === 'square' ? 'triangle' : rawType
-
-  o.frequency.setValueAtTime(Math.max(24, s.f0), t0)
-  if (s.f1 && s.f1 !== s.f0) {
-    o.frequency.exponentialRampToValueAtTime(Math.max(24, s.f1), t0 + dur)
-  }
-
-  const flt = c.createBiquadFilter()
-  flt.type = 'lowpass'
-  const lpStart = s.lp0 ?? Math.min(7500, s.f0 * 4.2)
-  const lpEnd = s.lp1 ?? Math.min(3200, s.f0 * 1.9)
-  flt.frequency.setValueAtTime(Math.max(120, lpStart), t0)
-  flt.frequency.exponentialRampToValueAtTime(Math.max(100, lpEnd), t0 + dur)
-  flt.Q.value = 0.85
-
-  const g = c.createGain()
-  g.gain.setValueAtTime(0.0001, t0)
-  g.gain.linearRampToValueAtTime(v, t0 + atk)
-  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur)
-
-  o.connect(flt)
-  flt.connect(g)
-  g.connect(dryBus!)
-  if (s.reverb !== false && wetBus) g.connect(wetBus)
-
-  o.start(t0)
-  o.stop(t0 + dur + 0.04)
-
-  // Мягкий обертон (октава/квинта) для живого тембра маримбы или колокольчика
-  const ov = s.overtone ?? 0.14
-  if (ov > 0.01 && s.f0 < 2200) {
-    const o2 = c.createOscillator()
-    const g2 = c.createGain()
-    o2.type = 'sine'
-    o2.frequency.setValueAtTime(s.f0 * 2, t0)
-    if (s.f1 && s.f1 !== s.f0) {
-      o2.frequency.exponentialRampToValueAtTime(Math.max(40, s.f1 * 2), t0 + dur * 0.65)
-    }
-    g2.gain.setValueAtTime(0.0001, t0)
-    g2.gain.linearRampToValueAtTime(v * ov, t0 + atk * 0.8)
-    g2.gain.exponentialRampToValueAtTime(0.0001, t0 + dur * 0.55)
-    o2.connect(flt)
-    o2.start(t0)
-    o2.stop(t0 + dur * 0.6 + 0.03)
-  }
-}
-
-let noiseBuf: AudioBuffer | null = null
-function playAir(c: AudioContext, t: number, d: number, v: number, f0: number, f1: number, type: BiquadFilterType = 'bandpass', vol = 1) {
-  if (!noiseBuf) {
-    noiseBuf = c.createBuffer(1, Math.floor(c.sampleRate * 0.4), c.sampleRate)
-    const data = noiseBuf.getChannelData(0)
-    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.7
-  }
-  const t0 = c.currentTime + t
-  const src = c.createBufferSource()
-  src.buffer = noiseBuf
-  const fl = c.createBiquadFilter()
-  fl.type = type
-  fl.frequency.setValueAtTime(Math.max(60, f0), t0)
-  if (f1 !== f0) fl.frequency.exponentialRampToValueAtTime(Math.max(60, f1), t0 + d)
-  fl.Q.value = 1.4
-  const g = c.createGain()
-  g.gain.setValueAtTime(0.0001, t0)
-  g.gain.linearRampToValueAtTime(Math.max(0.001, v * vol * 0.35), t0 + Math.min(0.01, d * 0.25))
-  g.gain.exponentialRampToValueAtTime(0.0001, t0 + d)
-  src.connect(fl)
-  fl.connect(g)
-  g.connect(dryBus!)
-  src.start(t0)
-  src.stop(t0 + d + 0.03)
-}
-
-export function sfx(name: Sfx, volume = 1, pitchMul = 1) {
-  if (muted) return
-  const c = ac()
-  if (!c || !master) return
-  const vol = Math.max(0.05, Math.min(1.25, volume))
-  const p = (f: number) => Math.max(35, Math.min(5500, f * pitchMul))
-  const T = (s: ToneSpec) => playTone(c, s, vol)
-  const A = (t: number, d: number, v: number, f0: number, f1: number, tp: BiquadFilterType = 'bandpass') =>
-    playAir(c, t, d, v, f0, f1, tp, vol)
-
-  switch (name) {
-    // ── ПРОДУКТОВЫЕ ЗВУКИ ИНТЕРФЕЙСА (Duolingo / Apple iOS стиль) ──
-    case 'ui.click':
-    case 'fb.chip':
-    case 'cm.tap':
-    case 'ws.select': {
-      // Мягкий тактильный wooden-tap
-      T({ f0: p(680), f1: p(340), d: 0.042, v: 0.22, type: 'sine', overtone: 0.08, reverb: false })
-      A(0, 0.02, 0.08, 2400, 1200)
-      break
-    }
-
-    case 'ui.notify':
-    case 'lq.join': {
-      // Кристальный двухнотный колокольчик (C6 -> G6)
-      T({ f0: p(1046.5), d: 0.16, v: 0.22, type: 'sine', overtone: 0.22 })
-      T({ f0: p(1567.98), t: 0.075, d: 0.28, v: 0.24, type: 'sine', overtone: 0.18 })
-      break
-    }
-
-    case 'ui.success':
-    case 'cm.right':
-    case 'hm.hit':
-    case 'fb.pick':
-    case 'mem.match':
-    case 'pairs.match': {
-      // Фирменный сочный мажорный аккорд успеха (C5 -> E5 -> G5 -> C6)
-      T({ f0: p(523.25), t: 0, d: 0.22, v: 0.26, type: 'triangle', overtone: 0.2 })
-      T({ f0: p(659.25), t: 0.055, d: 0.24, v: 0.28, type: 'triangle', overtone: 0.2 })
-      T({ f0: p(783.99), t: 0.11, d: 0.3, v: 0.3, type: 'triangle', overtone: 0.22 })
-      T({ f0: p(1046.5), t: 0.165, d: 0.42, v: 0.32, type: 'sine', overtone: 0.15 })
-      break
-    }
-
-    case 'ui.error':
-    case 'cm.wrong':
-    case 'ws.wrong':
-    case 'hm.miss':
-    case 'mem.miss':
-    case 'sprint.miss': {
-      // Мягкий бархатный деревянный «тук-тук» вниз (без режущего писка!)
-      T({ f0: p(311.13), f1: p(277.18), t: 0, d: 0.14, v: 0.3, type: 'triangle', lp0: 950, lp1: 420, overtone: 0.05 })
-      T({ f0: p(233.08), f1: p(196.0), t: 0.11, d: 0.24, v: 0.32, type: 'triangle', lp0: 820, lp1: 320, overtone: 0.04 })
-      break
-    }
-
-    case 'ui.win':
-    case 'fb.level':
-    case 'ws.win':
-    case 'mem.win':
-    case 'hm.win':
-    case 'pairs.win':
-    case 'sprint.fin':
-    case 'lq.podium': {
-      // Торжественная фанфара победы (C5 - E5 - G5 - B5 - C6 + тёплый бас)
-      const notes = [523.25, 659.25, 783.99, 987.77, 1046.5]
-      notes.forEach((f, i) => {
-        T({ f0: p(f), t: i * 0.085, d: 0.46, v: 0.28, type: 'triangle', overtone: 0.24 })
-      })
-      // Тёплый аккорд в финале
-      T({ f0: p(261.63), t: 0.34, d: 0.85, v: 0.22, type: 'triangle', lp0: 1200, lp1: 600 })
-      T({ f0: p(523.25), t: 0.34, d: 0.85, v: 0.2, type: 'sine' })
-      T({ f0: p(1567.98), t: 0.36, d: 0.75, v: 0.16, type: 'sine' })
-      break
-    }
-
-    case 'ui.lose':
-    case 'mem.lose':
-    case 'hm.lose':
-    case 'cm.over': {
-      // Мягкий кинематографичный минорный спад (A4 -> G4 -> F4 -> E4)
-      ;[440, 392, 349.23, 329.63].forEach((f, i) => {
-        T({ f0: p(f), t: i * 0.14, d: 0.34, v: 0.26, type: 'triangle', lp0: 1400, lp1: 500 })
-      })
-      break
-    }
-
-    // ── ИГРОВЫЕ СПЕЦ-ЭФФЕКТЫ ──
-    case 'ws.found':
-    case 'mem.bonus': {
-      ;[587.33, 739.99, 880, 1174.66].forEach((f, i) =>
-        T({ f0: p(f), t: i * 0.055, d: 0.3, v: 0.27, type: 'sine', overtone: 0.22 })
-      )
-      break
-    }
-
-    case 'ws.hint':
-    case 'hm.hint': {
-      // Волшебный перелив арфы
-      ;[659.25, 880, 1174.66, 1318.5].forEach((f, i) =>
-        T({ f0: p(f), t: i * 0.05, d: 0.28, v: 0.2, type: 'sine', overtone: 0.25 })
-      )
-      break
-    }
-
-    case 'ws.go':
-    case 'hm.go': {
-      ;[440, 554.37, 659.25, 880].forEach((f, i) =>
-        T({ f0: p(f), t: i * 0.065, d: 0.28, v: 0.26, type: 'triangle' })
-      )
-      break
-    }
-
-    case 'mem.flip':
-    case 'pairs.flip': {
-      A(0, 0.07, 0.16, 600, 1800)
-      T({ f0: p(420), f1: p(680), t: 0.01, d: 0.065, v: 0.18, type: 'sine', reverb: false })
-      break
-    }
-
-    case 'sprint.key': {
-      // Благородный звук механической клавиатуры (Topre / Holy Panda thock)
-      T({ f0: p(320), f1: p(140), d: 0.028, v: 0.18, type: 'sine', overtone: 0, reverb: false })
-      A(0, 0.018, 0.12, 2200, 1100)
-      break
-    }
-
-    case 'sprint.space': {
-      T({ f0: p(523.25), d: 0.09, v: 0.2, type: 'triangle' })
-      T({ f0: p(783.99), t: 0.035, d: 0.14, v: 0.22, type: 'sine' })
-      break
-    }
-
-    case 'clock':
-    case 'lq.tick': {
-      // Мягкий деревянный метроном Kahoot
-      T({ f0: p(880), f1: p(520), d: 0.045, v: 0.22, type: 'sine', overtone: 0.12, reverb: false })
-      break
-    }
-
-    case 'fb.plant': {
-      // Мягкий звук посадки / капли воды
-      T({ f0: p(360), f1: p(580), t: 0, d: 0.11, v: 0.26, type: 'sine' })
-      T({ f0: p(720), f1: p(980), t: 0.05, d: 0.12, v: 0.2, type: 'sine' })
-      break
-    }
-
-    case 'fb.big':
-    case 'mb.strike': {
-      // Энергетический удар в Математическом бою и комбо в Фермере!
-      A(0, 0.12, 0.25, 1800, 420)
-      T({ f0: p(220), f1: p(85), t: 0, d: 0.18, v: 0.38, type: 'triangle', lp0: 1200, lp1: 280 })
-      T({ f0: p(587.33), t: 0.02, d: 0.18, v: 0.26, type: 'triangle', overtone: 0.2 })
-      T({ f0: p(880), t: 0.07, d: 0.24, v: 0.28, type: 'sine', overtone: 0.22 })
-      break
-    }
-
-    case 'mb.crit': {
-      // Мощный КРИТ-УДАР (молния + аккорд!)
-      A(0, 0.16, 0.35, 3200, 350)
-      T({ f0: p(180), f1: p(65), t: 0, d: 0.24, v: 0.45, type: 'triangle', lp0: 1400, lp1: 240 })
-      ;[587.33, 880, 1174.66, 1760].forEach((f, i) =>
-        T({ f0: p(f), t: i * 0.035, d: 0.28, v: 0.28, type: 'triangle', overtone: 0.25 })
-      )
-      break
-    }
-
-    case 'mb.ko':
-    case 'lq.reveal': {
-      // Драматичный гонг / раскрытие ответа
-      T({ f0: p(196), f1: p(130.81), t: 0, d: 0.45, v: 0.36, type: 'triangle', lp0: 900, lp1: 300 })
-      ;[523.25, 659.25, 783.99, 1046.5].forEach((f, i) =>
-        T({ f0: p(f), t: 0.08 + i * 0.06, d: 0.45, v: 0.26, type: 'sine', overtone: 0.2 })
-      )
-      break
-    }
-
-    case 'fb.print': {
-      T({ f0: p(783.99), d: 0.09, v: 0.22, type: 'sine' })
-      T({ f0: p(1174.66), t: 0.05, d: 0.14, v: 0.2, type: 'sine' })
-      break
-    }
-  }
+  emitAudioState()
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   ФОНЫ ДЛЯ LIVE-КВИЗА (КАХУТ) И МАТЕМАТИЧЕСКОГО БОЯ (процедурный маримба-грув)
+   ФОНОВАЯ МУЗЫКА (студийные CC0-треки: Учёба / Викторина / Бой)
+   Один лёгкий HTMLAudioElement с плавным fade-in и нулевой нагрузкой на CPU.
    ═══════════════════════════════════════════════════════════════════════ */
-let bgTimer: number | null = null
-let bgStep = 0
+let bgAudio: HTMLAudioElement | null = null
+let bgStyle: BgMusicStyle | null = null
+let fadeTimer: number | null = null
 
-export function startBgMusic(style: 'lobby' | 'battle' = 'lobby') {
-  stopBgMusic()
-  if (muted) return
-  const c = ac()
-  if (!c) return
-  bgStep = 0
-  // Тёплая пентатоника маримбы в духе Kahoot!
-  const lobbyNotes = [261.63, 329.63, 392.0, 440.0, 523.25, 440.0, 392.0, 329.63]
-  const battleNotes = [220.0, 261.63, 329.63, 392.0, 329.63, 293.66, 261.63, 196.0]
-  const notes = style === 'battle' ? battleNotes : lobbyNotes
-  const stepMs = style === 'battle' ? 210 : 260
-
-  bgTimer = window.setInterval(() => {
-    if (muted) { stopBgMusic(); return }
-    const cNow = ac()
-    if (!cNow || !dryBus) return
-    const freq = notes[bgStep % notes.length]
-    playTone(cNow, {
-      f0: freq,
-      d: 0.2,
-      v: bgStep % 4 === 0 ? 0.12 : 0.075,
-      type: 'sine',
-      overtone: 0.15,
-      lp0: 1400,
-      lp1: 600,
-    }, 1)
-    if (bgStep % 4 === 0) {
-      playTone(cNow, { f0: freq * 0.5, d: 0.24, v: 0.09, type: 'triangle', lp0: 500, lp1: 220, overtone: 0 }, 1)
-    }
-    bgStep++
-  }, stepMs)
-}
-
-export function stopBgMusic() {
-  if (bgTimer !== null) {
-    window.clearInterval(bgTimer)
-    bgTimer = null
+function clearFade() {
+  if (fadeTimer !== null) {
+    window.clearInterval(fadeTimer)
+    fadeTimer = null
   }
 }
 
+export function startBgMusic(style: BgMusicStyle = 'lobby') {
+  if (muted) return
+  if (bgAudio && bgStyle === style && !bgAudio.paused) return
+
+  stopBgMusic(false)
+  try {
+    const audio = new Audio(MUSIC_URLS[style])
+    audio.loop = true
+    audio.preload = 'auto'
+    audio.volume = 0.01
+    bgAudio = audio
+    bgStyle = style
+
+    audio.play().then(() => {
+      if (bgAudio !== audio) return
+      clearFade()
+      const target = musicVolume
+      const step = Math.max(0.01, target / 12)
+      fadeTimer = window.setInterval(() => {
+        if (!bgAudio || bgAudio !== audio) { clearFade(); return }
+        if (audio.volume + step >= target) {
+          audio.volume = target
+          clearFade()
+        } else {
+          audio.volume = Math.min(target, audio.volume + step)
+        }
+      }, 40)
+    }).catch(() => {
+      if (bgAudio === audio) {
+        bgAudio = null
+        bgStyle = null
+        emitAudioState()
+      }
+    })
+    emitAudioState()
+  } catch {
+    bgAudio = null
+    bgStyle = null
+  }
+}
+
+export function stopBgMusic(notify = true) {
+  clearFade()
+  if (bgAudio) {
+    try {
+      bgAudio.pause()
+      bgAudio.currentTime = 0
+      bgAudio.src = ''
+    } catch {}
+    bgAudio = null
+  }
+  bgStyle = null
+  if (notify) emitAudioState()
+}
+
 export function isBgMusicPlaying() {
-  return bgTimer !== null
+  return bgAudio !== null && bgStyle !== null && !bgAudio.paused
+}
+
+export function getBgMusicStyle(): BgMusicStyle | null {
+  return isBgMusicPlaying() ? bgStyle : null
+}
+
+export function getBgMusicVolume() {
+  return musicVolume
+}
+
+export function setBgMusicVolume(v: number) {
+  musicVolume = Math.max(0.05, Math.min(0.8, v))
+  try { localStorage.setItem('edu-music-vol', String(musicVolume)) } catch {}
+  if (bgAudio && !bgAudio.paused) {
+    bgAudio.volume = musicVolume
+  }
+  emitAudioState()
 }
 
 export type { Sfx as SfxName }

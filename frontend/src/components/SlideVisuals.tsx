@@ -1034,35 +1034,49 @@ export function ChartDataModal({
 const escHtml = (s: string) =>
   String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[c])
 
+const safeColor = (v: any, fb: string) => {
+  const s = String(v || '').trim()
+  if (/^(?:#[0-9a-fA-F]{3,8}|rgba?\([0-9.,\s%]+\)|transparent|none)$/.test(s)) return s
+  return fb
+}
+const safeNumVal = (v: any, fb: number) => {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : fb
+}
+const safeSvgPath = (v: any) => String(v || '').replace(/[^0-9eE.,+\-\sMmLlHhVvCcSsQqTtAaZz]/g, '').slice(0, 8000)
+const safeId = (v: any) => String(v || 'x').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32) || 'x'
+const safeAlignVal = (v: any, fb = 'left') => (['left', 'center', 'right', 'justify'].includes(String(v)) ? String(v) : fb)
+
 export function renderShapeHtml(block: any, posStyle: string): string {
   const st = block.style || {}
   const def = getShapeDef(block.shape || st.preset || 'rect')
   const rawFill = st.fill === 'transparent' || st.fill === 'none' ? 'none' : (st.fill || '#3b82f6')
   const grad = typeof rawFill === 'string' && rawFill.startsWith('linear-gradient') ? parseCssGradient(rawFill) : null
-  const gid = `pdf-g-${block.id}`
+  const gid = `pdf-g-${safeId(block.id)}`
   const gradDef = grad
-    ? `<defs><linearGradient id="${gid}" x1="${grad.x1}" y1="${grad.y1}" x2="${grad.x2}" y2="${grad.y2}">${grad.stops.map(s => `<stop offset="${s.offset}%" stop-color="${s.color}" stop-opacity="${s.opacity}"/>`).join('')}</linearGradient></defs>`
+    ? `<defs><linearGradient id="${gid}" x1="${safeNumVal(grad.x1, 0)}" y1="${safeNumVal(grad.y1, 0)}" x2="${safeNumVal(grad.x2, 1)}" y2="${safeNumVal(grad.y2, 1)}">${grad.stops.map(s => `<stop offset="${safeNumVal(s.offset, 0)}%" stop-color="${safeColor(s.color, '#3b82f6')}" stop-opacity="${safeNumVal(s.opacity, 1)}"/>`).join('')}</linearGradient></defs>`
     : ''
-  const fillVal = grad ? `url(#${gid})` : rawFill
-  const strokeVal = st.stroke === 'transparent' || st.stroke === 'none' ? 'none' : (st.stroke ?? '#1d4ed8')
-  const sw = st.strokeWidth ?? (def.isLine ? 3 : 2)
+  const fillVal = grad ? `url(#${gid})` : safeColor(rawFill, '#3b82f6')
+  const strokeVal = st.stroke === 'transparent' || st.stroke === 'none' ? 'none' : safeColor(st.stroke, '#1d4ed8')
+  const sw = Math.max(0, Math.min(30, safeNumVal(st.strokeWidth, def.isLine ? 3 : 2)))
   const svg = st.svgPath
-    ? `<svg viewBox="0 0 ${st.svgW || 10000} ${st.svgH || 10000}" preserveAspectRatio="none" style="width:100%;height:100%;display:block">${gradDef}<path d="${st.svgPath}" fill="${fillVal}" stroke="${strokeVal}" stroke-width="${sw}" vector-effect="non-scaling-stroke"/></svg>`
+    ? `<svg viewBox="0 0 ${Math.max(1, safeNumVal(st.svgW, 10000))} ${Math.max(1, safeNumVal(st.svgH, 10000))}" preserveAspectRatio="none" style="width:100%;height:100%;display:block">${gradDef}<path d="${safeSvgPath(st.svgPath)}" fill="${fillVal}" stroke="${strokeVal}" stroke-width="${sw}" vector-effect="non-scaling-stroke"/></svg>`
     : def.toHtmlSvg(fillVal, strokeVal, sw, st.dash, gradDef)
   const txt = block.content
-    ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:8px;color:${st.textColor || '#fff'};font-size:${st.textSize || 16}px;font-weight:${st.textBold !== false ? 700 : 400};text-align:${st.textAlign || 'center'};white-space:pre-wrap">${escHtml(block.content)}</div>`
+    ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:8px;color:${safeColor(st.textColor, '#ffffff')};font-size:${safeNumVal(st.textSize, 16)}px;font-weight:${st.textBold !== false ? 700 : 400};text-align:${safeAlignVal(st.textAlign, 'center')};white-space:pre-wrap">${escHtml(block.content)}</div>`
     : ''
-  return `<div style="${posStyle}opacity:${st.opacity ?? 1};transform:${st.rotation ? `rotate(${st.rotation}deg)` : 'none'}">${svg}${txt}</div>`
+  const rot = safeNumVal(st.rotation, 0)
+  return `<div style="${posStyle}opacity:${Math.max(0, Math.min(1, safeNumVal(st.opacity, 1)))};transform:${rot ? `rotate(${rot}deg)` : 'none'}">${svg}${txt}</div>`
 }
 
 export function renderTableHtml(block: any, posStyle: string): string {
   const tbl = block.table || {}
-  const rows = Math.max(1, tbl.rows || tbl.cells?.length || 3)
-  const cols = Math.max(1, tbl.cols || tbl.cells?.[0]?.length || 3)
+  const rows = Math.max(1, Math.min(50, Math.round(safeNumVal(tbl.rows, tbl.cells?.length || 3))))
+  const cols = Math.max(1, Math.min(30, Math.round(safeNumVal(tbl.cols, tbl.cells?.[0]?.length || 3))))
   const theme = getTableTheme(tbl.theme)
   const headerRow = tbl.headerRow !== false
   const striped = tbl.striped !== false
-  const fs = tbl.fontSize || 13
+  const fs = Math.max(8, Math.min(48, safeNumVal(tbl.fontSize, 13)))
   let body = ''
   for (let r = 0; r < rows; r++) {
     body += '<tr>'
@@ -1071,14 +1085,16 @@ export function renderTableHtml(block: any, posStyle: string): string {
       if (cell.merged) continue
       const isHdr = headerRow && r === 0
       const cs = cell.style || {}
-      const bg = cs.background || (isHdr ? theme.headerBg : (striped && r % 2 === 0 ? theme.zebraBg : theme.cellBg))
-      const col = cs.color || (isHdr ? theme.headerText : theme.text)
+      const bg = safeColor(cs.background, isHdr ? theme.headerBg : (striped && r % 2 === 0 ? theme.zebraBg : theme.cellBg))
+      const col = safeColor(cs.color, isHdr ? theme.headerText : theme.text)
       const bold = cs.bold !== undefined ? cs.bold : isHdr
-      body += `<td colspan="${cell.colspan || 1}" rowspan="${cell.rowspan || 1}" style="background:${bg};color:${col};border:1px solid ${theme.border};padding:5px 7px;font-weight:${bold ? 700 : 400};text-align:${cs.align || tbl.align || 'left'};font-size:${fs}px">${escHtml(cell.text || '')}</td>`
+      const csSpan = Math.max(1, Math.min(30, Math.round(safeNumVal(cell.colspan, 1))))
+      const rsSpan = Math.max(1, Math.min(50, Math.round(safeNumVal(cell.rowspan, 1))))
+      body += `<td colspan="${csSpan}" rowspan="${rsSpan}" style="background:${bg};color:${col};border:1px solid ${safeColor(theme.border, '#cbd5e1')};padding:5px 7px;font-weight:${bold ? 700 : 400};text-align:${safeAlignVal(cs.align || tbl.align, 'left')};font-size:${fs}px">${escHtml(cell.text || '')}</td>`
     }
     body += '</tr>'
   }
-  return `<div style="${posStyle}overflow:hidden;border-radius:8px;border:1.5px solid ${theme.border}"><table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed">${body}</table></div>`
+  return `<div style="${posStyle}overflow:hidden;border-radius:8px;border:1.5px solid ${safeColor(theme.border, '#cbd5e1')}"><table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed">${body}</table></div>`
 }
 
 export function renderChartHtml(block: any, posStyle: string): string {
@@ -1095,7 +1111,7 @@ export function renderChartHtml(block: any, posStyle: string): string {
       const p = arcSlicePath(cx, cy, rO, rI, ang, ang + d)
       ang += d
       const pct = Math.round((sv / total) * 100)
-      return { p, color: cfg.colors[i], label: cfg.labels[i], sv, pct }
+      return { p, color: safeColor(cfg.colors[i], '#2563eb'), label: cfg.labels[i], sv, pct }
     })
     svg = `<svg viewBox="0 0 440 240" style="width:100%;height:100%">${parts.map(x => `<path d="${x.p}" fill="${x.color}" stroke="#fff" stroke-width="2"/>`).join('')}<g transform="translate(254,24)">${parts.slice(0, 8).map((x, i) => `<g transform="translate(0,${i * 24})"><rect width="12" height="12" rx="3" fill="${x.color}"/><text x="18" y="10" font-size="11" fill="#1e293b">${escHtml(x.label)} — ${x.sv} (${x.pct}%)</text></g>`).join('')}</g></svg>`
   } else if (cfg.chartType === 'hbar') {
@@ -1105,7 +1121,7 @@ export function renderChartHtml(block: any, posStyle: string): string {
       const sv = Math.max(0, v)
       const bw = Math.max(3, (sv / maxVal) * pw)
       const y = padT + i * rh + (rh - bh) / 2
-      return `<text x="${padL - 8}" y="${y + bh / 2 + 4}" text-anchor="end" font-size="11" fill="#334155">${escHtml(cfg.labels[i])}</text><rect x="${padL}" y="${y}" width="${bw}" height="${bh}" rx="4" fill="${cfg.colors[i]}"/><text x="${padL + bw + 6}" y="${y + bh / 2 + 4}" font-size="11" font-weight="700" fill="#0f172a">${sv}</text>`
+      return `<text x="${padL - 8}" y="${y + bh / 2 + 4}" text-anchor="end" font-size="11" fill="#334155">${escHtml(cfg.labels[i])}</text><rect x="${padL}" y="${y}" width="${bw}" height="${bh}" rx="4" fill="${safeColor(cfg.colors[i], '#2563eb')}"/><text x="${padL + bw + 6}" y="${y + bh / 2 + 4}" font-size="11" font-weight="700" fill="#0f172a">${sv}</text>`
     }).join('')}</svg>`
   } else if (cfg.chartType === 'line' || cfg.chartType === 'area') {
     const W = 440, H = 240, padL = 42, padR = 20, padT = 22, padB = 34, pw = W - padL - padR, ph = H - padT - padB
@@ -1116,7 +1132,7 @@ export function renderChartHtml(block: any, posStyle: string): string {
       l: cfg.labels[i],
     }))
     const poly = pts.map(p => `${p.x},${p.y}`).join(' ')
-    const col = cfg.colors[0] || '#2563eb'
+    const col = safeColor(cfg.colors[0], '#2563eb')
     const area = cfg.chartType === 'area' && pts.length
       ? `<path d="M ${pts[0].x} ${padT + ph} L ${pts.map(p => `${p.x} ${p.y}`).join(' L ')} L ${pts[pts.length - 1].x} ${padT + ph} Z" fill="${col}" fill-opacity="0.22"/>`
       : ''
@@ -1129,9 +1145,10 @@ export function renderChartHtml(block: any, posStyle: string): string {
       const bh = Math.max(3, (sv / maxVal) * ph)
       const x = padL + i * sw + (sw - bw) / 2
       const y = padT + ph - bh
-      return `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="4" fill="${cfg.colors[i]}"/><text x="${x + bw / 2}" y="${y - 6}" text-anchor="middle" font-size="11" font-weight="700" fill="#0f172a">${sv}</text><text x="${x + bw / 2}" y="${H - 12}" text-anchor="middle" font-size="10.5" fill="#475569">${escHtml(cfg.labels[i])}</text>`
+      return `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="4" fill="${safeColor(cfg.colors[i], '#2563eb')}"/><text x="${x + bw / 2}" y="${y - 6}" text-anchor="middle" font-size="11" font-weight="700" fill="#0f172a">${sv}</text><text x="${x + bw / 2}" y="${H - 12}" text-anchor="middle" font-size="10.5" fill="#475569">${escHtml(cfg.labels[i])}</text>`
     }).join('')}</svg>`
   }
+  const safeBg = safeColor(cfg.bg, '#ffffff')
   const titleHtml = cfg.title ? `<div style="text-align:center;font-weight:700;font-size:14px;color:#1e293b;margin-bottom:4px">${escHtml(cfg.title)}</div>` : ''
-  return `<div style="${posStyle}background:${cfg.bg};border:${cfg.bg === 'transparent' ? 'none' : '1px solid #e2e8f0'};border-radius:10px;padding:8px;display:flex;flex-direction:column">${titleHtml}<div style="flex:1;min-height:0">${svg}</div></div>`
+  return `<div style="${posStyle}background:${safeBg};border:${safeBg === 'transparent' ? 'none' : '1px solid #e2e8f0'};border-radius:10px;padding:8px;display:flex;flex-direction:column">${titleHtml}<div style="flex:1;min-height:0">${svg}</div></div>`
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import client from '../api/client'
+import client, { clearLocalSession } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import { useLang } from '../context/LangContext'
 import { Eye, EyeOff } from 'lucide-react'
@@ -29,6 +29,8 @@ export default function Login(){
         setError('')
       } else {
         const r=await client.post('/auth/jwt/create/',{username:form.username,password:form.password})
+        // Очищаем кэш/данные предыдущего пользователя на общем школьном ПК перед входом
+        clearLocalSession()
         localStorage.setItem('access',r.data.access)
         localStorage.setItem('refresh',r.data.refresh)
         // для совместимости со старым кодом

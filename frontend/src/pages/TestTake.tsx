@@ -17,7 +17,8 @@ export default function TestTake(){
   const [qi,setQi]=useState(0)
   const [leftMap,setLeftMap]=useState<Record<string,number>>({})
   const [searchParams]=useSearchParams()
-  const fromPath=searchParams.get('from') && searchParams.get('from')!.startsWith('/') ? searchParams.get('from')! : null
+  const rawFrom=searchParams.get('from')||''
+  const fromPath=rawFrom.startsWith('/') && !rawFrom.startsWith('//') && !rawFrom.startsWith('/\\') ? rawFrom : null
   const {speech,autoRead,toggleAutoRead,speak}=useAccessibility()
   const [violations,setViolations]=useState(0)
   useEffect(()=>{

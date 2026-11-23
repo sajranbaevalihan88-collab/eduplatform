@@ -1,14 +1,16 @@
 from rest_framework import generics, permissions, status, throttling
 from rest_framework.response import Response
-from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.conf import settings
 from .serializers import RegisterSerializer, UserSerializer, MeUpdateSerializer
 from .permissions import IsAdmin
 from .models import ParentLink
 
 User = get_user_model()
+_USERNAME_VALIDATOR = UnicodeUsernameValidator()
 
 # --- Брут-защита по аккаунту: N неудачных входов в окно → блок 15 мин (независимо от IP) ---
 _LOGIN_MAX_FAILS = 10
@@ -41,47 +43,110 @@ def _clear_login_failures(username: str) -> None:
 
 _LOCKED_MSG = 'Слишком много неудачных попыток входа в этот аккаунт — подождите 15 минут'
 
+class _IPScopedThrottle(throttling.AnonRateThrottle):
+    """Троттлинг строго по IP, который НЕ отключается при наличии заголовка Authorization."""
+    def get_cache_key(self, request, view):
+        return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}
+
+
+class RegisterThrottle(_IPScopedThrottle):
+    scope = 'register'
+
+
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
+    authentication_classes = []
     permission_classes = [permissions.AllowAny]
-    throttle_classes = [throttling.AnonRateThrottle]
-    throttle_scope = 'register'
+    throttle_classes = [RegisterThrottle]
 
-class LoginThrottle(throttling.AnonRateThrottle):
+
+class LoginThrottle(_IPScopedThrottle):
     # rate НЕ задаём здесь — класс жёстко перебивал THROTTLE_RATES['login'];
     # лимит настраивается в settings (20/мин на IP: хватит классу за NAT, брут меньше)
     scope = 'login'
 
+
 # Тот же лимит на стандартный jwt/create — иначе там обходной путь для brute force
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.settings import api_settings as _jwt_settings
+from rest_framework_simplejwt.utils import datetime_from_epoch
+from .authentication import assert_token_not_revoked_by_password_change
+
+
 class ThrottledTokenObtainPairView(TokenObtainPairView):
+    authentication_classes = []
     throttle_classes = [LoginThrottle]
 
     def post(self, request, *args, **kwargs):
-        username = (request.data or {}).get('username') or ''
-        if _is_locked(username):
+        raw_u = (request.data or {}).get('username')
+        username = raw_u if isinstance(raw_u, str) else ''
+        if username and _is_locked(username):
             return Response({'detail': _LOCKED_MSG}, status=status.HTTP_429_TOO_MANY_REQUESTS)
         resp = super().post(request, *args, **kwargs)
         if resp.status_code == 200:
-            _clear_login_failures(username)
-        else:
+            if username:
+                _clear_login_failures(username)
+        elif username:
             _register_login_failure(username)
         return resp
+
+
+class PasswordStampTokenRefreshSerializer(TokenRefreshSerializer):
+    """Refresh-сериализатор с проверкой password_changed_at, is_active и записью ротированных токенов в OutstandingToken."""
+
+    def validate(self, attrs):
+        refresh = self.token_class(attrs['refresh'])
+        user_id = refresh.payload.get(_jwt_settings.USER_ID_CLAIM)
+        user = User.objects.filter(**{_jwt_settings.USER_ID_FIELD: user_id}).first() if user_id is not None else None
+        assert_token_not_revoked_by_password_change(user, refresh.payload)
+
+        data = super().validate(attrs)
+
+        # SimpleJWT 5.3.1 при ROTATE_REFRESH_TOKENS=True не заносит новый refresh в OutstandingToken,
+        # из-за чего change_password мог не заблэклистить ротированный токен в ту же секунду.
+        new_refresh_raw = data.get('refresh')
+        if new_refresh_raw and user is not None:
+            try:
+                from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+                new_rt = RefreshToken(new_refresh_raw)
+                OutstandingToken.objects.get_or_create(
+                    jti=new_rt['jti'],
+                    defaults={
+                        'user': user,
+                        'token': str(new_rt),
+                        'created_at': datetime_from_epoch(new_rt['iat']),
+                        'expires_at': datetime_from_epoch(new_rt['exp']),
+                    },
+                )
+            except Exception:
+                pass
+        return data
+
+
+class PasswordStampTokenRefreshView(TokenRefreshView):
+    authentication_classes = []
+    throttle_classes = [LoginThrottle]
+    serializer_class = PasswordStampTokenRefreshSerializer
+
 
 class PasswordChangeThrottle(throttling.UserRateThrottle):
     scope = 'password_change'
 
-class AnonRateThrottleBootstrap(throttling.AnonRateThrottle):
-    scope = 'anon'
+
+class AnonRateThrottleBootstrap(_IPScopedThrottle):
+    scope = 'login'
+
 
 @api_view(['POST'])
+@authentication_classes([])
 @permission_classes([permissions.AllowAny])
 @throttle_classes([LoginThrottle])
 def login_view(request):
     username = request.data.get('username')
     password = request.data.get('password')
-    if not username or not password:
+    if not isinstance(username, str) or not isinstance(password, str) or not username or not password:
         return Response({'error': 'Укажите username и password'}, status=status.HTTP_400_BAD_REQUEST)
     # простая защита от перебора: username длина
     if len(username) > 150 or len(password) > 128:
@@ -97,12 +162,14 @@ def login_view(request):
     return Response({'error': 'Неверные данные'}, status=status.HTTP_401_UNAUTHORIZED)
 
 def _validate_profile_image(uploaded, max_mb: int, label: str):
-    """Безопасная проверка загруженного изображения (аватар или баннер): размер + Pillow."""
-    import os, uuid
-    from PIL import Image
+    """Безопасная проверка и перекодировка фото профиля/баннера через Pillow:
+    удаляет EXIF/GPS-метаданные и обезвреживает полиглот-файлы."""
+    import io, uuid
+    from django.core.files.base import ContentFile
+    from PIL import Image, ImageOps
     if uploaded.size > max_mb * 1024 * 1024:
         return None, f'{label}: файл слишком большой (максимум {max_mb} МБ)'
-    allowed_formats = {'JPEG': '.jpg', 'PNG': '.png', 'WEBP': '.webp', 'GIF': '.gif'}
+    allowed_formats = {'JPEG': ('.jpg', 'JPEG'), 'PNG': ('.png', 'PNG'), 'WEBP': ('.webp', 'WEBP'), 'GIF': ('.gif', 'GIF')}
     try:
         uploaded.seek(0)
         with Image.open(uploaded) as img:
@@ -110,9 +177,40 @@ def _validate_profile_image(uploaded, max_mb: int, label: str):
             img.verify()
         if fmt not in allowed_formats:
             return None, f'{label}: поддерживаются только JPG, PNG, WEBP и GIF'
+        ext, save_fmt = allowed_formats[fmt]
         uploaded.seek(0)
-        uploaded.name = f'{uuid.uuid4().hex}{allowed_formats[fmt]}'
-        return uploaded, None
+        with Image.open(uploaded) as img:
+            if fmt != 'GIF':
+                img = ImageOps.exif_transpose(img)
+                img.thumbnail((1920, 1920), Image.Resampling.LANCZOS)
+                if save_fmt == 'JPEG' and img.mode not in ('RGB', 'L'):
+                    img = img.convert('RGB')
+                buf = io.BytesIO()
+                save_kwargs = {'quality': 88, 'optimize': True} if save_fmt in ('JPEG', 'WEBP') else {'optimize': True}
+                img.save(buf, format=save_fmt, **save_kwargs)
+                return ContentFile(buf.getvalue(), name=f'{uuid.uuid4().hex}{ext}'), None
+            # Перекодируем GIF через Pillow (снимает полиглот-хвосты и ограничивает кадры/размер)
+            from PIL import ImageSequence
+            frames = []
+            durations = []
+            for idx, frame in enumerate(ImageSequence.Iterator(img)):
+                if idx >= 60:
+                    break
+                fr = frame.convert('RGBA')
+                fr.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
+                frames.append(fr.convert('P', palette=Image.Palette.ADAPTIVE))
+                durations.append(int(frame.info.get('duration', 100) or 100))
+            if not frames:
+                return None, f'{label}: пустой GIF-файл'
+            buf = io.BytesIO()
+            if len(frames) > 1:
+                frames[0].save(
+                    buf, format='GIF', save_all=True, append_images=frames[1:],
+                    duration=durations, loop=0, optimize=True,
+                )
+            else:
+                frames[0].save(buf, format='GIF', optimize=True)
+            return ContentFile(buf.getvalue(), name=f'{uuid.uuid4().hex}{ext}'), None
     except Exception:
         return None, f'{label}: не удалось прочитать изображение — выберите корректный файл JPG/PNG/WEBP/GIF'
 
@@ -230,22 +328,34 @@ def change_password_view(request):
 @api_view(['POST'])
 @permission_classes([IsAdmin])
 def create_assistant_view(request):
-    """Админ создаёт аккаунты: role='teacher' (спец-акк учителя) или 'assistant' (помощник с правами админа).
+    """Админ создаёт аккаунты: role='teacher' (учитель) или 'assistant' (админ — только суперпользователь).
     Заходят по логину и паролю на обычной странице входа — отдельного входа нет."""
     from django.contrib.auth.password_validation import validate_password
     from django.core.exceptions import ValidationError as _VE
-    username = (request.data.get('username') or '').strip()
-    password = request.data.get('password') or ''
-    first_name = (request.data.get('first_name') or '').strip()
-    kind = (request.data.get('role') or 'teacher').strip()
+    raw_u = request.data.get('username')
+    raw_p = request.data.get('password')
+    raw_fn = request.data.get('first_name') or ''
+    raw_kind = request.data.get('role') or 'teacher'
+    if not isinstance(raw_u, str) or not isinstance(raw_p, str) or not isinstance(raw_fn, str) or not isinstance(raw_kind, str):
+        return Response({'error': 'Некорректные данные'}, status=status.HTTP_400_BAD_REQUEST)
+    username = raw_u.strip()
+    password = raw_p
+    first_name = raw_fn.strip()[:150]
+    kind = raw_kind.strip()
     if kind not in ('teacher', 'assistant'):
         return Response({'error': 'role должен быть teacher или assistant'}, status=status.HTTP_400_BAD_REQUEST)
-    if len(username) < 3:
-        return Response({'error': 'Ник минимум 3 символа'}, status=status.HTTP_400_BAD_REQUEST)
+    if kind == 'assistant' and not request.user.is_superuser:
+        return Response({'error': 'Создавать помощников с правами админа может только суперпользователь'}, status=status.HTTP_403_FORBIDDEN)
+    if len(username) < 3 or len(username) > 150:
+        return Response({'error': 'Ник от 3 до 150 символов'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        _USERNAME_VALIDATOR(username)
+    except _VE as e:
+        return Response({'error': ' '.join(getattr(e, 'messages', [str(e)]))}, status=status.HTTP_400_BAD_REQUEST)
     if User.objects.filter(username__iexact=username).exists():
         return Response({'error': 'Этот ник уже занят — придумай другой'}, status=status.HTTP_400_BAD_REQUEST)
     try:
-        validate_password(password)
+        validate_password(password, user=User(username=username, first_name=first_name))
     except _VE as e:
         return Response({'error': ' '.join(getattr(e, 'messages', [str(e)]))}, status=status.HTTP_400_BAD_REQUEST)
     role = 'admin' if kind == 'assistant' else 'teacher'
@@ -253,38 +363,56 @@ def create_assistant_view(request):
     return Response({'status': 'ok', 'user': UserSerializer(u).data}, status=status.HTTP_201_CREATED)
 
 @api_view(['POST'])
+@authentication_classes([])
 @permission_classes([permissions.AllowAny])
 @throttle_classes([AnonRateThrottleBootstrap])
 def bootstrap_admin_view(request):
-    """Одноразовый bootstrap для прод-базы (где ещё нет ни одного админа).
-    Активен ТОЛЬКО если в env задан BOOTSTRAP_ADMIN_KEY — без ключа отвечает 403.
-    {key, username, password?}:
-      username существует → повышает до admin+staff+superuser (пароль не трогаем, если не передан)
-      username нет        → создаёт суперпользователя с переданным паролем (мин 8)
-      username пуст       → {users:[...]} — список ников и ролей (чтобы найти свой аккаунт)"""
+    """Строго одноразовый bootstrap для чистой прод-базы (где ещё нет ни одного суперпользователя).
+    Активен ТОЛЬКО если в env задан BOOTSTRAP_ADMIN_KEY (>=24 символов) И суперпользователей нет."""
     from rest_framework import status as _st
-    expected = getattr(settings, 'BOOTSTRAP_ADMIN_KEY', '')
-    key = request.data.get('key') or ''
-    if not expected or not key or key != expected:
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as _VE
+    import hmac
+    expected = str(getattr(settings, 'BOOTSTRAP_ADMIN_KEY', '') or '')
+    key = request.data.get('key')
+    if len(expected) < 24 or not isinstance(key, str) or not key or not hmac.compare_digest(key, expected):
         return Response({'error': 'bootstrap disabled'}, status=_st.HTTP_403_FORBIDDEN)
-    username = (request.data.get('username') or '').strip()
-    password = request.data.get('password') or ''
-    if not username:
-        return Response({'users': [{'username': u.username, 'role': u.role, 'staff': u.is_staff} for u in User.objects.all().order_by('id')]})
-    if len(username) < 3:
-        return Response({'error': 'username минимум 3 символа'}, status=_st.HTTP_400_BAD_REQUEST)
+    if User.objects.filter(is_superuser=True).exists():
+        return Response({'error': 'bootstrap disabled'}, status=_st.HTTP_403_FORBIDDEN)
+    raw_u = request.data.get('username')
+    raw_p = request.data.get('password') or ''
+    if not isinstance(raw_u, str) or not isinstance(raw_p, str):
+        return Response({'error': 'Некорректные данные'}, status=_st.HTTP_400_BAD_REQUEST)
+    username = raw_u.strip()
+    password = raw_p
+    if len(username) < 3 or len(username) > 150:
+        return Response({'error': 'username от 3 до 150 символов'}, status=_st.HTTP_400_BAD_REQUEST)
+    try:
+        _USERNAME_VALIDATOR(username)
+    except _VE as e:
+        return Response({'error': ' '.join(getattr(e, 'messages', [str(e)]))}, status=_st.HTTP_400_BAD_REQUEST)
     u = User.objects.filter(username__iexact=username).first()
     if u:
         u.role = 'admin'
         u.is_staff = True
         u.is_superuser = True
         if password:
-            u.set_password(password)
+            try:
+                validate_password(password, user=u)
+            except _VE as e:
+                return Response({'error': ' '.join(getattr(e, 'messages', [str(e)]))}, status=_st.HTTP_400_BAD_REQUEST)
+            u.set_password_with_stamp(password)
         u.save()
+        if password:
+            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+            for t in OutstandingToken.objects.filter(user=u):
+                BlacklistedToken.objects.get_or_create(token=t)
         action = 'promoted'
     else:
-        if len(password) < 8:
-            return Response({'error': 'Пароль минимум 8 символов (создаётся новый аккаунт)'}, status=_st.HTTP_400_BAD_REQUEST)
+        try:
+            validate_password(password, user=User(username=username))
+        except _VE as e:
+            return Response({'error': ' '.join(getattr(e, 'messages', [str(e)]))}, status=_st.HTTP_400_BAD_REQUEST)
         u = User.objects.create_superuser(username=username, email='', password=password, role='admin')
         action = 'created'
     return Response({'status': 'ok', 'action': action, 'user': UserSerializer(u).data})
@@ -398,15 +526,24 @@ def parents_create_view(request):
     """Админ создаёт родительский аккаунт: роль жёстко 'parent', ники уникальны."""
     from django.contrib.auth.password_validation import validate_password
     from django.core.exceptions import ValidationError as _VE
-    username = (request.data.get('username') or '').strip()
-    password = request.data.get('password') or ''
-    first_name = (request.data.get('first_name') or '').strip()
-    if len(username) < 3:
-        return Response({'error': 'Ник минимум 3 символа'}, status=status.HTTP_400_BAD_REQUEST)
+    raw_u = request.data.get('username')
+    raw_p = request.data.get('password')
+    raw_fn = request.data.get('first_name') or ''
+    if not isinstance(raw_u, str) or not isinstance(raw_p, str) or not isinstance(raw_fn, str):
+        return Response({'error': 'Некорректные данные'}, status=status.HTTP_400_BAD_REQUEST)
+    username = raw_u.strip()
+    password = raw_p
+    first_name = raw_fn.strip()[:150]
+    if len(username) < 3 or len(username) > 150:
+        return Response({'error': 'Ник от 3 до 150 символов'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        _USERNAME_VALIDATOR(username)
+    except _VE as e:
+        return Response({'error': ' '.join(getattr(e, 'messages', [str(e)]))}, status=status.HTTP_400_BAD_REQUEST)
     if User.objects.filter(username__iexact=username).exists():
         return Response({'error': 'Этот ник уже занят — придумай другой'}, status=status.HTTP_400_BAD_REQUEST)
     try:
-        validate_password(password)
+        validate_password(password, user=User(username=username, first_name=first_name))
     except _VE as e:
         return Response({'error': ' '.join(getattr(e, 'messages', [str(e)]))}, status=status.HTTP_400_BAD_REQUEST)
     u = User.objects.create_user(username=username, password=password, role='parent', first_name=first_name)
@@ -450,7 +587,4 @@ def list_users(request):
     data = [{'id': u.id, 'username': u.username, 'role': u.role,
              'is_staff': u.is_staff, 'is_superuser': u.is_superuser,
              'date_joined': u.date_joined} for u in users]
-    return Response(data)
-    # скрываем email для списка
-    data = [{'id': u.id, 'username': u.username, 'role': u.role} for u in users]
     return Response(data)

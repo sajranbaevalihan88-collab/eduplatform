@@ -1,14 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import client, { mediaUrl } from '../api/client'
-import { Eye, Edit, Play, ChevronLeft, ChevronRight, Maximize2, Copy, Trash2 } from 'lucide-react'
+import { Eye, Edit, Play, ChevronLeft, ChevronRight, Maximize2, Copy, Trash2, Download } from 'lucide-react'
 import { SlideShape, SlideTable, SlideChart } from '../components/SlideVisuals'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
 
 const resolveSrc = (src?:string)=> src?.startsWith('/media') ? mediaUrl(src) : (src||'')
 
-// YouTube/VK/Rutube → embed-URL (тот же хелпер, что в редакторе)
+// YouTube/VK/Rutube → embed-URL (строгий белый список, иначе пустая строка)
 const videoEmbedUrl=(src:string)=>{
   const s=(src||'').trim()
   let m=s.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{6,})/)
@@ -17,7 +17,7 @@ const videoEmbedUrl=(src:string)=>{
   if(m) return `https://vk.com/video_ext.php?oid=${m[1]}&id=${m[2]}`
   m=s.match(/rutube\.ru\/video\/([\w]+)/)
   if(m) return `https://rutube.ru/play/embed/${m[1]}`
-  return s
+  return ''
 }
 
 // Потерянный файл картинки: прячем битую иконку, показываем плейсхолдер (CSS .img-missing)
@@ -159,7 +159,8 @@ export default function PresentationView(){
   const nav=useNavigate()
   const [pres,setPres]=useState<any>(null)
   const [searchParams]=useSearchParams()
-  const fromPath=searchParams.get('from') && searchParams.get('from')!.startsWith('/') ? searchParams.get('from')! : null
+  const rawFrom=searchParams.get('from')||''
+  const fromPath=rawFrom.startsWith('/') && !rawFrom.startsWith('//') && !rawFrom.startsWith('/\\') ? rawFrom : null
   const startSlide=Math.max(0, Math.min(200, parseInt(searchParams.get('slide')||'0',10)||0))
   const [slides,setSlides]=useState<any[]>([])
   const [idx,setIdx]=useState(startSlide)
@@ -352,7 +353,7 @@ export default function PresentationView(){
           {b.type==='shape' && <div className="w-[300px] h-[140px] mx-auto"><SlideShape block={b} gid={`pv-leg-sh-${b.id}`}/></div>}
           {b.type==='table' && <div className="w-full max-w-[90%] mx-auto"><SlideTable block={b}/></div>}
           {b.type==='chart' && <div className="w-full max-w-[85%] h-[260px] mx-auto"><SlideChart block={b} gid={`pv-leg-ch-${b.id}`}/></div>}
-          {b.type==='video' && <div className="w-full max-w-[90%] mx-auto aspect-video rounded-lg overflow-hidden bg-black"><iframe src={videoEmbedUrl(b.content||'')} title="video" className="w-full h-full" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups"/></div>}
+          {b.type==='video' && (()=>{ const embed=videoEmbedUrl(b.content||''); return embed ? <div className="w-full max-w-[90%] mx-auto aspect-video rounded-lg overflow-hidden bg-black"><iframe src={embed} title="video" className="w-full h-full" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups"/></div> : <div className="w-full max-w-[90%] mx-auto p-4 rounded-lg bg-slate-100 text-slate-500 text-xs text-center">Поддерживаются ссылки YouTube, VK и Rutube</div> })()}
         </div>
       ))
     }
@@ -426,7 +427,7 @@ export default function PresentationView(){
               </div>
             )
           }
-          if(b.type==='video') return <div key={b.id} style={{...common, padding:0}} className={animClass}><iframe src={videoEmbedUrl(b.content||'')} title="video" className="w-full h-full rounded" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups"/></div>
+          if(b.type==='video'){ const embed=videoEmbedUrl(b.content||''); return <div key={b.id} style={{...common, padding:0}} className={animClass}>{embed ? <iframe src={embed} title="video" className="w-full h-full rounded" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups"/> : <div className="w-full h-full rounded bg-slate-100 text-slate-500 text-xs flex items-center justify-center p-2 text-center">Поддерживаются видео YouTube, VK и Rutube</div>}</div> }
           return <div key={b.id} style={common}>{b.content||''}</div>
         })}
       </div>
@@ -492,22 +493,47 @@ export default function PresentationView(){
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border p-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-800 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
           <div className="flex items-center gap-2">
-            <button onClick={()=>setIdx(i=>Math.max(0,i-1))} disabled={idx===0} aria-label={t('pv_back')} className="w-11 h-11 rounded-xl bg-slate-100 disabled:opacity-40 flex items-center justify-center"><ChevronLeft size={20}/></button>
-            <span className="px-3 py-2 min-h-[44px] rounded-xl bg-slate-50 border text-sm font-medium flex items-center">{idx+1} / {totalPages}</span>
-            <button onClick={()=>setIdx(i=>Math.min(totalPages-1,i+1))} disabled={idx===totalPages-1} aria-label={t('pv_next')} className="w-11 h-11 rounded-xl bg-slate-100 disabled:opacity-40 flex items-center justify-center"><ChevronRight size={20}/></button>
+            <button onClick={()=>setIdx(i=>Math.max(0,i-1))} disabled={idx===0} aria-label={t('pv_back')} className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-slate-200 disabled:opacity-40 flex items-center justify-center"><ChevronLeft size={20}/></button>
+            <span className="px-3 py-2 min-h-[44px] rounded-xl bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 dark:text-slate-200 text-sm font-medium flex items-center">{idx+1} / {totalPages}</span>
+            <button onClick={()=>setIdx(i=>Math.min(totalPages-1,i+1))} disabled={idx===totalPages-1} aria-label={t('pv_next')} className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-slate-200 disabled:opacity-40 flex items-center justify-center"><ChevronRight size={20}/></button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {hasPdf && (
-              <div className="flex rounded-xl border overflow-hidden text-sm">
-                <button onClick={()=>setModeOv('orig')} className={`px-3 py-2 min-h-[44px] flex items-center gap-1.5 ${mode==='orig'?'bg-slate-900 text-white':'bg-white text-slate-600'}`}>{t('pv_original')}</button>
-                <button onClick={()=>setModeOv('blocks')} className={`px-3 py-2 min-h-[44px] flex items-center gap-1.5 ${mode==='blocks'?'bg-slate-900 text-white':'bg-white text-slate-600'}`}>{t('pv_blocks')}</button>
+              <div className="flex rounded-xl border dark:border-slate-700 overflow-hidden text-sm">
+                <button onClick={()=>setModeOv('orig')} className={`px-3 py-2 min-h-[44px] flex items-center gap-1.5 ${mode==='orig'?'bg-slate-900 dark:bg-indigo-600 text-white':'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>{t('pv_original')}</button>
+                <button onClick={()=>setModeOv('blocks')} className={`px-3 py-2 min-h-[44px] flex items-center gap-1.5 ${mode==='blocks'?'bg-slate-900 dark:bg-indigo-600 text-white':'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>{t('pv_blocks')}</button>
               </div>
             )}
-            <button onClick={()=>setSlideshow(true)} className="px-3 py-2 min-h-[44px] rounded-xl bg-white border flex items-center gap-1.5 text-sm"><Maximize2 size={16}/> <span className="hidden sm:inline">{t('pv_fullscreen')}</span><span className="sm:hidden">{t('pv_slideshow')}</span></button>
-            {isOwner && <Link to={`/presentations/${id}/edit`} className="px-3 py-2 min-h-[44px] rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 text-sm flex items-center gap-1"><Edit size={16}/> {t('edit')}</Link>}
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const res = await client.get(`/presentations/${id}/export_pptx/`, { responseType: 'blob' })
+                  const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  const cleanName = (pres?.title || 'presentation').replace(/[\\/:*?"<>|]+/g, '_').trim() || 'presentation'
+                  a.download = `${cleanName}.pptx`
+                  document.body.appendChild(a)
+                  a.click()
+                  a.remove()
+                  setTimeout(() => URL.revokeObjectURL(url), 10000)
+                  toast(`Скачан файл «${cleanName}.pptx»`, 'success')
+                } catch {
+                  toast('Не удалось скачать .pptx', 'error')
+                }
+              }}
+              className="px-3 py-2 min-h-[44px] rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 text-sm font-medium flex items-center gap-1.5"
+              title="Скачать в формате PowerPoint (.pptx)"
+            >
+              <Download size={16}/> <span>.pptx</span>
+            </button>
+            <button onClick={()=>setSlideshow(true)} className="px-3 py-2 min-h-[44px] rounded-xl bg-white dark:bg-slate-800 border dark:border-slate-700 dark:text-slate-200 flex items-center gap-1.5 text-sm"><Maximize2 size={16}/> <span className="hidden sm:inline">{t('pv_fullscreen')}</span><span className="sm:hidden">{t('pv_slideshow')}</span></button>
+            {isOwner && <Link to={`/presentations/${id}/edit`} className="px-3 py-2 min-h-[44px] rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-sm flex items-center gap-1"><Edit size={16}/> {t('edit')}</Link>}
           </div>
         </div>
 

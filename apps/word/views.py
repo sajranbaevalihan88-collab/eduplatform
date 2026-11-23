@@ -125,8 +125,45 @@ class _Sanitizer(HTMLParser):
                 self.out.append('<div class="page-break">')
                 self.div_stack.append(True)
             elif 'word-meta' in cls and meta_val:
-                self.out.append(f'<div class="word-meta" data-word-meta="{escape(meta_val, quote=True)}" style="display: none">')
-                self.div_stack.append(True)
+                # Валидируем и пересобираем JSON-метаданные макета по строгому белому списку (защита от CSS-инъекций)
+                try:
+                    import json as _wjson
+                    raw_m = _wjson.loads(meta_val)
+                    if isinstance(raw_m, dict):
+                        safe_m = {}
+                        if raw_m.get('ps') in ('A3', 'A4', 'A5'):
+                            safe_m['ps'] = raw_m['ps']
+                        if raw_m.get('o') in ('portrait', 'landscape'):
+                            safe_m['o'] = raw_m['o']
+                        if raw_m.get('pb') in ('none', 'thin', 'double', 'frame'):
+                            safe_m['pb'] = raw_m['pb']
+                        pbc = str(raw_m.get('pbc') or '').strip()
+                        if re.fullmatch(r'#[0-9a-fA-F]{6}', pbc):
+                            safe_m['pbc'] = pbc
+                        for knum, lo, hi in (('mt', 5, 60), ('mb', 5, 60), ('ml', 5, 60), ('mr', 5, 60), ('c', 1, 3)):
+                            if knum in raw_m:
+                                try:
+                                    safe_m[knum] = max(lo, min(hi, int(raw_m[knum])))
+                                except (TypeError, ValueError):
+                                    pass
+                        for kflt, lo, hi in (('lh', 1.0, 3.0), ('ls', 1.0, 3.0)):
+                            if kflt in raw_m:
+                                try:
+                                    safe_m[kflt] = round(max(lo, min(hi, float(raw_m[kflt]))), 2)
+                                except (TypeError, ValueError):
+                                    pass
+                        for kstr in ('hd', 'ft', 'wm'):
+                            if isinstance(raw_m.get(kstr), str):
+                                safe_m[kstr] = re.sub(r'[<>"]', '', raw_m[kstr])[:120]
+                        if 'pn' in raw_m:
+                            safe_m['pn'] = bool(raw_m['pn'])
+                        clean_meta = _wjson.dumps(safe_m, ensure_ascii=False)
+                        self.out.append(f'<div class="word-meta" data-word-meta="{escape(clean_meta, quote=True)}" style="display: none">')
+                        self.div_stack.append(True)
+                    else:
+                        self.div_stack.append(False)
+                except Exception:
+                    self.div_stack.append(False)
             elif 'word-frame' in cls:
                 f_attr = f' data-frame="{frame_val}"' if frame_val else ''
                 css = f' style="{escape(style, quote=True)}"' if style else ''
@@ -574,11 +611,12 @@ def html_to_docx_bytes(body_html: str, page_size: str = 'A4') -> bytes:
     for section in doc.sections:
         section.page_width = Mm(width)
         section.page_height = Mm(height)
-    # разрывы страниц редактора -> настоящие разрывы Word
-    chunks = re.split(r'<div[^>]*class="[^"]*page-break[^"]*"[^>]*>.*?</div>',
-                      str(body_html or ''), flags=re.DOTALL | re.IGNORECASE)
+    # разрывы страниц редактора -> настоящие разрывы Word (линейный regex без ReDoS)
+    bounded_html = str(body_html or '')[:WORD_BODY_MAX_CHARS]
+    chunks = re.split(r'<div\b[^>]{0,200}class="[^"]{0,80}page-break[^"]{0,80}"[^>]{0,200}>[^<]{0,100}</div>',
+                      bounded_html, flags=re.IGNORECASE)
     first = True
-    for chunk in chunks:
+    for chunk in chunks[:100]:
         if not first:
             try:
                 doc.add_page_break()
@@ -594,21 +632,21 @@ def html_to_docx_bytes(body_html: str, page_size: str = 'A4') -> bytes:
 
 
 def _html_chunk_to_docx(doc, html: str) -> None:
-    # таблицы — отдельным проходом: режем html на куски table/не-table
-    parts = re.split(r'(<table.*?</table>)', str(html or ''), flags=re.DOTALL | re.IGNORECASE)
+    # таблицы — отдельным проходом с линейными паттернами (без катастрофического backtracking O(N^3))
+    parts = re.split(r'(<table\b[^>]*>[\s\S]*?</table>)', str(html or '')[:WORD_BODY_MAX_CHARS], flags=re.IGNORECASE)
     for part in parts:
         if not part.strip():
             continue
         if part.strip().lower().startswith('<table'):
             try:
-                rows = re.findall(r'<tr.*?>(.*?)</tr>', part, flags=re.DOTALL | re.IGNORECASE)
+                rows = re.findall(r'<tr\b[^>]*>([\s\S]*?)</tr>', part, flags=re.IGNORECASE)[:200]
                 grid = []
                 for r in rows:
-                    cells = re.findall(r'<t[dh].*?>(.*?)</t[dh]>', r, flags=re.DOTALL | re.IGNORECASE)
+                    cells = re.findall(r'<t[dh]\b[^>]*>([\s\S]*?)</t[dh]>', r, flags=re.IGNORECASE)[:30]
                     grid.append([unescape(re.sub(r'<[^>]+>', '', c)).strip()[:500] for c in cells])
                 grid = [r for r in grid if r]
                 if grid:
-                    cols = max(len(r) for r in grid)
+                    cols = min(30, max(len(r) for r in grid))
                     t = doc.add_table(rows=len(grid), cols=cols)
                     t.style = 'Table Grid'
                     for i, row in enumerate(grid):
@@ -714,9 +752,15 @@ class WordDocumentViewSet(viewsets.ModelViewSet):
                 tmp.write(chunk)
             tmp.close()
             try:
+                from apps.common.safety import validate_ooxml_zip
+                validate_ooxml_zip(tmp.name)
                 title, body_html, stats = docx_to_html(tmp.name)
-            except Exception as e:
-                return Response({'error': f'Не получилось прочитать .docx: {e}'}, status=400)
+            except ValueError as ve:
+                return Response({'error': str(ve)}, status=400)
+            except Exception:
+                import logging as _wlog
+                _wlog.getLogger(__name__).exception('import_docx failed')
+                return Response({'error': 'Не получилось прочитать .docx — проверьте корректность файла'}, status=400)
             if not body_html.strip():
                 return Response({'error': 'В файле нет текста'}, status=400)
             clean = sanitize_html(body_html)
@@ -741,8 +785,10 @@ class WordDocumentViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Пустой документ'}, status=400)
         try:
             data = html_to_docx_bytes(body_html, clean_page_size(request.data.get('page_size')))
-        except Exception as e:
-            return Response({'error': f'Не получилось собрать .docx: {e}'}, status=400)
+        except Exception:
+            import logging as _wlog2
+            _wlog2.getLogger(__name__).exception('export_docx failed')
+            return Response({'error': 'Не получилось собрать .docx'}, status=400)
         safe = re.sub(r'[^\w\s\-а-яА-ЯёЁ]+', '', title, flags=re.UNICODE).strip()[:80] or 'document'
         resp = FileResponse(io.BytesIO(data),
                             content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')

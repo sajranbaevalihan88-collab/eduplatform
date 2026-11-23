@@ -78,7 +78,8 @@ export default function TestBuilder(){
     }).catch(()=>{})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[])
-  const fromPath=searchParams.get('from') && searchParams.get('from')!.startsWith('/') ? searchParams.get('from')! : null
+  const rawFrom=searchParams.get('from')||''
+  const fromPath=rawFrom.startsWith('/') && !rawFrom.startsWith('//') && !rawFrom.startsWith('/\\') ? rawFrom : null
   useEffect(()=>{
     if(!isNew) client.get(`/tests/${id}/`).then(r=>{
       setTitle(r.data.title); setDesc(r.data.description); setPass(r.data.pass_score); setTimePerQ(r.data.time_per_question||0); if(r.data.subject!=null) setSubject(Number(r.data.subject))

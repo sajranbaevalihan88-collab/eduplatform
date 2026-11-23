@@ -55,6 +55,8 @@ export default defineConfig({
           if (!id.includes('node_modules')) return
           if (id.includes('monaco')) return 'vendor-monaco'
           if (id.includes('tldraw')) return 'vendor-tldraw'
+          if (id.includes('/three/') || id.includes('\\three\\')) return 'vendor-three'
+          if (id.includes('pdfjs-dist')) return 'vendor-pdf'
           if (id.includes('mammoth') || id.includes('jszip') || id.includes('/pako/') || id.includes('pptx') || id.includes('/xlsx/') || id.includes('file-saver')) return 'vendor-docs'
           // SQLite и PostgreSQL (PGlite) WASM — лениво, только страница /sql (практика баз данных)
           if (id.includes('@electric-sql/pglite') || id.includes('pglite')) return 'vendor-pglite'

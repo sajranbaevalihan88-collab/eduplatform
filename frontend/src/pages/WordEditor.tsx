@@ -390,7 +390,7 @@ export default function WordEditor() {
       try {
         const meta = JSON.parse(decodeURIComponent(m[1]))
         setPageBorder((['none', 'solid', 'double', 'shadow', 'dashed', 'gold'].includes(meta.pb) ? meta.pb : 'none') as PageBorderKind)
-        setPageBorderColor(typeof meta.pbc === 'string' ? meta.pbc : '#2b579a')
+        setPageBorderColor(typeof meta.pbc === 'string' && /^#[0-9a-fA-F]{6}$/.test(meta.pbc) ? meta.pbc : '#2b579a')
         setPageBorderWidth(typeof meta.pbw === 'number' ? Math.max(1, Math.min(4, meta.pbw)) : 2)
         setWatermark(typeof meta.wm === 'string' ? meta.wm : '')
         setColumns(meta.cols === 2 ? 2 : 1)
@@ -1794,7 +1794,7 @@ export default function WordEditor() {
     markSelImg(null)
     const ps = (d as any).page_size
     if (ps && PAGE_SIZES[ps]) { setPageSize(ps); try { localStorage.setItem(LS_PAGE, ps) } catch { } }
-    if (editRef.current) editRef.current.innerHTML = unpackHtmlMeta(d.body_html)
+    if (editRef.current) editRef.current.innerHTML = sanitize(unpackHtmlMeta(d.body_html))
     mergeRedundantBreaks(true)
     try { measurePages(); settleMarkers() } catch { }
     setDirty(false)
@@ -1831,7 +1831,7 @@ export default function WordEditor() {
       setCurrentId(null)
       setTitle(d.title || 'Черновик')
       if (d.page_size && PAGE_SIZES[d.page_size]) setPageSize(d.page_size)
-      if (editRef.current) editRef.current.innerHTML = unpackHtmlMeta(d.body_html || '')
+      if (editRef.current) editRef.current.innerHTML = sanitize(unpackHtmlMeta(d.body_html || ''))
       mergeRedundantBreaks(true)
       try { measurePages(); settleMarkers() } catch { }
       setDirty(true)
@@ -1935,7 +1935,7 @@ export default function WordEditor() {
       toast('Файл .docx скачан', 'success')
     } catch {
       // офлайн — скачиваем HTML
-      const blob = new Blob([`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body>${body}</body></html>`], { type: 'text/html' })
+      const blob = new Blob([`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body>${sanitize(body)}</body></html>`], { type: 'text/html' })
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
       a.download = `${(title || 'document').slice(0, 80)}.html`
@@ -1976,13 +1976,24 @@ export default function WordEditor() {
 
   const insertLink = () => {
     const sel = window.getSelection()?.toString() || ''
-    const url = prompt('Ссылка (https://…)?', 'https://')
-    if (!url) return
-    if (!/^https?:\/\//i.test(url)) { alert('Ссылка должна начинаться с http:// или https://'); return }
+    const rawUrl = prompt('Ссылка (https://…)?', 'https://')
+    if (!rawUrl) return
+    let parsed: URL
+    try {
+      parsed = new URL(rawUrl.trim())
+    } catch {
+      alert('Некорректный адрес ссылки')
+      return
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      alert('Ссылка должна начинаться с http:// или https://')
+      return
+    }
+    const safeUrl = parsed.href
     restoreSelection()
     try {
-      if (!sel) document.execCommand('insertHTML', false, `<a href="${url}">${url}</a>`)
-      else document.execCommand('createLink', false, url)
+      if (!sel) document.execCommand('insertHTML', false, `<a href="${escapeHtml(safeUrl)}" rel="noopener noreferrer">${escapeHtml(safeUrl)}</a>`)
+      else document.execCommand('createLink', false, safeUrl)
     } catch { }
     saveSelection()
     setDirty(true)
@@ -1996,15 +2007,20 @@ export default function WordEditor() {
       const d = frame.contentDocument
       if (!d) return
       const marginMm = marginMode === 'narrow' ? '10mm' : marginMode === 'wide' ? '26mm' : '16mm'
+      const safeBorderColor = /^#[0-9a-fA-F]{6}$/.test(pageBorderColor) ? pageBorderColor : '#2b579a'
+      const safeBorderW = Math.max(1, Math.min(6, Number(pageBorderWidth) || 2))
+      const safePageSize = ['A4', 'A5', 'Letter', 'Legal'].includes(pageSize) ? pageSize : 'A4'
+      const safeOri = orientation === 'landscape' ? 'landscape' : 'portrait'
+      const safeSheetBg = /^#[0-9a-fA-F]{6}$/.test(sheetBg) ? sheetBg : '#ffffff'
       const pBorderCss =
         pageBorder === 'none' ? '' :
-        pageBorder === 'double' ? `border:${Math.max(4, pageBorderWidth + 2)}px double ${pageBorderColor};` :
-        pageBorder === 'dashed' ? `border:${pageBorderWidth}px dashed ${pageBorderColor};` :
-        pageBorder === 'shadow' ? `border:${pageBorderWidth}px solid ${pageBorderColor};box-shadow:4px 4px 0 ${pageBorderColor}44;` :
-        pageBorder === 'gold' ? `border:6px double ${pageBorderColor};outline:2px solid ${pageBorderColor};outline-offset:-10px;` :
-        `border:${pageBorderWidth}px solid ${pageBorderColor};`
+        pageBorder === 'double' ? `border:${Math.max(4, safeBorderW + 2)}px double ${safeBorderColor};` :
+        pageBorder === 'dashed' ? `border:${safeBorderW}px dashed ${safeBorderColor};` :
+        pageBorder === 'shadow' ? `border:${safeBorderW}px solid ${safeBorderColor};box-shadow:4px 4px 0 ${safeBorderColor}44;` :
+        pageBorder === 'gold' ? `border:6px double ${safeBorderColor};outline:2px solid ${safeBorderColor};outline-offset:-10px;` :
+        `border:${safeBorderW}px solid ${safeBorderColor};`
       d.open()
-      d.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>@page{size:${pageSize} ${orientation};margin:${marginMm}}body{font-family:Georgia,'Times New Roman',serif;line-height:1.65;color:#111;background:${sheetBg};${pBorderCss ? `padding:18px;min-height:92vh;box-sizing:border-box;${pBorderCss}` : ''}}header{font-size:11px;color:#64748b;border-bottom:1px solid #cbd5e1;padding-bottom:6px;margin-bottom:14px}footer{font-size:11px;color:#64748b;border-top:1px solid #cbd5e1;padding-top:6px;margin-top:20px;text-align:center}.content{${columns === 2 ? 'column-count:2;column-gap:28px;column-rule:1px solid #cbd5e1;' : ''}}.wm{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:68px;font-weight:900;color:#64748b;opacity:0.12;transform:rotate(-32deg);pointer-events:none;z-index:0}table{border-collapse:collapse;width:100%}td,th{border:1px solid #666;padding:6px}img{max-width:100%}blockquote{border-left:4px solid #2b579a;padding-left:12px;color:#475569;font-style:italic}</style></head><body>${watermark.trim() ? `<div class="wm">${escapeHtml(watermark)}</div>` : ''}${headerText.trim() ? `<header>${escapeHtml(headerText)}</header>` : ''}<div class="content">${sanitize(html())}</div>${footerText.trim() ? `<footer>${escapeHtml(footerText)}</footer>` : ''}</body></html>`)
+      d.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>@page{size:${safePageSize} ${safeOri};margin:${marginMm}}body{font-family:Georgia,'Times New Roman',serif;line-height:1.65;color:#111;background:${safeSheetBg};${pBorderCss ? `padding:18px;min-height:92vh;box-sizing:border-box;${pBorderCss}` : ''}}header{font-size:11px;color:#64748b;border-bottom:1px solid #cbd5e1;padding-bottom:6px;margin-bottom:14px}footer{font-size:11px;color:#64748b;border-top:1px solid #cbd5e1;padding-top:6px;margin-top:20px;text-align:center}.content{${columns === 2 ? 'column-count:2;column-gap:28px;column-rule:1px solid #cbd5e1;' : ''}}.wm{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:68px;font-weight:900;color:#64748b;opacity:0.12;transform:rotate(-32deg);pointer-events:none;z-index:0}table{border-collapse:collapse;width:100%}td,th{border:1px solid #666;padding:6px}img{max-width:100%}blockquote{border-left:4px solid #2b579a;padding-left:12px;color:#475569;font-style:italic}</style></head><body>${watermark.trim() ? `<div class="wm">${escapeHtml(watermark)}</div>` : ''}${headerText.trim() ? `<header>${escapeHtml(headerText)}</header>` : ''}<div class="content">${sanitize(html())}</div>${footerText.trim() ? `<footer>${escapeHtml(footerText)}</footer>` : ''}</body></html>`)
       d.close()
       const w = frame.contentWindow
       if (w) { w.focus(); w.print() }

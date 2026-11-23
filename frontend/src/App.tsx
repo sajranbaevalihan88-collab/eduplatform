@@ -4,92 +4,97 @@ import Layout from './components/Layout'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { ThemeProvider, AccessibilityProvider, ToastContainer } from './context/UIContext'
 import { LangProvider } from './context/LangContext'
-import { configureMonacoLocale } from './monacoLocale'
 import Landing from './pages/Landing'
-import About from './pages/About'
-
-// Меню Monaco (правый клик в редакторе) — на языке интерфейса, по умолчанию русское.
-// Конфиг должен примениться ДО первого монтирования <Editor/>.
-configureMonacoLocale()
+import Login from './pages/Login'
+import Dashboard from './pages/Dashboard'
+import ErrorBoundary from './components/ErrorBoundary'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const [token,setToken]=useState<string|null>(()=>localStorage.getItem('token'))
-  useEffect(()=>{
-    const onChange=()=> setToken(localStorage.getItem('token'))
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'))
+  useEffect(() => {
+    const onChange = () => setToken(localStorage.getItem('token'))
     window.addEventListener('storage', onChange)
     window.addEventListener('auth-change', onChange as any)
-    return ()=>{ window.removeEventListener('storage', onChange); window.removeEventListener('auth-change', onChange as any) }
-  },[])
+    return () => {
+      window.removeEventListener('storage', onChange)
+      window.removeEventListener('auth-change', onChange as any)
+    }
+  }, [])
   if (!token) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
-function ErrorFallback(){ return <div className="p-8 text-center"><h2 className="text-xl font-bold">Что-то пошло не так</h2><a href="/" className="text-indigo-600 underline">На главную</a></div> }
+function ErrorFallback() {
+  return (
+    <div className="p-8 text-center">
+      <h2 className="text-xl font-bold">Что-то пошло не так</h2>
+      <a href="/" className="text-indigo-600 underline">На главную</a>
+    </div>
+  )
+}
 
 // Только для учителей: ученик и родитель видят заглушку (создавать нельзя, бэк тоже запретит)
 function TeacherRoute({ children }: { children: React.ReactNode }) {
-  const [token] = useState<string|null>(()=>localStorage.getItem('token'))
+  const [token] = useState<string | null>(() => localStorage.getItem('token'))
   if (!token) return <Navigate to="/login" replace />
   if (getRole() === 'student' || getRole() === 'parent') return (
-    <div className="max-w-xl mx-auto bg-white rounded-2xl border p-8 text-center space-y-3">
+    <div className="max-w-xl mx-auto bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-800 p-8 text-center space-y-3">
       <div className="text-5xl">🔒</div>
-      <h2 className="text-xl font-bold">Только для учителей</h2>
-      <p className="text-slate-500 text-sm">Ученики могут открывать уроки, тесты, игры и код, а создавать — нет. Word и заметки доступны в профиле.</p>
+      <h2 className="text-xl font-bold dark:text-white">Только для учителей</h2>
+      <p className="text-slate-500 dark:text-slate-400 text-sm">Ученики могут открывать уроки, тесты, игры и код, а создавать — нет. Word и заметки доступны в профиле.</p>
       <Link to="/" className="inline-block px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold">На главную</Link>
     </div>
   )
   return <>{children}</>
 }
 
-import Dashboard from './pages/Dashboard'
-import Subjects from './pages/Subjects'
-import SubjectDetail from './pages/SubjectDetail'
-import MyLessons from './pages/MyLessons'
-import Lessons from './pages/Lessons'
-import LessonView from './pages/LessonView'
-import Files from './pages/Files'
-import Presentations from './pages/Presentations'
-const LessonBuilder = lazy(()=>import('./pages/LessonBuilder'))
-const PresentationView = lazy(()=>import('./pages/PresentationView'))
-const PresentationEditor = lazy(()=>import('./pages/PresentationEditor'))
-const CodeLab = lazy(()=>import('./pages/CodeLab'))
-const SharedView = lazy(()=>import('./pages/SharedView'))
-const Board = lazy(()=>import('./pages/Board'))
-const VSCodeEditor = lazy(()=>import('./pages/VSCodeEditor'))
-const SqlLab = lazy(()=>import('./pages/SqlLab'))
-const WordEditor = lazy(()=>import('./pages/WordEditor'))
-import Tests from './pages/Tests'
-import Classes from './pages/Classes'
-import ClassroomDetail from './pages/ClassroomDetail'
-import Programs from './pages/Programs'
-import Progress from './pages/Progress'
-import Messages from './pages/Messages'
-import Portfolio from './pages/Portfolio'
-import TeacherAI from './pages/TeacherAI'
-import Diary from './pages/Diary'
-import Children from './pages/Children'
-import TestBuilder from './pages/TestBuilder'
-import TestTake from './pages/TestTake'
-import Notes from './pages/Notes'
-import Games from './pages/Games'
-import Guide from './pages/Guide'
-import Arkan from './pages/Arkan'
-import Sprint from './pages/Sprint'
-
-import Memory from './pages/Memory'
-import ColorMatch from './pages/ColorMatch'
-import Hangman from './pages/Hangman'
-import WordSearch from './pages/WordSearch'
-import FarmerBala from './pages/FarmerBala'
-import MathBattle from './pages/MathBattle'
-import SoundMemory from './pages/SoundMemory'
-import ConnectFour from './pages/ConnectFour'
-import Blocade from './pages/Blocade'
-const LiveQuizHost = lazy(()=>import('./pages/LiveQuizHost'))
-const LiveQuizPlay = lazy(()=>import('./pages/LiveQuizPlay'))
-import Login from './pages/Login'
-import Profile from './pages/Profile'
-import ErrorBoundary from './components/ErrorBoundary'
+// Ленивая подгрузка всех вторичных разделов и игр — быстрый старт на слабых ноутбуках и при медленном интернете
+const About = lazy(() => import('./pages/About'))
+const Profile = lazy(() => import('./pages/Profile'))
+const Subjects = lazy(() => import('./pages/Subjects'))
+const SubjectDetail = lazy(() => import('./pages/SubjectDetail'))
+const MyLessons = lazy(() => import('./pages/MyLessons'))
+const Lessons = lazy(() => import('./pages/Lessons'))
+const LessonView = lazy(() => import('./pages/LessonView'))
+const LessonBuilder = lazy(() => import('./pages/LessonBuilder'))
+const Files = lazy(() => import('./pages/Files'))
+const Presentations = lazy(() => import('./pages/Presentations'))
+const PresentationView = lazy(() => import('./pages/PresentationView'))
+const PresentationEditor = lazy(() => import('./pages/PresentationEditor'))
+const CodeLab = lazy(() => import('./pages/CodeLab'))
+const SharedView = lazy(() => import('./pages/SharedView'))
+const Board = lazy(() => import('./pages/Board'))
+const VSCodeEditor = lazy(() => import('./pages/VSCodeEditor'))
+const SqlLab = lazy(() => import('./pages/SqlLab'))
+const WordEditor = lazy(() => import('./pages/WordEditor'))
+const Tests = lazy(() => import('./pages/Tests'))
+const TestBuilder = lazy(() => import('./pages/TestBuilder'))
+const TestTake = lazy(() => import('./pages/TestTake'))
+const Classes = lazy(() => import('./pages/Classes'))
+const ClassroomDetail = lazy(() => import('./pages/ClassroomDetail'))
+const Programs = lazy(() => import('./pages/Programs'))
+const Progress = lazy(() => import('./pages/Progress'))
+const Messages = lazy(() => import('./pages/Messages'))
+const Portfolio = lazy(() => import('./pages/Portfolio'))
+const TeacherAI = lazy(() => import('./pages/TeacherAI'))
+const Diary = lazy(() => import('./pages/Diary'))
+const Children = lazy(() => import('./pages/Children'))
+const Notes = lazy(() => import('./pages/Notes'))
+const Guide = lazy(() => import('./pages/Guide'))
+const Games = lazy(() => import('./pages/Games'))
+const Arkan = lazy(() => import('./pages/Arkan'))
+const Sprint = lazy(() => import('./pages/Sprint'))
+const Memory = lazy(() => import('./pages/Memory'))
+const ColorMatch = lazy(() => import('./pages/ColorMatch'))
+const Hangman = lazy(() => import('./pages/Hangman'))
+const WordSearch = lazy(() => import('./pages/WordSearch'))
+const FarmerBala = lazy(() => import('./pages/FarmerBala'))
+const MathBattle = lazy(() => import('./pages/MathBattle'))
+const SoundMemory = lazy(() => import('./pages/SoundMemory'))
+const ConnectFour = lazy(() => import('./pages/ConnectFour'))
+const Blocade = lazy(() => import('./pages/Blocade'))
+const LiveQuizHost = lazy(() => import('./pages/LiveQuizHost'))
+const LiveQuizPlay = lazy(() => import('./pages/LiveQuizPlay'))
 
 export default function App() {
   return (

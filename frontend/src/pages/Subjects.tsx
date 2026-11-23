@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import client from '../api/client'
 import { Link } from 'react-router-dom'
 import { BookOpen, Plus, X } from 'lucide-react'
@@ -37,7 +37,7 @@ export default function Subjects(){
     <div className="space-y-6 page-enter">
       <div className="flex flex-wrap items-center justify-between gap-3 animate-fadeIn">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-blue-600 text-white"><BookOpen size={20}/></span> {t('subjects_title')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{list.length}</span></h1>
+          <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-blue-600 text-white"><BookOpen size={20}/></span> {t('subjects_title')} <span className="text-sm font-normal text-slate-500 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">{list.length}</span></h1>
         </div>
         {isAdmin && (
           <button onClick={()=>setShowAdd(v=>!v)} className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center gap-2"><Plus size={16}/>{showAdd?t('close'):t('subj_add')}</button>
@@ -61,16 +61,16 @@ export default function Subjects(){
       {error && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {list.map(s=>(
-          <Link key={s.id} to={`/subjects/${s.slug}`} className="bg-white rounded-2xl border overflow-hidden hover:shadow-md transition hover:border-indigo-200 group block">
+          <Link key={s.id} to={`/subjects/${s.slug}`} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden hover:shadow-md transition hover:border-indigo-300 dark:hover:border-indigo-600 group block">
             <div className="h-2" style={{background:s.color}} />
             <div className="p-5">
               <div className="flex items-start justify-between">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl border group-hover:scale-105 transition" style={{background:`${s.color}15`}}>{s.icon}</div>
-                <span className="text-xs px-2 py-1 rounded-full bg-slate-100">{s.slug}</span>
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl border dark:border-slate-700 group-hover:scale-105 transition" style={{background:`${s.color}20`}}>{s.icon}</div>
+                <span className="text-xs px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">{s.slug}</span>
               </div>
-              <h3 className="font-bold text-lg mt-3 group-hover:text-indigo-600 transition">{s.name}</h3>
-              <p className="text-sm text-slate-500 line-clamp-2">{s.description||t('subj_no_desc')}</p>
-              <div className="mt-3 flex items-center text-xs text-indigo-600 font-medium opacity-0 group-hover:opacity-100 transition">{t('subj_go')}</div>
+              <h3 className="font-bold text-lg mt-3 text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">{s.name}</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">{s.description||t('subj_no_desc')}</p>
+              <div className="mt-3 flex items-center text-xs text-indigo-600 dark:text-indigo-400 font-medium opacity-0 group-hover:opacity-100 transition">{t('subj_go')}</div>
             </div>
           </Link>
         ))}

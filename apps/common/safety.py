@@ -67,3 +67,38 @@ def validate_portfolio_file(f, max_mb=8):
         return f
     return validate_image_file(f, max_mb=max_mb)
 
+
+def validate_ooxml_zip(
+    source,
+    max_uncompressed_bytes: int = 80 * 1024 * 1024,
+    max_files: int = 800,
+    max_entry_bytes: int = 20 * 1024 * 1024,
+):
+    """Защита от ZIP-бомб и path-traversal при разборе OOXML (.docx / .pptx).
+
+    Проверяет метаданные центрального каталога ДО распаковки содержимого.
+    Бросает ValueError при подозрительном архиве.
+    """
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(source, 'r') as zf:
+            infos = zf.infolist()
+            if len(infos) > max_files:
+                raise ValueError('Архив документа содержит слишком много файлов')
+            total_uncompressed = 0
+            for info in infos:
+                name = (info.filename or '').replace('\\', '/')
+                if name.startswith('/') or '..' in name.split('/'):
+                    raise ValueError('Недопустимый путь внутри архива документа')
+                if info.file_size > max_entry_bytes:
+                    raise ValueError('Внутренний файл документа превышает лимит размера')
+                total_uncompressed += info.file_size
+                if total_uncompressed > max_uncompressed_bytes:
+                    raise ValueError('Распакованный размер документа превышает лимит безопасности')
+                if info.file_size > 1024 * 1024 and info.compress_size > 0:
+                    if (info.file_size / info.compress_size) > 100:
+                        raise ValueError('Обнаружена подозрительная степень сжатия архива (ZIP-бомба)')
+    except zipfile.BadZipFile:
+        raise ValueError('Повреждённый или некорректный архив документа')
+

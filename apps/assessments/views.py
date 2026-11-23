@@ -34,13 +34,12 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
         qs = super().get_queryset().select_related('lesson')
         user = self.request.user
         from django.db.models import Q
-        # гость: публичное + уроковое из опубликованных уроков (ответы скрывает сериалайзер)
+        # гость: публичное + уроковое только из публичных опубликованных уроков (ответы скрывает сериалайзер)
         # зарегистрированный: + своё (черновики/приватное — только владелец)
-        lesson_visible = Q(is_lesson_private=True, lesson__is_published=True)
         if not user.is_authenticated:
-            qs = qs.filter(Q(is_public=True) | lesson_visible)
+            qs = qs.filter(Q(is_public=True) | Q(is_lesson_private=True, lesson__is_published=True, lesson__is_public=True))
         elif not (user.is_staff or getattr(user, 'role', None) == 'admin'):
-            qs = qs.filter(Q(owner=user) | Q(is_public=True) | lesson_visible)
+            qs = qs.filter(Q(owner=user) | Q(is_public=True) | Q(is_lesson_private=True, lesson__is_published=True))
         is_pub = self.request.query_params.get('is_public')
         if is_pub is not None and is_pub != '':
             if is_pub.lower() in ('true', '1', 'yes'):
@@ -99,6 +98,15 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
         import logging
         logger = logging.getLogger(__name__)
         test = self.get_object()
+        # Защита от подбора ключей анонимными запросами (answer-key oracle):
+        # диагностические и назначенные в классах тесты сдают ТОЛЬКО авторизованные пользователи.
+        from apps.classroom.models import Assignment as _ClassroomAssignment
+        is_graded_test = bool(test.is_diagnostic or _ClassroomAssignment.objects.filter(test=test).exists())
+        if is_graded_test and not request.user.is_authenticated:
+            return Response(
+                {'error': 'Войдите в аккаунт, чтобы сдать оцениваемый или диагностический тест.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
         # Только одна попытка для авторизованных — как просили "только один раз и всё"
         # (двойная защита: проверка + транзакция + unique на уровне приложения)
         if request.user.is_authenticated and TestAttempt.objects.filter(test=test, user=request.user).exists():
@@ -210,9 +218,18 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             if request.user.is_authenticated:
                 try:
                     from apps.classroom.models import Assignment, Submission
+                    from django.db.models import Q
                     from django.utils import timezone as _tz
-                    for a in Assignment.objects.filter(kind='test', test=test,
-                                                       classroom__enrollments__student=request.user).only('id', 'deadline', 'max_score'):
+                    eligible_assignments = Assignment.objects.filter(
+                        kind='test',
+                        test=test,
+                        classroom__enrollments__student=request.user,
+                    ).filter(
+                        Q(classroom__is_paid=False) | Q(classroom__enrollments__access_granted=True)
+                    ).filter(
+                        Q(assigned_to__isnull=True) | Q(assigned_to=request.user)
+                    ).distinct().only('id', 'deadline', 'max_score')
+                    for a in eligible_assignments:
                         late = bool(a.deadline and _tz.now() > a.deadline)
                         scaled_score = round((attempt.score / 100.0) * (a.max_score or 100), 1)
                         Submission.objects.update_or_create(
@@ -258,14 +275,14 @@ class TestViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             return Response({'error': 'Нет такого варианта'}, status=400)
         return Response({'correct': bool(opt.is_correct)})
 
-    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated], throttle_classes=[])
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated], throttle_classes=[throttling.UserRateThrottle])
     def generate(self, request):
-        """Генерация вопросов из текста урока.
-        Сначала пробуем внешний генератор (если задан GEMINI_API_KEY),
-        иначе — честный офлайн-генератор. Ответ всегда содержит source:
-        'gemini:<model>' или 'offline' — фронт показывает это учителю.
+        """Генерация вопросов из текста урока (только учителя и администраторы, с лимитом запросов).
         POST /api/tests/generate/ {lesson_id?, text?, count?, prompt?} -> {questions:[...], source}.
         Вопросы НЕ сохраняются — учитель правит их в конструкторе и сохраняет как обычно."""
+        u = request.user
+        if not (u.is_staff or getattr(u, 'role', None) in ('teacher', 'admin')):
+            return Response({'error': 'Генерация тестов доступна только учителям и администраторам'}, status=status.HTTP_403_FORBIDDEN)
         from .services.generator import (
             extract_requested_count,
             generate_smart_topic_questions,

@@ -1,0 +1,17 @@
+.env
+.env.*
+.git
+.gitignore
+db.sqlite3
+db.sqlite3-*
+media/
+staticfiles/
+scratch/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+frontend/node_modules/
+frontend/dist/
+.vscode/
+.idea/

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import client from '../api/client'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
+import { getRole } from '../utils/role'
+import BackupRestoreActions from '../components/BackupRestoreCard'
 import {
   Sparkles, Users, AlertTriangle, Trophy, CheckCircle2, BookOpen,
   FileText, FlaskConical, Send, Download, Copy, ShieldCheck,
@@ -292,21 +294,6 @@ export default function TeacherAI() {
       URL.revokeObjectURL(url)
     } catch {
       toast('Не удалось скачать CSV', 'error')
-    }
-  }
-
-  const downloadBackup = async () => {
-    try {
-      const r = await client.get('/classrooms/backup_data/', { responseType: 'blob' })
-      const url = URL.createObjectURL(new Blob([r.data], { type: 'application/json;charset=utf-8' }))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `eduplatform-backup-${new Date().toISOString().slice(0, 10)}.json`
-      a.click()
-      URL.revokeObjectURL(url)
-      toast('Резервная копия скачана', 'success')
-    } catch {
-      toast('Не удалось скачать резервную копию', 'error')
     }
   }
 
@@ -803,10 +790,13 @@ export default function TeacherAI() {
               className="px-3.5 py-2 min-h-[40px] rounded-xl bg-amber-50 dark:bg-slate-800 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-slate-700 text-xs font-bold flex items-center gap-1.5">
               <Download size={14} /> Проблемные темы КР (CSV)
             </button>
-            <button onClick={downloadBackup} data-testid="exp-backup-json"
-              className="px-3.5 py-2 min-h-[40px] rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1.5">
-              <Download size={14} /> Резервная копия (JSON)
-            </button>
+            <BackupRestoreActions
+              isAdmin={getRole() === 'admin'}
+              compact
+              onRestored={() => {
+                client.get('/classrooms/school_analytics/').then(r => setSchoolStats(r.data)).catch(() => {})
+              }}
+            />
           </div>
 
           {/* Таблица классов: какие классы пропускают занятия и где отстают */}

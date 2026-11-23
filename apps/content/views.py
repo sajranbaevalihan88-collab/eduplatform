@@ -11,7 +11,7 @@ import re
 from django.http import HttpResponse, FileResponse, Http404
 
 _MEDIA_MIME = {'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif',
-               '.webp':'image/webp','.svg':'image/svg+xml','.pdf':'application/pdf',
+               '.webp':'image/webp','.pdf':'application/pdf',
                '.txt':'text/plain; charset=utf-8','.md':'text/plain; charset=utf-8','.csv':'text/csv; charset=utf-8',
                '.doc':'application/msword',
                '.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -42,10 +42,18 @@ def media_fallback(request, subpath):
         if not (safe.startswith('pptx_images/') or safe.startswith('pptx_pdf/')):
             raise Http404()
         from django.conf import settings as _s
+        ext = os.path.splitext(safe)[1].lower()
+        # Никогда не раздаём SVG как активный image/svg+xml на том же origin (защита от Stored XSS)
+        if ext == '.svg':
+            raise Http404()
+        ctype = _MEDIA_MIME.get(ext, 'application/octet-stream')
         disk = os.path.join(str(getattr(_s, 'MEDIA_ROOT', 'media')), safe)
         if os.path.isfile(disk):
-            resp = FileResponse(open(disk, 'rb'), content_type=_MEDIA_MIME.get(os.path.splitext(safe)[1].lower(), 'application/octet-stream'))
+            resp = FileResponse(open(disk, 'rb'), content_type=ctype)
             resp['Cache-Control'] = 'public, max-age=86400'
+            resp['X-Content-Type-Options'] = 'nosniff'
+            if ext == '.pdf':
+                resp['Content-Security-Policy'] = 'sandbox'
             return resp
         try:
             blob = MediaBlob.objects.filter(key=safe).first()
@@ -58,8 +66,11 @@ def media_fallback(request, subpath):
                     fh.write(bytes(blob.data))
             except Exception:
                 pass
-            resp = HttpResponse(bytes(blob.data), content_type=blob.mime or 'application/octet-stream')
+            resp = HttpResponse(bytes(blob.data), content_type=ctype)
             resp['Cache-Control'] = 'public, max-age=86400'
+            resp['X-Content-Type-Options'] = 'nosniff'
+            if ext == '.pdf':
+                resp['Content-Security-Policy'] = 'sandbox'
             return resp
     except Http404:
         pass
@@ -84,21 +95,7 @@ def media_uploads(request, name=''):
     uf = UploadedFile.objects.filter(file='uploads/' + safe).select_related('owner').first()
     if uf is None:
         raise Http404()
-    user = request.user
-    if not user.is_authenticated:
-        # Обычная функция не читает Bearer (DRF-JWT не применяется) — поподтянем юзера
-        # вручную, иначе приватные книги не открываются даже владельцу/админу.
-        try:
-            from rest_framework_simplejwt.authentication import JWTAuthentication
-            from rest_framework.exceptions import AuthenticationFailed
-            try:
-                result = JWTAuthentication().authenticate(request)
-            except AuthenticationFailed:
-                result = None
-            if result and result[0].is_authenticated:
-                user = result[0]
-        except Exception:
-            pass
+    user = _resolve_media_user(request)
     is_admin = user.is_authenticated and (user.is_staff or getattr(user, 'role', None) == 'admin')
     if not uf.is_public and not is_admin and (not user.is_authenticated or uf.owner_id != user.id):
         raise Http404()
@@ -131,21 +128,136 @@ def media_uploads(request, name=''):
     resp['Cache-Control'] = 'private, max-age=3600'
     return resp
 
+
+def _resolve_media_user(request):
+    """Извлекает пользователя из сессии или Bearer JWT с проверкой password_changed_at."""
+    user = request.user
+    if user.is_authenticated:
+        return user
+    try:
+        from apps.accounts.authentication import PasswordStampJWTAuthentication
+        from rest_framework.exceptions import AuthenticationFailed
+        try:
+            result = PasswordStampJWTAuthentication().authenticate(request)
+        except AuthenticationFailed:
+            result = None
+        if result and result[0].is_authenticated:
+            return result[0]
+    except Exception:
+        pass
+    return user
+
+
+def media_achievements(request, name=''):
+    """Защищённая раздача файлов достижений (/media/achievements/*):
+    доступ только пользователям, которым разрешено смотреть портфолио ученика."""
+    safe = (name or '').replace('\\', '/').strip('/')
+    if not safe or '..' in safe.split('/'):
+        raise Http404()
+    user = _resolve_media_user(request)
+    if not user or not user.is_authenticated:
+        raise Http404()
+    from apps.portfolio.models import Achievement
+    from apps.portfolio.views import _can_view
+    rel = 'achievements/' + safe
+    ach = Achievement.objects.filter(file=rel).select_related('student').first()
+    if ach is None or not _can_view(user, ach.student):
+        raise Http404()
+    ext = os.path.splitext(safe)[1].lower()
+    if ext == '.svg':
+        raise Http404()
+    ctype = _MEDIA_MIME.get(ext, 'application/octet-stream')
+    disk_path = os.path.join(str(getattr(settings, 'MEDIA_ROOT', 'media')), rel.replace('/', os.sep))
+    resp = None
+    if os.path.isfile(disk_path):
+        resp = FileResponse(open(disk_path, 'rb'), content_type=ctype)
+    else:
+        blob = MediaBlob.objects.filter(key=rel).first()
+        if blob and blob.data:
+            resp = HttpResponse(bytes(blob.data), content_type=ctype)
+        else:
+            raise Http404()
+    resp['X-Content-Type-Options'] = 'nosniff'
+    resp['Cache-Control'] = 'private, max-age=3600'
+    if ext == '.pdf':
+        resp['Content-Security-Policy'] = 'sandbox'
+    return resp
+
+
+def media_payment_receipts(request, name=''):
+    """Защищённая раздача чеков об оплате (/media/payment_receipts/*):
+    доступ только самому студенту, владельцу класса или администратору. 404 при отказе."""
+    safe = (name or '').replace('\\', '/').strip('/')
+    if not safe or '..' in safe.split('/'):
+        raise Http404()
+    user = _resolve_media_user(request)
+    if not user or not user.is_authenticated:
+        raise Http404()
+    from apps.classroom.models import Enrollment
+    rel = 'payment_receipts/' + safe
+    enr = Enrollment.objects.filter(receipt=rel).select_related('classroom', 'student').first()
+    if enr is None:
+        raise Http404()
+    is_admin = user.is_staff or getattr(user, 'role', None) == 'admin'
+    if not is_admin and user.id not in (enr.student_id, enr.classroom.owner_id):
+        raise Http404()
+    disk_path = os.path.join(str(getattr(settings, 'MEDIA_ROOT', 'media')), rel.replace('/', os.sep))
+    if not os.path.isfile(disk_path):
+        raise Http404()
+    ext = os.path.splitext(safe)[1].lower()
+    ctype = _MEDIA_MIME.get(ext, 'application/octet-stream')
+    resp = FileResponse(open(disk_path, 'rb'), content_type=ctype)
+    resp['X-Content-Type-Options'] = 'nosniff'
+    resp['Cache-Control'] = 'private, no-store'
+    return resp
+
+
 def _validate_upload(file_obj):
     if not file_obj:
         raise ValueError("Файл не передан")
+    if file_obj.size == 0:
+        raise ValueError("Пустой файл")
     if file_obj.size > 100 * 1024 * 1024:
         raise ValueError("Файл слишком большой (макс 100MB)")
     ext = os.path.splitext(file_obj.name)[1].lower()
     allowed_ext = getattr(settings, 'ALLOWED_UPLOAD_EXTENSIONS', [])
     if ext not in allowed_ext:
         raise ValueError(f"Недопустимое расширение {ext}. Разрешены: {', '.join(allowed_ext)}")
-    # проверка mime
-    allowed_mime = getattr(settings, 'ALLOWED_UPLOAD_MIMES', [])
-    # доверяем расширению, но mime должен быть похож
-    # блокируем .html/.svg которые могут содержать XSS
+    # блокируем .html/.svg/.js которые могут содержать XSS
     if ext in ['.svg','.html','.htm','.js']:
         raise ValueError("Тип файла запрещен из соображений безопасности")
+    # Проверка магических байтов содержимого (защита от подмены расширения)
+    pos = file_obj.tell() if hasattr(file_obj, 'tell') else 0
+    try:
+        file_obj.seek(0)
+        head = file_obj.read(16) or b''
+        if ext == '.pdf':
+            if not head.startswith(b'%PDF-'):
+                raise ValueError("Содержимое файла не соответствует формату PDF")
+        elif ext in ('.pptx', '.docx'):
+            if not head.startswith(b'PK\x03\x04') and not head.startswith(b'PK\x05\x06'):
+                raise ValueError(f"Содержимое файла не соответствует формату {ext}")
+        elif ext in ('.ppt', '.doc'):
+            if not (head.startswith(b'\xd0\xcf\x11\xe0') or head.startswith(b'PK\x03\x04')):
+                raise ValueError(f"Содержимое файла не соответствует формату {ext}")
+        elif ext in ('.png', '.jpg', '.jpeg', '.gif', '.webp'):
+            from PIL import Image
+            file_obj.seek(0)
+            try:
+                with Image.open(file_obj) as im:
+                    im.verify()
+                    fmt = (im.format or '').upper()
+                if fmt not in ('PNG', 'JPEG', 'GIF', 'WEBP'):
+                    raise ValueError("Неподдерживаемый формат изображения")
+            except ValueError:
+                raise
+            except Exception:
+                raise ValueError("Файл повреждён или не является корректным изображением")
+    finally:
+        try:
+            file_obj.seek(pos)
+        except Exception:
+            pass
     return True
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
@@ -233,19 +345,36 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             return bytes(blob.data)
         return None
 
+    def _can_read_file(self, request, uf):
+        """Проверка доступа к файлу (защита от IDOR):
+        публичные — всем; приватные — владельцу, админу или если файл прикреплён к опубликованному уроку."""
+        if uf.is_public:
+            return True
+        u = request.user
+        if not u or not u.is_authenticated:
+            return False
+        if u.is_staff or getattr(u, 'role', None) == 'admin' or uf.owner_id == u.id:
+            return True
+        # Разрешаем чтение, только если этот файл реально встроен в опубликованный урок
+        try:
+            from apps.lessons.models import Lesson
+            fid = str(uf.id)
+            fname = os.path.basename(uf.file.name or '')
+            for les in Lesson.objects.filter(is_published=True).only('content'):
+                raw = str(les.content or '')
+                if f'"fileId": {fid}' in raw or f'"fileId":{fid}' in raw or (fname and fname in raw):
+                    return True
+        except Exception:
+            pass
+        return False
+
     @action(detail=True, methods=['get'], permission_classes=[permissions.AllowAny])
     def raw(self, request, pk=None):
         """GET /api/files/<id>/raw/ — чтение/скачивание файла прямо в уроке (PDF, фото, документы)."""
         from urllib.parse import quote
         uf = UploadedFile.objects.filter(pk=pk).first()
-        if not uf:
+        if not uf or not self._can_read_file(request, uf):
             raise Http404('Файл не найден')
-        u = request.user
-        is_admin = u.is_authenticated and (u.is_staff or getattr(u, 'role', None) == 'admin')
-        if not uf.is_public and not is_admin and (not u.is_authenticated or uf.owner_id != u.id):
-            # Если пользователь авторизован (например ученик открывает урок с этим файлом) — разрешаем чтение
-            if not u.is_authenticated:
-                raise Http404('Нет доступа')
         data = self._read_file_bytes(uf)
         if data is None:
             raise Http404('Содержимое файла не найдено')
@@ -271,12 +400,8 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         import zipfile
         import xml.etree.ElementTree as ET
         uf = UploadedFile.objects.filter(pk=pk).first()
-        if not uf:
+        if not uf or not self._can_read_file(request, uf):
             return Response({'error': 'Файл не найден'}, status=404)
-        u = request.user
-        is_admin = u.is_authenticated and (u.is_staff or getattr(u, 'role', None) == 'admin')
-        if not uf.is_public and not is_admin and not u.is_authenticated:
-            return Response({'error': 'Нет доступа'}, status=403)
         data = self._read_file_bytes(uf)
         if data is None:
             return Response({'error': 'Файл недоступен на сервере'}, status=404)
@@ -308,6 +433,8 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
                     html_out = ''
         elif ext == '.docx':
             try:
+                from apps.common.safety import validate_ooxml_zip
+                validate_ooxml_zip(_io.BytesIO(data))
                 W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
                 R = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
                 A = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
@@ -551,18 +678,18 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
     queryset = Presentation.objects.prefetch_related('slides').all().order_by('-updated_at')
     serializer_class = PresentationSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    teacher_extra_actions = frozenset({'import_pptx', 'slides', 'reorder'})
 
     def get_queryset(self):
         qs = super().get_queryset().select_related('subject', 'lesson')
         user = self.request.user
         from django.db.models import Q
-        # гость: публичное + уроковое из опубликованных уроков
+        # гость: публичное + уроковое только из публичных опубликованных уроков
         # зарегистрированный: + своё (черновики/приватное — только владелец)
-        lesson_visible = Q(is_lesson_private=True, lesson__is_published=True)
         if not user.is_authenticated:
-            qs = qs.filter(Q(is_public=True) | lesson_visible)
+            qs = qs.filter(Q(is_public=True) | Q(is_lesson_private=True, lesson__is_published=True, lesson__is_public=True))
         elif not (user.is_staff or getattr(user, 'role', None) == 'admin'):
-            qs = qs.filter(Q(owner=user) | Q(is_public=True) | lesson_visible)
+            qs = qs.filter(Q(owner=user) | Q(is_public=True) | Q(is_lesson_private=True, lesson__is_published=True))
         # фильтр по is_public ?is_public=true/false (для профиля черновиков)
         is_pub = self.request.query_params.get('is_public')
         if is_pub is not None and is_pub != '':
@@ -631,11 +758,14 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             raise PermissionDenied("Можно удалять только свои презентации")
         instance.delete()
 
-    @action(detail=False, methods=['post'], url_path='import', parser_classes=[MultiPartParser, FormParser])
+    @action(detail=False, methods=['post'], url_path='import', parser_classes=[MultiPartParser, FormParser], permission_classes=[permissions.IsAuthenticated])
     def import_pptx(self, request):
         """Загрузка .pptx/.ppt/.pdf как презентации с сохранением оригинального дизайна.
-        Сохраняет: x/y/w/h (EMU→%), font runs, цвета, фон слайда (solid/gradient), таблицы с контентом, картинки с геометрией.
-        Рендер на фронте — absolute layout, как в PowerPoint."""
+        Доступно только учителям и администраторам."""
+        u = request.user
+        if not (u.is_authenticated and (u.is_staff or getattr(u, 'role', None) in ('teacher', 'admin'))):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Импорт презентаций доступен только учителям и администраторам')
         file = request.FILES.get('file')
         if not file:
             return Response({'detail':'Файл не передан (поле file)'}, status=400)
@@ -1807,6 +1937,8 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                     except Exception:
                         return None, 0
                 try:
+                    from apps.common.safety import validate_ooxml_zip
+                    validate_ooxml_zip(tmp_path)
                     pptx = PptxPres(tmp_path)
                     scheme = _parse_scheme_colors(tmp_path)
                     typo = _parse_master_typography(pptx, scheme)
@@ -1872,8 +2004,8 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                                         try:
                                             blob = shape.image.blob
                                             img_ext = '.' + (shape.image.ext or 'png')
-                                            # браузеры не показывают EMF/WMF/TIFF/BMP — пробуем конверт через LibreOffice, иначе плейсхолдер
-                                            BROWSER_OK = ['.png','.jpg','.jpeg','.gif','.webp','.svg']
+                                            # Только безопасные растровые форматы (SVG запрещён — защита от Same-Origin Stored XSS)
+                                            BROWSER_OK = ['.png','.jpg','.jpeg','.gif','.webp']
                                             need_convert = img_ext.lower() not in BROWSER_OK
                                             conv_blob, conv_ext, unrenderable = blob, img_ext, False
                                             if need_convert:
@@ -2433,7 +2565,9 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                     max_pages = min(len(doc), 50)
                     for pno in range(max_pages):
                         page = doc[pno]
-                        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+                        max_dim = max(float(page.rect.width or 1), float(page.rect.height or 1), 1.0)
+                        scale = min(2.0, 1920.0 / max_dim)
+                        pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
                         fname = f"{_uuid.uuid4().hex}.png"
                         rel = f"pptx_images/{fname}"
                         pix.save(os.path.join(media_root, rel))
@@ -2475,8 +2609,10 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                     pass
         except Exception as e:
             pres.delete()
-            import traceback; traceback.print_exc()
-            return Response({'detail': f'Ошибка импорта: {str(e)[:500]}'}, status=400)
+            import logging as _plog
+            _plog.getLogger(__name__).exception('import_pptx failed')
+            safe_msg = str(e)[:200] if isinstance(e, ValueError) else 'Не удалось импортировать файл презентации'
+            return Response({'detail': f'Ошибка импорта: {safe_msg}'}, status=400)
         try:
             from .models import UploadedFile
             file.seek(0)
@@ -2542,10 +2678,85 @@ class PresentationViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
                 Slide.objects.filter(id=sid, presentation=pres).update(order=idx)
         return Response({'status':'ok'})
 
+    @action(detail=False, methods=['post'], url_path='export_pptx', permission_classes=[permissions.IsAuthenticated], throttle_classes=[throttling.UserRateThrottle])
+    def export_pptx_payload(self, request):
+        """POST /api/presentations/export_pptx/ — генерирует настоящий файл .pptx прямо из редактора (только авторизованным)."""
+        from urllib.parse import quote
+        import logging
+        from .pptx_export import build_pptx_bytes
+        title = str(request.data.get('title') or 'Презентация').strip() or 'Презентация'
+        slides_data = request.data.get('slides')
+        if not isinstance(slides_data, list):
+            return Response({'error': 'slides должен быть списком'}, status=400)
+        if len(slides_data) > 120:
+            return Response({'error': 'Слишком много слайдов (макс 120)'}, status=400)
+        try:
+            data = build_pptx_bytes(title, slides_data)
+        except Exception:
+            logging.getLogger(__name__).exception('export_pptx_payload failed')
+            return Response({'error': 'Ошибка экспорта PPTX'}, status=500)
+        safe_fname = re.sub(r'[\\/:*?"<>|\r\n]+', '_', title)[:80].strip() or 'presentation'
+        resp = HttpResponse(
+            data,
+            content_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        )
+        resp['Content-Disposition'] = f"attachment; filename=\"presentation.pptx\"; filename*=UTF-8''{quote(safe_fname + '.pptx')}"
+        return resp
+
+    @action(detail=True, methods=['get'], url_path='export_pptx', permission_classes=[permissions.AllowAny])
+    def export_pptx(self, request, pk=None):
+        """GET /api/presentations/<id>/export_pptx/ — скачать сохранённую презентацию в формате .pptx."""
+        from urllib.parse import quote
+        import logging
+        from .pptx_export import build_pptx_bytes
+        pres = self.get_object()
+        slides_data = [
+            {
+                'background': s.background,
+                'backgroundType': s.background_type,
+                'gradient': s.gradient,
+                'bgImage': s.bg_image,
+                'content': s.content or {},
+                'notes': s.notes or '',
+                'layout': s.layout,
+                'transition': s.transition,
+            }
+            for s in pres.slides.all().order_by('order', 'id')
+        ]
+        try:
+            data = build_pptx_bytes(pres.title, slides_data)
+        except Exception:
+            logging.getLogger(__name__).exception('export_pptx failed pres=%s', pres.id)
+            return Response({'error': 'Ошибка экспорта PPTX'}, status=500)
+        safe_fname = re.sub(r'[\\/:*?"<>|\r\n]+', '_', pres.title or 'presentation')[:80].strip() or 'presentation'
+        resp = HttpResponse(
+            data,
+            content_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        )
+        resp['Content-Disposition'] = f"attachment; filename=\"presentation.pptx\"; filename*=UTF-8''{quote(safe_fname + '.pptx')}"
+        return resp
+
 class SlideViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
-    queryset = Slide.objects.all()
+    queryset = Slide.objects.select_related('presentation', 'presentation__lesson').all()
     serializer_class = SlideSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        from django.db.models import Q
+        if not user.is_authenticated:
+            return qs.filter(
+                Q(presentation__is_public=True)
+                | Q(presentation__is_lesson_private=True, presentation__lesson__is_published=True, presentation__lesson__is_public=True)
+            )
+        if user.is_staff or getattr(user, 'role', None) == 'admin':
+            return qs
+        return qs.filter(
+            Q(presentation__owner=user)
+            | Q(presentation__is_public=True)
+            | Q(presentation__is_lesson_private=True, presentation__lesson__is_published=True)
+        )
 
     def perform_create(self, serializer):
         pres = serializer.validated_data.get('presentation')
@@ -2563,14 +2774,17 @@ class SlideViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
     def perform_update(self, serializer):
         obj = self.get_object()
         is_admin = self.request.user.is_authenticated and (getattr(self.request.user, 'role', None) == 'admin' or self.request.user.is_staff)
-        owner_id = obj.presentation.owner_id if obj.presentation else None
-        if owner_id is None:
-            if not is_admin:
+        for target_pres in (obj.presentation, serializer.validated_data.get('presentation')):
+            if target_pres is None:
+                continue
+            owner_id = target_pres.owner_id
+            if owner_id is None:
+                if not is_admin:
+                    from rest_framework.exceptions import PermissionDenied
+                    raise PermissionDenied("Нет прав")
+            elif not self.request.user.is_authenticated or (owner_id != self.request.user.id and not is_admin):
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied("Нет прав")
-        elif not self.request.user.is_authenticated or (owner_id != self.request.user.id and not is_admin):
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied("Нет прав")
         serializer.save()
 
     def perform_destroy(self, instance):

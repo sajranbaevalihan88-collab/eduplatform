@@ -69,35 +69,35 @@ export default function Files(){
           <Upload size={18}/> {uploading?t('files_uploading'):t('files_upload')} <input type="file" className="hidden" accept=".ppt,.pptx,.doc,.docx,.pdf,.png,.jpg,.jpeg" onChange={onUpload}/>
         </label>
       </div>
-      <div className="bg-white rounded-2xl border p-3 flex gap-2 text-sm overflow-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-800 p-3 flex gap-2 text-sm overflow-auto">
         <span className="px-3 py-1.5 rounded-full bg-indigo-600 text-white">{t('files_all')}</span>
-        <span className="px-3 py-1.5 rounded-full bg-slate-100">{t('files_pptx')}</span>
-        <span className="px-3 py-1.5 rounded-full bg-slate-100">{t('files_docx')}</span>
-        <span className="px-3 py-1.5 rounded-full bg-slate-100">PDF</span>
+        <span className="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 dark:text-slate-300">{t('files_pptx')}</span>
+        <span className="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 dark:text-slate-300">{t('files_docx')}</span>
+        <span className="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 dark:text-slate-300">PDF</span>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {list.map(f=>(
-          <div key={f.id} className="bg-white rounded-2xl border p-4 hover:shadow-md transition">
+          <div key={f.id} className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-800 p-4 hover:shadow-md transition">
             <div className="flex items-start justify-between">
-              <div className="w-10 h-10 rounded-xl bg-slate-50 border flex items-center justify-center">{iconFor(f.file_type)}</div>
-              <span className="text-xs px-2 py-1 rounded-full bg-slate-100 capitalize">{f.file_type}</span>
+              <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 flex items-center justify-center">{iconFor(f.file_type)}</div>
+              <span className="text-xs px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 dark:text-slate-300 capitalize">{f.file_type}</span>
             </div>
-            <h3 className="font-semibold mt-3 line-clamp-1" title={f.title}>{f.title}</h3>
-            <div className="text-xs text-slate-500 mt-1">{(f.size/1024).toFixed(1)} KB • {new Date(f.created_at).toLocaleDateString()}</div>
+            <h3 className="font-semibold mt-3 line-clamp-1 text-slate-900 dark:text-white" title={f.title}>{f.title}</h3>
+            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{(f.size/1024).toFixed(1)} KB • {new Date(f.created_at).toLocaleDateString()}</div>
             <div className="flex gap-2 mt-4">
-              <button onClick={()=>openMediaFile(mediaUrl(f.file)).catch(()=>alert(t('books_load_err')))} className="flex-1 px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium text-center flex items-center justify-center gap-1"><Eye size={14}/> {t('files_open')}</button>
-              <button onClick={()=>openPreview(f)} className="px-3 py-2 rounded-xl bg-slate-100 text-sm">{t('files_preview')}</button>
-              {canDelete(f) && <button onClick={()=>del(f.id)} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-red-50 text-red-600 flex items-center justify-center" aria-label={t('delete')}><Trash2 size={16}/></button>}
+              <button onClick={()=>openMediaFile(mediaUrl(f.file)).catch(()=>alert(t('books_load_err')))} className="flex-1 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium text-center flex items-center justify-center gap-1"><Eye size={14}/> {t('files_open')}</button>
+              <button onClick={()=>openPreview(f)} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-slate-200 text-sm">{t('files_preview')}</button>
+              {canDelete(f) && <button onClick={()=>del(f.id)} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center" aria-label={t('delete')}><Trash2 size={16}/></button>}
             </div>
           </div>
         ))}
       </div>
-      {list.length===0 && <div className="text-center py-16 text-slate-400 bg-white rounded-2xl border">{t('files_empty_list')}</div>}
+      {list.length===0 && <div className="text-center py-16 text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-800">{t('files_empty_list')}</div>}
       {preview && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={()=>{setPreview(null); if(previewUrl) URL.revokeObjectURL(previewUrl)}}>
-          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}>
-            <div className="p-4 border-b flex items-center justify-between"><h3 className="font-bold">{preview.title}</h3><button onClick={()=>{setPreview(null); if(previewUrl) URL.revokeObjectURL(previewUrl)}} className="px-3 py-1.5 rounded-xl bg-slate-100">{t('close')}</button></div>
-            <div className="flex-1 overflow-auto p-4 bg-slate-50">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={()=>{setPreview(null); if(previewUrl) URL.revokeObjectURL(previewUrl)}}>
+          <div className="bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}>
+            <div className="p-4 border-b dark:border-slate-800 flex items-center justify-between"><h3 className="font-bold text-slate-900 dark:text-white">{preview.title}</h3><button onClick={()=>{setPreview(null); if(previewUrl) URL.revokeObjectURL(previewUrl)}} className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-slate-200">{t('close')}</button></div>
+            <div className="flex-1 overflow-auto p-4 bg-slate-50 dark:bg-slate-950">
               {previewUrl && preview.file_type==='image' ? <img src={previewUrl} className="max-w-full mx-auto rounded-xl" referrerPolicy="no-referrer"/> :
                previewUrl && preview.file?.endsWith('.pdf') ? <iframe src={previewUrl} className="w-full h-[60vh] rounded-xl border bg-white" sandbox="allow-same-origin" title="preview"/> :
                <div className="text-center py-12"><p className="text-slate-500">{t('files_preview_na')}</p><button onClick={()=>openMediaFile(mediaUrl(preview.file), preview.title).catch(()=>alert(t('books_load_err')))} className="inline-block mt-4 px-5 py-2.5 rounded-xl bg-indigo-600 text-white">{t('files_download')}</button></div>

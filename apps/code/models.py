@@ -7,13 +7,18 @@ class CodeTask(models.Model):
         ('javascript','JavaScript'),
         ('html','HTML'),
         ('css','CSS'),
+        ('sql','SQL (PostgreSQL)'),
     ]
     title = models.CharField(max_length=300)
     description = models.TextField(blank=True)
     language = models.CharField(max_length=20, choices=LANG_CHOICES, default='python')
     starter_code = models.TextField(blank=True)
+    schema_sql = models.TextField(blank=True, default='', help_text="DDL и начальные данные для SQL-задач")
     solution = models.TextField(blank=True, help_text="Эталонное решение")
-    tests = models.JSONField(default=list, blank=True, help_text="[{input, expected}]")
+    tests = models.JSONField(default=list, blank=True, help_text="[{label, input, expected, hidden, type, ...}]")
+    max_score = models.PositiveIntegerField(default=100)
+    classroom = models.ForeignKey('classroom.Classroom', on_delete=models.SET_NULL, null=True, blank=True, related_name='code_tasks')
+    assignment = models.OneToOneField('classroom.Assignment', on_delete=models.SET_NULL, null=True, blank=True, related_name='code_task')
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name='code_tasks')
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -26,6 +31,10 @@ class CodeSubmission(models.Model):
     code = models.TextField()
     output = models.TextField(blank=True)
     passed = models.BooleanField(default=False)
+    score = models.FloatField(default=0)
+    passed_tests = models.PositiveIntegerField(default=0)
+    total_tests = models.PositiveIntegerField(default=0)
+    test_results = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
 class SharedCode(models.Model):

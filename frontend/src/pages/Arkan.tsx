@@ -3,10 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom'
 import client from '../api/client'
 import { useAccessibility, toast } from '../context/UIContext'
 import { playArkanSound } from '../utils/sound'
-import { sfx } from '../utils/sfx'
+import { sfx, startBgMusic, stopBgMusic, isBgMusicPlaying } from '../utils/sfx'
 import { READY_TOPICS } from '../data/readyTopics'
 import { isStudent, isGuest } from '../utils/role'
-import { Play, Volume2, ArrowRight, RotateCcw, Sparkles, Plus, Trash2, Users, Bot, Zap } from 'lucide-react'
+import { Play, Volume2, Music, ArrowRight, RotateCcw, Sparkles, Plus, Trash2, Users, Bot, Zap } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 
 type Opt = { id?: number; text: string; is_correct: boolean }
@@ -117,21 +117,29 @@ function Arkan2DScene({
   theme: ArenaTheme
   onChangeTheme: (t: ArenaTheme) => void
 }) {
-  // Живой 30fps таймер для плавных 2D-анимаций (рывки, орёл, облака, дым юрт, факелы, вибрация каната)
+  // Живой 30fps таймер для плавных 2D-анимаций (авто-пауза при скрытой вкладке — бережёт CPU на слабых ноутбуках)
   const [animT, setAnimT] = useState(0)
   useEffect(() => {
     let raf = 0
     let lastTs = 0
     const start = performance.now()
     const loop = (now: number) => {
+      if (document.hidden) { raf = 0; return }
       if (now - lastTs >= 33) {
         lastTs = now
         setAnimT((now - start) / 1000)
       }
       raf = requestAnimationFrame(loop)
     }
+    const onVis = () => {
+      if (!document.hidden && !raf) raf = requestAnimationFrame(loop)
+    }
+    document.addEventListener('visibilitychange', onVis)
     raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      if (raf) cancelAnimationFrame(raf)
+    }
   }, [])
 
   // Центр поля в SVG: X = 450 (из 900). Смещение каната: до ±165px.
@@ -804,8 +812,28 @@ export default function Arkan() {
   const [combo, setCombo] = useState(0)
   const [lastGain, setLastGain] = useState<string | null>(null)
   const [pullAnim, setPullAnim] = useState<'none' | 'A' | 'B'>('none')
+  const [musicOn, setMusicOn] = useState(false)
   const qStartRef = useRef(0)
   const tickRef = useRef(0)
+
+  useEffect(() => {
+    const sync = () => setMusicOn(isBgMusicPlaying())
+    window.addEventListener('audio-state-change', sync)
+    return () => {
+      window.removeEventListener('audio-state-change', sync)
+      stopBgMusic()
+    }
+  }, [])
+
+  const toggleBattleMusic = () => {
+    if (musicOn) {
+      stopBgMusic()
+      setMusicOn(false)
+    } else {
+      startBgMusic('arkan')
+      setMusicOn(true)
+    }
+  }
 
   useEffect(() => {
     if (!isGuest()) client.get('/tests/?owner=me').then(r => setMine(Array.isArray(r.data) ? r.data : r.data.results || [])).catch(() => {})
@@ -1315,14 +1343,27 @@ export default function Arkan() {
     const ci = correctIdx(q)
     return (
       <div className="max-w-5xl mx-auto space-y-4">
-        <div className="flex items-center justify-between">
-          <button onClick={() => setPhase('lobby')}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <button onClick={() => { stopBgMusic(); setMusicOn(false); setPhase('lobby') }}
             className="inline-flex items-center gap-1 text-sm font-bold text-indigo-600 dark:text-indigo-400">
             {tr('arkan_exit_battle')}
           </button>
-          <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">
-            {battleMode === 'duel' ? '⚡ Одновременная дуэль 2 команд' : battleMode === 'ai' ? '🤖 Против ИИ-батыров' : '🔄 По очереди'}
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleBattleMusic}
+              className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border transition ${
+                musicOn
+                  ? 'bg-indigo-600 text-white border-indigo-500'
+                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              <Music size={13} /> {musicOn ? 'Музыка: Вкл' : 'Музыка'}
+            </button>
+            <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">
+              {battleMode === 'duel' ? '⚡ Одновременная дуэль 2 команд' : battleMode === 'ai' ? '🤖 Против ИИ-батыров' : '🔄 По очереди'}
+            </span>
+          </div>
         </div>
 
         {/* Полноценная 2D-Сцена Аркан Тартыш */}

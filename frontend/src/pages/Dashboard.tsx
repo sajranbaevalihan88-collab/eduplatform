@@ -98,54 +98,53 @@ export default function Dashboard(){
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger">
         {cards.map(c=>(
-          <Link key={c.label} to={c.to} className="bg-white rounded-2xl p-5 border border-slate-100 card-hover group">
+          <Link key={c.label} to={c.to} className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-100 dark:border-slate-800 card-hover group">
             <div className="flex items-center justify-between">
               <div className={`w-12 h-12 rounded-xl ${c.color} flex items-center justify-center text-white`}><c.icon size={22}/></div>
-              <span className="text-3xl font-display font-extrabold"><CountUp value={c.value} /></span>
+              <span className="text-3xl font-display font-extrabold text-slate-900 dark:text-white"><CountUp value={c.value} /></span>
             </div>
-            <div className="mt-3 font-semibold group-hover:text-indigo-600 transition-colors">{c.label}</div>
-            <div className="text-sm text-slate-500 flex items-center gap-1 mt-1 group-hover:gap-2 transition-all">{t('dash_go')} <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform"/></div>
+            <div className="mt-3 font-semibold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{c.label}</div>
+            <div className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-1 group-hover:gap-2 transition-all">{t('dash_go')} <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform"/></div>
           </Link>
         ))}
       </div>
-      <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3 text-xs text-emerald-700 text-center flex items-center justify-center gap-2 animate-fadeIn"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulseSoft"/>{t('dash_db')}</div>
       {due>0 && (
-        <Link to="/classes" className="flex items-center justify-center gap-2 rounded-2xl p-4 bg-amber-50 border border-amber-200 text-amber-800 font-semibold card-hover">
+        <Link to="/classes" className="flex items-center justify-center gap-2 rounded-2xl p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 font-semibold card-hover">
           <Clock size={18}/> {t('cls_due')}: {due} → {t('classes')}
         </Link>
       )}
       {student && (
-        <Link to="/diary" className="flex items-center justify-center gap-2 rounded-2xl p-4 bg-indigo-50 border border-indigo-200 text-indigo-800 font-semibold card-hover">
+        <Link to="/diary" className="flex items-center justify-center gap-2 rounded-2xl p-4 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 text-indigo-800 dark:text-indigo-300 font-semibold card-hover">
           <BookOpenCheck size={18}/> {t('diary')} — {t('dash_go')}
         </Link>
       )}
 
       <div className="grid lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 p-6 card-hover">
-          <h3 className="font-bold text-lg flex items-center gap-2">{t('dash_how')}</h3>
-          <ol className="mt-4 space-y-3 text-sm stagger">
-            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors"><span className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">1</span> {t('dash_step1')}</li>
-            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors"><span className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">2</span> {t('dash_step2')}</li>
-            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors"><span className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">3</span> {t('dash_step3')}</li>
-            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors"><span className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">4</span> {t('dash_step4')}</li>
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 card-hover">
+          <h3 className="font-bold text-lg flex items-center gap-2 text-slate-900 dark:text-white">{t('dash_how')}</h3>
+          <ol className="mt-4 space-y-3 text-sm text-slate-700 dark:text-slate-300 stagger">
+            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/70 transition-colors"><span className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold shrink-0">1</span> {t('dash_step1')}</li>
+            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/70 transition-colors"><span className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold shrink-0">2</span> {t('dash_step2')}</li>
+            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/70 transition-colors"><span className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold shrink-0">3</span> {t('dash_step3')}</li>
+            <li className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/70 transition-colors"><span className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold shrink-0">4</span> {t('dash_step4')}</li>
           </ol>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-100 p-6 card-hover">
-          <h3 className="font-bold flex items-center gap-2">{t('dash_quick')}</h3>
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 card-hover">
+          <h3 className="font-bold flex items-center gap-2 text-slate-900 dark:text-white">{t('dash_quick')}</h3>
           <div className="grid grid-cols-2 gap-3 mt-4 stagger">
             {!student && me?.role !== 'parent' ? (
               <>
                 <Link to="/lessons/new" className="p-4 rounded-xl bg-indigo-600 text-white text-center font-medium flex flex-col items-center gap-2 shadow-md btn-hover"><Layers size={24}/>{t('dash_new_lesson')}</Link>
-                {me?.role!=='admin' && <Link to="/board" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-indigo-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><PenTool size={24}/>{t('board')}</Link>}
-                {me?.role!=='admin' && <Link to="/presentations/new" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-orange-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><Cuboid size={24}/>{t('dash_pres_one')}</Link>}
-                <Link to="/tests/new" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-rose-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><FlaskConical size={24}/>{t('dash_test_one')}</Link>
+                {me?.role!=='admin' && <Link to="/board" className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700 hover:border-indigo-200 hover:shadow-md text-center font-medium text-slate-800 dark:text-slate-100 flex flex-col items-center gap-2 card-hover"><PenTool size={24}/>{t('board')}</Link>}
+                {me?.role!=='admin' && <Link to="/presentations/new" className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700 hover:border-orange-200 hover:shadow-md text-center font-medium text-slate-800 dark:text-slate-100 flex flex-col items-center gap-2 card-hover"><Cuboid size={24}/>{t('dash_pres_one')}</Link>}
+                <Link to="/tests/new" className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700 hover:border-rose-200 hover:shadow-md text-center font-medium text-slate-800 dark:text-slate-100 flex flex-col items-center gap-2 card-hover"><FlaskConical size={24}/>{t('dash_test_one')}</Link>
               </>
             ) : (
               <>
                 <Link to="/classes" className="p-4 rounded-xl bg-indigo-600 text-white text-center font-medium flex flex-col items-center gap-2 shadow-md btn-hover"><GraduationCap size={24}/>{t('classes')}</Link>
-                <Link to={me?.role==='parent'?'/children':'/progress'} className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-indigo-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><BookOpenCheck size={24}/>{me?.role==='parent'?'Дневник':t('progress_t')}</Link>
-                <Link to="/portfolio" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-amber-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><BookOpen size={24}/>{t('pf_title')}</Link>
-                <Link to="/tests" className="p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-rose-200 hover:shadow-md text-center font-medium flex flex-col items-center gap-2 card-hover"><FlaskConical size={24}/>{t('tests')}</Link>
+                <Link to={me?.role==='parent'?'/children':'/progress'} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700 hover:border-indigo-200 hover:shadow-md text-center font-medium text-slate-800 dark:text-slate-100 flex flex-col items-center gap-2 card-hover"><BookOpenCheck size={24}/>{me?.role==='parent'?'Дневник':t('progress_t')}</Link>
+                <Link to="/portfolio" className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700 hover:border-amber-200 hover:shadow-md text-center font-medium text-slate-800 dark:text-slate-100 flex flex-col items-center gap-2 card-hover"><BookOpen size={24}/>{t('pf_title')}</Link>
+                <Link to="/tests" className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700 hover:border-rose-200 hover:shadow-md text-center font-medium text-slate-800 dark:text-slate-100 flex flex-col items-center gap-2 card-hover"><FlaskConical size={24}/>{t('tests')}</Link>
               </>
             )}
           </div>

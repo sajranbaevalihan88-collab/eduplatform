@@ -9,7 +9,7 @@ import re
 import requests
 
 MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-3-flash-preview']
-_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={k}'
+_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent'
 
 
 def _strip_fences(s):
@@ -36,7 +36,8 @@ def generate_text(prompt, api_key='', preferred_model='', expect_json=False):
     for model_name in models:
         try:
             r = requests.post(
-                _API_URL.format(m=model_name, k=api_key),
+                _API_URL.format(m=model_name),
+                headers={'x-goog-api-key': api_key},
                 json={
                     'contents': [{'parts': [{'text': prompt}]}],
                     'generationConfig': {'temperature': 0.6, 'maxOutputTokens': 4096},

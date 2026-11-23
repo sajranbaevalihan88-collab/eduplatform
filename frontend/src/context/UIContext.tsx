@@ -10,7 +10,7 @@ export function ToastContainer(){
   useEffect(()=>{
     push = (msg, type='info')=>{
       const id=Date.now()+Math.random()
-      // звуковая обратная связь продукта — свой синт-набор (scripts/gen_ui_sounds.py)
+      // Студийная звуковая обратная связь (/audio/sfx/)
       if(type==='success') playUiSound('ui-success')
       else if(type==='error') playUiSound('ui-error')
       setToasts(t=>[...t,{id,msg,type}])

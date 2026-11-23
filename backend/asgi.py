@@ -23,10 +23,22 @@ def _ws_patterns():
 
 
 def _allowed_ws_origins():
-    origins = list(getattr(settings, 'ALLOWED_HOSTS', []) or [])
+    """Явный список разрешённых Origin для WebSocket (без wildcard-субдоменов типа .onrender.com)."""
+    origins = []
     for o in getattr(settings, 'CORS_ALLOWED_ORIGINS', []) or []:
-        if o and o not in origins:
+        o = (o or '').strip().rstrip('/')
+        if o and o != '*' and o not in origins:
             origins.append(o)
+    for h in getattr(settings, 'ALLOWED_HOSTS', []) or []:
+        h = (h or '').strip()
+        if not h or h == '*' or h.startswith('.') or h == 'testserver':
+            continue
+        if h not in origins:
+            origins.append(h)
+    if getattr(settings, 'DEBUG', False):
+        for dev_host in ('localhost', '127.0.0.1'):
+            if dev_host not in origins:
+                origins.append(dev_host)
     return origins or ['localhost', '127.0.0.1']
 
 

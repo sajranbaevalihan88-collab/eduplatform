@@ -1,24 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import client, { mediaSrc } from '../api/client'
+import client, { mediaSrc, clearLocalSession } from '../api/client'
 import {
   User, Mail, Shield, BookOpen, Layers, Presentation, FlaskConical, LogOut, Trash2,
   Eye, EyeOff, Edit, Search, Filter, Gamepad2, Play, StickyNote, UserPlus, Users,
   Check, X as XIcon, KeyRound, Camera, Image as ImageIcon, Upload, Calendar,
-  Loader2, SlidersHorizontal, Plus, ChevronDown, ChevronUp, Download, FileText,
+  Loader2, SlidersHorizontal, Plus, ChevronDown, ChevronUp, FileText,
 } from 'lucide-react'
 import { useNavigate, Link } from 'react-router-dom'
 import { toast } from '../context/UIContext'
 import Notes from './Notes'
 import QuizBuilder from '../components/QuizBuilder'
+import BackupRestoreActions from '../components/BackupRestoreCard'
 import { useLang } from '../context/LangContext'
 
 const BANNER_PRESETS = [
-  { id: 'slate',    name: 'Графит', css: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)' },
-  { id: 'steel',    name: 'Сталь',  css: 'linear-gradient(160deg, #1e3a5f 0%, #0f2035 100%)' },
-  { id: 'ink',      name: 'Ночь',   css: 'linear-gradient(160deg, #1e2444 0%, #11152b 100%)' },
-  { id: 'pine',     name: 'Хвоя',   css: 'linear-gradient(160deg, #16302a 0%, #0d1e1a 100%)' },
-  { id: 'sand',     name: 'Камень', css: 'linear-gradient(160deg, #2c2825 0%, #1a1715 100%)' },
-  { id: 'burgundy', name: 'Бордо',  css: 'linear-gradient(160deg, #3a1924 0%, #1d0c12 100%)' },
+  { id: 'slate', name: 'Графит', css: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)' },
+  { id: 'steel', name: 'Сталь', css: 'linear-gradient(160deg, #1e3a5f 0%, #0f2035 100%)' },
+  { id: 'ink', name: 'Ночь', css: 'linear-gradient(160deg, #1e2444 0%, #11152b 100%)' },
+  { id: 'pine', name: 'Хвоя', css: 'linear-gradient(160deg, #16302a 0%, #0d1e1a 100%)' },
+  { id: 'sand', name: 'Камень', css: 'linear-gradient(160deg, #2c2825 0%, #1a1715 100%)' },
+  { id: 'burgundy', name: 'Бордо', css: 'linear-gradient(160deg, #3a1924 0%, #1d0c12 100%)' },
 ] as const
 
 function getBannerCss(presetId?: string): string {
@@ -31,7 +32,7 @@ function syncStoredUser(nextUser: any) {
     const prev = raw ? JSON.parse(raw) : {}
     localStorage.setItem('user', JSON.stringify({ ...prev, ...nextUser }))
     window.dispatchEvent(new Event('auth-change'))
-  } catch {}
+  } catch { }
 }
 
 export default function Profile() {
@@ -115,7 +116,7 @@ export default function Profile() {
     client.get('/auth/parents/').then(r => setParentsList(Array.isArray(r.data) ? r.data : [])).catch(() => setParentsList([]))
   }
   useEffect(() => { if (isAdmin && parentsOpen && parentsList === null) loadParents() }, [isAdmin, parentsOpen])
-  const refreshUsers = () => client.get('/auth/users/').then(r => setUsersList(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+  const refreshUsers = () => client.get('/auth/users/').then(r => setUsersList(Array.isArray(r.data) ? r.data : [])).catch(() => { })
   const doLink = async (action: 'link' | 'unlink') => {
     if (linkBusy) return
     if (!linkParent.trim() || !linkStudent.trim()) { toast(t('parents_link_need_both'), 'error'); return }
@@ -191,7 +192,7 @@ export default function Profile() {
       toast(t('admin_del_user_done'), 'success')
       setDelNick('')
       setUsersList(prev => prev ? prev.filter((x: any) => x.username.toLowerCase() !== nick.toLowerCase()) : prev)
-      client.get('/auth/users/').then(r => setUsersList(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+      client.get('/auth/users/').then(r => setUsersList(Array.isArray(r.data) ? r.data : [])).catch(() => { })
     } catch (e: any) {
       toast(e?.response?.data?.error || e?.response?.data?.detail || t('error'), 'error')
     }
@@ -232,7 +233,7 @@ export default function Profile() {
       client.get('/subjects/').then(rr => {
         const arr = Array.isArray(rr.data) ? rr.data : rr.data.results || []
         setSubjects(arr)
-      }).catch(() => {})
+      }).catch(() => { })
       try {
         const rawDraft = localStorage.getItem('lesson-draft')
         if (rawDraft) {
@@ -242,7 +243,7 @@ export default function Profile() {
           if (hasContent && age < 7 * 24 * 60 * 60 * 1000) setDraft(d)
           else localStorage.removeItem('lesson-draft')
         }
-      } catch {}
+      } catch { }
 
       Promise.all([
         client.get('/lessons/?owner=me').then(r => r.data.results || r.data).catch(() => client.get('/lessons/').then(r => r.data.results || r.data).catch(() => [])),
@@ -374,7 +375,7 @@ export default function Profile() {
       const r = await client.patch('/auth/me/', { banner_position: pos })
       setMe(r.data)
       syncStoredUser(r.data)
-    } catch {}
+    } catch { }
   }
 
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -437,8 +438,16 @@ export default function Profile() {
     setPwBusy(false)
   }
 
-  const logout = () => {
-    localStorage.clear()
+  const logout = async () => {
+    const refresh = localStorage.getItem('refresh')
+    if (refresh) {
+      try {
+        await client.post('/auth/logout/', { refresh })
+      } catch {
+        // выход должен срабатывать даже при сетевой ошибке
+      }
+    }
+    clearLocalSession()
     window.dispatchEvent(new Event('auth-change'))
     nav('/login')
   }
@@ -652,11 +661,10 @@ export default function Profile() {
               <button
                 type="button"
                 onClick={() => { setEdit(v => !v); setPwOpen(false) }}
-                className={`px-3.5 py-2 min-h-[40px] rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition ${
-                  edit
-                    ? 'bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200'
-                    : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90'
-                }`}
+                className={`px-3.5 py-2 min-h-[40px] rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition ${edit
+                  ? 'bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200'
+                  : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90'
+                  }`}
               >
                 <Edit size={14} /> {edit ? t('cancel') : t('edit')}
               </button>
@@ -1315,42 +1323,7 @@ export default function Profile() {
               <span>Резервные копии и памятка учителя</span>
               {deployOpen ? <ChevronUp size={15} className="text-slate-400" /> : <ChevronDown size={15} className="text-slate-400" />}
             </button>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={async () => {
-                  try {
-                    const r = await client.get('/classrooms/backup_data/', { responseType: 'blob' })
-                    const url = URL.createObjectURL(new Blob([r.data], { type: 'application/json' }))
-                    const a = document.createElement('a'); a.href = url; a.download = 'eduplatform-backup.json'; a.click()
-                    URL.revokeObjectURL(url)
-                    toast('Резервная копия скачана', 'success')
-                  } catch { toast('Ошибка скачивания резервной копии', 'error') }
-                }}
-                className="px-3.5 py-2 min-h-[40px] rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 border border-slate-800 dark:border-slate-700 text-white text-xs font-semibold flex items-center gap-1.5"
-              >
-                <Download size={13} /> Скачать копию (JSON)
-              </button>
-              {(me?.role === 'admin' || me?.is_staff) && (
-                <label className="px-3.5 py-2 min-h-[40px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-slate-200 border dark:border-slate-700 text-xs font-semibold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1.5">
-                  <Upload size={13} /> Восстановить программу
-                  <input
-                    type="file"
-                    accept=".json"
-                    className="hidden"
-                    onChange={async e => {
-                      const f = e.target.files?.[0]; e.target.value = ''
-                      if (!f) return
-                      try {
-                        const txt = await f.text()
-                        const data = JSON.parse(txt)
-                        const r = await client.post('/classrooms/restore_backup/', data)
-                        toast(`Восстановлено тем учебной программы: ${r.data.restored_topics}`, 'success')
-                      } catch (err: any) { toast(err?.response?.data?.detail || 'Некорректный файл резервной копии', 'error') }
-                    }}
-                  />
-                </label>
-              )}
-            </div>
+            <BackupRestoreActions isAdmin={isAdmin} />
           </div>
 
           {deployOpen && (
@@ -1511,9 +1484,8 @@ export default function Profile() {
                         key={pr.id}
                         type="button"
                         onClick={() => selectBannerPreset(pr.id)}
-                        className={`h-11 rounded-lg relative overflow-hidden border transition ${
-                          active ? 'border-slate-900 dark:border-white ring-2 ring-slate-400/50' : 'border-slate-200 dark:border-slate-700'
-                        }`}
+                        className={`h-11 rounded-lg relative overflow-hidden border transition ${active ? 'border-slate-900 dark:border-white ring-2 ring-slate-400/50' : 'border-slate-200 dark:border-slate-700'
+                          }`}
                         style={{ background: pr.css }}
                         title={pr.name}
                       >

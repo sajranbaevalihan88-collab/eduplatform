@@ -7,7 +7,7 @@ import {
   Maximize2, ZoomIn, ZoomOut, List, ListOrdered, Highlighter, Undo2, Redo2, Shapes,
   BookOpen, Pencil, Printer, ArrowUp, ArrowDown, BringToFront, SendToBack, CheckCircle2,
   Wand2, ChevronDown, Lock, Unlock, GripHorizontal, MessageSquare, FileImage, Sparkles,
-  RotateCw, LayoutTemplate, AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter,
+  RotateCw, LayoutTemplate, AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Download,
 } from 'lucide-react'
 import { PdfPage, FitBox } from '../components/pptxView'
 import {
@@ -129,7 +129,7 @@ function videoEmbedUrl(src: string) {
   if (m) return `https://vk.com/video_ext.php?oid=${m[1]}&id=${m[2]}`
   m = s.match(/rutube\.ru\/video\/([\w]+)/)
   if (m) return `https://rutube.ru/play/embed/${m[1]}`
-  return s
+  return ''
 }
 
 function getSlideBgStyle(s: Slide): React.CSSProperties {
@@ -261,9 +261,16 @@ function renderStaticBlock(b: any, prefix: string, fontScale = 1) {
     )
   }
   if (b.type === 'video') {
+    const embed = videoEmbedUrl(b.content || '')
     return (
       <div key={b.id} className={anim} style={boxPos}>
-        <iframe src={videoEmbedUrl(b.content || '')} title="video" className="w-full h-full rounded-lg" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups" />
+        {embed ? (
+          <iframe src={embed} title="video" className="w-full h-full rounded-lg" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups" />
+        ) : (
+          <div className="w-full h-full rounded-lg bg-slate-100 border border-dashed border-slate-300 text-slate-500 text-xs flex items-center justify-center p-2 text-center">
+            Поддерживаются видео YouTube, VK и Rutube
+          </div>
+        )}
       </div>
     )
   }
@@ -1404,24 +1411,68 @@ export default function PresentationEditor() {
     e.target.value = ''
   }
 
+  const [exportingPptx, setExportingPptx] = useState(false)
+
+  // ==================== ЭКСПОРТ В НАСТОЯЩИЙ .PPTX ====================
+  const exportSlidesPptx = async () => {
+    if (exportingPptx) return
+    setExportingPptx(true)
+    try {
+      const res = await client.post(
+        '/presentations/export_pptx/',
+        { title: title || 'Презентация', slides },
+        { responseType: 'blob' }
+      )
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const cleanName = (title || 'presentation').replace(/[\\/:*?"<>|]+/g, '_').trim() || 'presentation'
+      a.download = `${cleanName}.pptx`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 10000)
+      toast(`Скачан файл «${cleanName}.pptx»`, 'success')
+    } catch (e: any) {
+      toast(e?.response?.data?.error || 'Не удалось экспортировать .pptx', 'error')
+    } finally {
+      setExportingPptx(false)
+    }
+  }
+
   // ==================== ЭКСПОРТ PDF ====================
   const exportSlidesPdf = () => {
-    const win = window.open('', '_blank')
-    if (!win) { toast('Разреши всплывающие окна для экспорта в PDF / печати', 'error'); return }
     const esc = (s: string) => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[c])
+    const safeNum = (v: any, fb: number) => { const n = Number(v); return Number.isFinite(n) ? n : fb }
+    const safeCssVal = (v: any, fb: string) => {
+      const s = String(v || '').trim()
+      if (!s || /[<>;"'\\]|expression|javascript|url\s*\(/i.test(s)) return fb
+      return esc(s.slice(0, 220))
+    }
+    const safeAlign = (v: any) => (['left', 'center', 'right', 'justify'].includes(String(v)) ? String(v) : 'left')
+    const safeFit = (v: any) => (['contain', 'cover', 'fill', 'none'].includes(String(v)) ? String(v) : 'contain')
+    const safeFont = (v: any) => String(v || 'Inter').replace(/[^a-zA-Zа-яА-ЯёЁ0-9 _-]/g, '').slice(0, 48) || 'Inter'
     const pagesHtml = slides.map(s => {
-      const bg = s.backgroundType === 'gradient' && s.gradient ? s.gradient : (s.background || '#ffffff')
+      const rawBg = s.backgroundType === 'gradient' && s.gradient ? s.gradient : (s.background || '#ffffff')
+      const bg = safeCssVal(rawBg, '#ffffff')
       const blocksHtml = (s.content.blocks || [])
         .slice()
-        .sort((a: any, b: any) => (a.style?.z || 0) - (b.style?.z || 0))
+        .sort((a: any, b: any) => (safeNum(a.style?.z, 0)) - (safeNum(b.style?.z, 0)))
         .map((b: any) => {
           const st = b.style || {}
-          const pos = `position:absolute;left:${st.x ?? 5}%;top:${st.y ?? 10}%;width:${st.w ?? 90}%;height:${st.h != null ? `${st.h}%` : 'auto'};z-index:${st.z || 1};`
+          const pos = `position:absolute;left:${safeNum(st.x, 5)}%;top:${safeNum(st.y, 10)}%;width:${safeNum(st.w, 90)}%;height:${st.h != null ? `${safeNum(st.h, 20)}%` : 'auto'};z-index:${Math.round(safeNum(st.z, 1))};`
           if (b.type === 'text') {
             const txt = b.paragraphs ? b.paragraphs.map((p: any) => p.runs ? p.runs.map((r: any) => r.text || '').join('') : (p.text || '')).join('\n') : (b.content || '')
-            return `<div style="${pos}font-size:${st.fontSize || 18}px;font-weight:${st.bold ? 700 : 400};font-style:${st.italic ? 'italic' : 'normal'};color:${st.color || '#1e293b'};text-align:${st.align || 'left'};white-space:pre-wrap;font-family:${st.fontFamily || 'Inter'},sans-serif;background:${st.background || 'transparent'};border-radius:${st.borderRadius || 0}px;padding:${st.background ? '6px 8px' : '2px 6px'}">${esc(txt)}</div>`
+            return `<div style="${pos}font-size:${safeNum(st.fontSize, 18)}px;font-weight:${st.bold ? 700 : 400};font-style:${st.italic ? 'italic' : 'normal'};color:${safeCssVal(st.color, '#1e293b')};text-align:${safeAlign(st.align)};white-space:pre-wrap;font-family:'${safeFont(st.fontFamily)}',sans-serif;background:${safeCssVal(st.background, 'transparent')};border-radius:${safeNum(st.borderRadius, 0)}px;padding:${st.background ? '6px 8px' : '2px 6px'}">${esc(txt)}</div>`
           }
-          if (b.type === 'image' && b.src) return `<img src="${esc(resolveSrc(b.src))}" style="${pos}object-fit:${st.objectFit || 'contain'};border-radius:${st.borderRadius || 0}px;" />`
+          if (b.type === 'image' && b.src) {
+            const srcStr = resolveSrc(b.src)
+            if (/^javascript:|^data:text\/html|^data:image\/svg/i.test(srcStr.trim())) return ''
+            return `<img src="${esc(srcStr)}" style="${pos}object-fit:${safeFit(st.objectFit)};border-radius:${safeNum(st.borderRadius, 0)}px;" />`
+          }
           if (b.type === 'shape') return renderShapeHtml(b, pos)
           if (b.type === 'table') return renderTableHtml(b, pos)
           if (b.type === 'chart') return renderChartHtml(b, pos)
@@ -1429,8 +1480,24 @@ export default function PresentationEditor() {
         }).join('')
       return `<section class="slide" style="background:${bg}">${blocksHtml}</section>`
     }).join('')
-    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:landscape;margin:0}*{box-sizing:border-box}body{margin:0;background:#111;display:flex;flex-direction:column;align-items:center;gap:16px;padding:16px;font-family:Inter,system-ui,sans-serif}.slide{width:960px;height:540px;position:relative;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.4);page-break-after:always}@media print{body{background:#fff;padding:0;gap:0}.slide{width:100vw;height:100vh;box-shadow:none}}</style></head><body>${pagesHtml}<script>setTimeout(()=>window.print(),350)</script></body></html>`)
-    win.document.close()
+    // Печатаем через скрытый iframe без выполнения скриптов и без передачи window.opener
+    const frame = document.createElement('iframe')
+    frame.style.display = 'none'
+    document.body.appendChild(frame)
+    try {
+      const doc = frame.contentDocument
+      if (!doc) { toast('Не удалось открыть печать PDF', 'error'); return }
+      doc.open()
+      doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:landscape;margin:0}*{box-sizing:border-box}body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif}.slide{width:960px;height:540px;position:relative;overflow:hidden;page-break-after:always}@media print{.slide{width:100vw;height:100vh}}</style></head><body>${pagesHtml}</body></html>`)
+      doc.close()
+      setTimeout(() => {
+        try { frame.contentWindow?.focus(); frame.contentWindow?.print() } catch {}
+        setTimeout(() => frame.remove(), 2500)
+      }, 250)
+    } catch {
+      frame.remove()
+      toast('Не удалось открыть печать PDF', 'error')
+    }
   }
 
   // ==================== СОХРАНЕНИЕ И ИМПОРТ ====================
@@ -1815,6 +1882,15 @@ export default function PresentationEditor() {
           className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold whitespace-nowrap shrink-0 flex items-center gap-1 hover:bg-slate-100 dark:hover:bg-slate-700"
         >
           <Eye size={13} /> {PUI.prev}
+        </button>
+        <button
+          type="button"
+          onClick={exportSlidesPptx}
+          disabled={exportingPptx}
+          className="px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold whitespace-nowrap shrink-0 flex items-center gap-1 hover:bg-emerald-100 disabled:opacity-50"
+          title="Скачать настоящий файл PowerPoint (.pptx) со слайдами, таблицами, фигурами и диаграммами"
+        >
+          <Download size={13} /> {exportingPptx ? 'Экспорт…' : 'Скачать .pptx'}
         </button>
         <button
           type="button"

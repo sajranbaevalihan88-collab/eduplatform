@@ -7,38 +7,79 @@ from .serializers import CodeTaskSerializer, CodeTaskDetailSerializer, CodeSubmi
 from apps.accounts.permissions import TeacherWriteMixin
 import subprocess, tempfile, os, sys, json, re, ast, textwrap, urllib.request, urllib.error
 
-# Блокируемые паттерны для Python
-# TODO: Заменить на реальную изоляцию: каждый прогон в Docker/nsjail с лимитами CPU/RAM, read-only FS, --network none
-# Сейчас — усиленный denylist как временная мера, прод — делегировать все в Piston/Judge0 self-hosted
+# Блокируемые паттерны для Python (дополнительный слой поверх строгого AST-allowlist)
+# TODO: В продакшене рекомендуется дополнительно выносить запуски в self-hosted Piston/nsjail (CODE_USE_PISTON_ONLY=True)
 BLOCKED_PY = [
-    'import subprocess','import socket','__import__','subprocess.','socket.','pickle','ctypes','eval(','exec(',
-    # опасные os/shutil даже при разрешённом `import os`
-    'os.system','os.popen','os.spawn','os.exec','os.fork','os.kill','os.remove','os.unlink','os.rename','os.mkdir','os.rmdir','os.removedirs',
-    'os.chmod','os.chown','os.symlink','os.link','os.mknod','os.fifo',
-    'os.getenv','os.putenv','os.open','os.fdopen','os.environ',
-    'shutil.rmtree','shutil.move','shutil.copy','shutil.copytree',
-    'pathlib.Path.write','pathlib.Path.unlink','pathlib.Path.read',
-    '.read_text','.write_text','.open_text',
+    'import subprocess', 'import socket', '__import__', 'subprocess.', 'socket.',
+    'pickle', 'ctypes', 'os.system', 'os.popen', 'os.environ',
 ]
-BLOCKED_JS = ['require(','process.','fs.','child_process','eval(','Function(','import(','globalThis','.constructor(','["constructor"]',"['constructor']"]
 
-# Модули, импорт которых запрещён всегда (ФС, сеть, процессы, низкоуровневый доступ, обход через загрузчики)
-_BLOCKED_MODULES = {
-    'os', 'shutil', 'pathlib', 'glob', 'tempfile', 'platform', 'getpass', 'pwd', 'grp',
-    'resource', 'fcntl', 'mmap', 'codecs', 'sysconfig', 'site', 'pip', 'ensurepip',
-    'subprocess', 'socket', 'ctypes', 'pickle', 'importlib', 'runpy', 'multiprocessing',
-    'sqlite3', 'builtins', 'marshal', 'pty', 'signal', 'threading', '_thread', 'asyncio',
-    'urllib', 'http', 'requests', 'ftplib', 'smtplib', 'telnetlib', 'webbrowser',
-    'code', 'codeop', 'gc', 'inspect', 'venv', 'distutils', 'setuptools',
+# Строгие regex-правила для JavaScript (ловит обходы с пробелами, скобками и индексацией process['env'])
+_BLOCKED_JS_RE = [
+    (re.compile(r'\brequire\b', re.IGNORECASE), 'require'),
+    (re.compile(r'\bprocess\b', re.IGNORECASE), 'process'),
+    (re.compile(r'\bglobalThis\b', re.IGNORECASE), 'globalThis'),
+    (re.compile(r'\bglobal\b', re.IGNORECASE), 'global'),
+    (re.compile(r'\bchild_process\b', re.IGNORECASE), 'child_process'),
+    (re.compile(r'\bworker_threads\b', re.IGNORECASE), 'worker_threads'),
+    (re.compile(r'\bmodule\b', re.IGNORECASE), 'module'),
+    (re.compile(r'\bimport\b', re.IGNORECASE), 'import'),
+    (re.compile(r'\beval\b', re.IGNORECASE), 'eval'),
+    (re.compile(r'\b(?:Async|Generator)?Function\b'), 'Function'),
+    (re.compile(r'\bReflect\b'), 'Reflect'),
+    (re.compile(r'\bProxy\b'), 'Proxy'),
+    (re.compile(r'\bWebAssembly\b'), 'WebAssembly'),
+    (re.compile(r'\bSharedArrayBuffer\b'), 'SharedArrayBuffer'),
+    (re.compile(r'\bfetch\b', re.IGNORECASE), 'fetch'),
+    (re.compile(r'\bXMLHttpRequest\b', re.IGNORECASE), 'XMLHttpRequest'),
+    (re.compile(r'\bWebSocket\b', re.IGNORECASE), 'WebSocket'),
+    (re.compile(r'\b(?:Deno|Bun)\b'), 'Deno/Bun'),
+    (re.compile(r'(?:\.\s*constructor\b|\[\s*[\'"`]constructor[\'"`]\s*\])', re.IGNORECASE), 'constructor'),
+    (re.compile(r'__proto__', re.IGNORECASE), '__proto__'),
+    (re.compile(r'\b(?:get|set)PrototypeOf\b'), 'PrototypeOf'),
+    (re.compile(r'\bdefineProperty\b'), 'defineProperty'),
+    (re.compile(r'\bmainModule\b', re.IGNORECASE), 'mainModule'),
+    (re.compile(r'\bBuffer\b'), 'Buffer'),
+    (re.compile(r'\bfs\s*[\.\[]', re.IGNORECASE), 'fs'),
+]
+
+# Строгий белый список безопасных модулей Python для школьных задач (вместо неполного denylist)
+_SAFE_PY_MODULES = {
+    'math', 'cmath', 'random', 'statistics', 'decimal', 'fractions', 'numbers',
+    'datetime', 'time', 'collections', 'itertools', 'functools', 'operator',
+    'string', 're', 'json', 'hashlib', 'hmac', 'base64', 'copy', 'textwrap',
+    'difflib', 'unicodedata', 'enum', 'dataclasses', 'typing', 'heapq',
+    'bisect', 'array', 'queue', 'abc',
 }
-# «Безопасные» dunder-атрибуты, без которых не работают обычные ученические программы (классы, ООП)
-_ALLOWED_DUNDER = {'__init__','__name__','__str__','__repr__','__len__','__eq__','__lt__','__gt__',
-                   '__le__','__ge__','__add__','__sub__','__mul__','__iter__','__next__','__getitem__',
-                   '__setitem__','__contains__','__enter__','__exit__','__doc__','__hash__','__bool__',
-                   '__call__','__truediv__','__mod__','__neg__','__ne__'}
 
-# Разрешённые импорты для Python (os/sys/pathlib/shutil/django/pygame разрешены)
-ALLOWED_PY_IMPORTS = {'os','sys','pathlib','shutil','re','json','math','random','datetime','collections','itertools','functools','typing','django','flask','pygame','numpy','pandas','requests','io','time','hashlib','copy','string','statistics','decimal','fractions','queue','heapq','bisect','array','enum','dataclasses'}
+# Опасные встроенные имена — запрещены везде (не только в прямом вызове, чтобы заблокировать f = open)
+_BLOCKED_PY_NAMES = {
+    'open', 'eval', 'exec', 'compile', '__import__', 'breakpoint',
+    'globals', 'locals', 'vars', 'getattr', 'setattr', 'delattr',
+    'memoryview', '__builtins__', '__loader__', '__spec__', '__file__',
+    '__cached__', '__package__', '__doc__', 'help', 'license', 'credits',
+    'copyright', 'exit', 'quit', 'dir',
+}
+
+# Опасные имена атрибутов (защита от утечки модулей через атрибуты вроде mod.os / frame.f_globals)
+_BLOCKED_PY_ATTRS = {
+    'os', 'sys', 'io', 'builtins', 'subprocess', 'socket', 'posix', 'nt',
+    'importlib', 'system', 'popen', 'exec', 'eval', 'open', 'open_code',
+    'FileIO', 'modules', 'meta_path', 'path_hooks', 'f_globals', 'f_builtins',
+    'f_locals', 'f_back', 'gi_frame', 'cr_frame', 'ag_frame', 'tb_frame',
+    'tb_next', 'func_globals', 'im_func', 'im_self',
+}
+
+# «Безопасные» dunder-атрибуты, без которых не работают обычные ученические программы (классы, ООП)
+_ALLOWED_DUNDER = {
+    '__init__', '__name__', '__str__', '__repr__', '__len__', '__eq__', '__lt__', '__gt__',
+    '__le__', '__ge__', '__add__', '__sub__', '__mul__', '__iter__', '__next__', '__getitem__',
+    '__setitem__', '__contains__', '__enter__', '__exit__', '__hash__', '__bool__',
+    '__call__', '__truediv__', '__floordiv__', '__mod__', '__neg__', '__ne__',
+}
+
+_CODING_COOKIE_RE = re.compile(r'coding[:=]\s*[-\w.]+', re.IGNORECASE)
+_ALLOWED_PROJECT_EXTS = {'.py', '.js', '.html', '.htm', '.css', '.txt', '.json', '.csv', '.md'}
 
 # Карта языков для Piston API — только 4 рабочих (python/javascript локально стабильно, html/css preview)
 # Остальные отключены: публичный Piston whitelist-only, Godbolt нестабилен на выставке
@@ -99,12 +140,12 @@ def _check_piston_limit() -> tuple[bool, str]:
         return True, ""
 
 def _piston_error_views(lang: str, detail: str) -> tuple[str, bool]:
-    """Честная ошибка Piston для views.py — НИКОГДА не выдумывает вывод.
-    Любой фейковый _simulate_run для кодовых языков запрещён."""
+    """Честная ошибка Piston для views.py — без раскрытия внутренних URL и стектрейсов."""
+    import logging as _plog
+    _plog.getLogger(__name__).warning("Piston error (%s): %s", lang, detail)
     return (
-        f"⚠️ Не удалось выполнить код на языке «{lang}»: сервис выполнения (Piston) "
-        f"недоступен или вернул ошибку.\nПодробности: {detail}\n"
-        f"Попробуй ещё раз через минуту. Если ошибка повторяется — язык требует self-hosted Piston (см. docker-compose.yml, сервис piston)."
+        f"⚠️ Не удалось выполнить код на языке «{lang}»: сервис выполнения временно недоступен.\n"
+        f"Попробуй ещё раз через минуту."
     ), False
 
 def _piston_run(code: str, lang: str, stdin: str = "") -> tuple[str, bool]:
@@ -185,82 +226,301 @@ def _piston_run(code: str, lang: str, stdin: str = "") -> tuple[str, bool]:
     except Exception as e:
         return _piston_error_views(lang, f"{type(e).__name__}: {e}")
 
-def _is_safe_code(code: str, lang: str):
-    if len(code) > 8000:
-        return False, "Код слишком длинный (макс 8000 символов)"
+def _is_safe_code(code: str, lang: str, local_modules: set | None = None):
+    if not isinstance(code, str):
+        return False, "Код должен быть строкой"
+    if len(code) > 50000:
+        return False, "Код слишком длинный (макс 50000 символов)"
     lower = code.lower()
     if lang == 'python':
+        # Защита от PEP 263 кодировок (# coding: raw_unicode_escape), обходящих текстовые/AST проверки
+        first_lines = '\n'.join(code.splitlines()[:2])
+        if _CODING_COOKIE_RE.search(first_lines):
+            return False, "Директива coding: запрещена в песочнице"
         for pat in BLOCKED_PY:
             if pat.lower() in lower:
                 return False, f"Запрещенный паттерн: {pat}"
-        # AST проверка для python — импорты и опасные вызовы
+        allowed_mods = _SAFE_PY_MODULES | (local_modules or set())
         try:
             tree = ast.parse(code)
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Import):
-                    for alias in node.names:
-                        if alias.name.split('.')[0] in _BLOCKED_MODULES:
-                            return False, f"Импорт {alias.name} запрещен"
-                if isinstance(node, ast.ImportFrom):
-                    # `from . import x` — module=None
-                    if (node.module or '').split('.')[0] in _BLOCKED_MODULES or node.level:
-                        return False, f"Импорт из {node.module or '.'} запрещен"
-                # опасные вызовы: open/eval/exec/compile/__import__ — чтение файлов сервера и обход blacklist
-                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                    if node.func.id in ('open','eval','exec','compile','__import__','breakpoint','globals','locals','vars','getattr','setattr','delattr'):
-                        return False, f"Вызов {node.func.id}() запрещен"
-                # побег из песочницы через интроспекцию: ().__class__.__subclasses__(), f.__globals__ и т.п.
-                if isinstance(node, ast.Attribute) and node.attr.startswith('__') and node.attr.endswith('__') \
-                        and node.attr not in _ALLOWED_DUNDER:
-                    return False, f"Доступ к {node.attr} запрещен"
-                if isinstance(node, ast.Name) and node.id in ('__builtins__', '__loader__', '__spec__'):
-                    return False, f"Доступ к {node.id} запрещен"
-                # os.environ / опасные атрибуты sys и io — слив секретов или обход песочницы
-                if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-                    if node.value.id == 'os' and node.attr == 'environ':
-                        return False, "Доступ к os.environ запрещен"
-                    if node.value.id == 'sys' and node.attr in ('modules', '_getframe', '_current_frames', 'meta_path', 'path_hooks'):
-                        return False, f"Доступ к sys.{node.attr} запрещен"
-                    if node.value.id == 'io' and node.attr in ('open', 'FileIO', 'open_code'):
-                        return False, f"Вызов io.{node.attr}() запрещен"
-        except SyntaxError:
-            pass
+        except SyntaxError as e:
+            # Fail-closed: синтаксически некорректный код никогда не передаётся интерпретатору
+            return False, f"Синтаксическая ошибка: {e.msg or 'неверный синтаксис'} (строка {e.lineno or 1})"
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    top = (alias.name or '').split('.')[0]
+                    if top not in allowed_mods:
+                        return False, f"Импорт {alias.name} запрещен в песочнице"
+            elif isinstance(node, ast.ImportFrom):
+                if node.level:
+                    return False, "Относительные импорты запрещены в песочнице"
+                top = (node.module or '').split('.')[0]
+                if top not in allowed_mods:
+                    return False, f"Импорт из {node.module or '.'} запрещен в песочнице"
+            elif isinstance(node, ast.Name):
+                if node.id in _BLOCKED_PY_NAMES:
+                    return False, f"Использование {node.id} запрещено"
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id == 'type' and (len(node.args) != 1 or node.keywords):
+                    return False, "Динамическое создание классов через type() запрещено"
+            elif isinstance(node, ast.Attribute):
+                attr = node.attr or ''
+                # Блокируем все приватные/магические атрибуты (_os, __subclasses__, __globals__, и т.п.)
+                if attr.startswith('_') and attr not in _ALLOWED_DUNDER:
+                    return False, f"Доступ к атрибуту {attr} запрещен"
+                if attr in _BLOCKED_PY_ATTRS:
+                    return False, f"Доступ к атрибуту {attr} запрещен"
     elif lang == 'javascript':
-        for pat in BLOCKED_JS:
-            if pat.lower() in lower:
-                return False, f"Запрещенный паттерн: {pat}"
+        for rx, label in _BLOCKED_JS_RE:
+            if rx.search(code):
+                return False, f"Запрещенная конструкция JavaScript: {label}"
     return True, ""
 
 class CodeRunThrottle(throttling.UserRateThrottle):
     scope = 'code_run'
-    rate = '120/minute'
+    rate = '30/minute'
 
 class AnonCodeThrottle(throttling.AnonRateThrottle):
     rate = '30/minute'
 
+def _norm_out(s: str) -> str:
+    lines = [ln.rstrip() for ln in (s or '').replace('\r\n', '\n').replace('\r', '\n').split('\n')]
+    while lines and lines[-1] == '':
+        lines.pop()
+    while lines and lines[0] == '':
+        lines.pop(0)
+    return '\n'.join(lines)
+
+
+def _match_stdout(actual: str, expected: str) -> bool:
+    a = _norm_out(actual)
+    e = _norm_out(expected)
+    if not e:
+        return True
+    if a == e:
+        return True
+    # Allow matching single-line trimmed output or exact line inside stdout
+    if a.strip() == e.strip():
+        return True
+    a_lines = [ln.strip() for ln in a.splitlines()]
+    e_lines = [ln.strip() for ln in e.splitlines()]
+    if a_lines == e_lines:
+        return True
+    if len(e_lines) == 1 and e_lines[0] in a_lines:
+        return True
+    return False
+
+
+def _eval_web_test(test: dict, html_code: str, css_code: str = '', js_code: str = '') -> tuple[bool, str]:
+    ttype = str(test.get('type') or 'contains').lower().strip()
+    val = str(test.get('value') or test.get('expected') or '').strip()
+    combined = '\n'.join([html_code or '', css_code or '', js_code or ''])
+    if not val:
+        return True, 'OK'
+    if ttype == 'tag':
+        pat = rf'<\s*{re.escape(val)}\b'
+        ok = bool(re.search(pat, html_code or combined, re.IGNORECASE))
+        return ok, (f'Найден тег <{val}>' if ok else f'Не найден тег <{val}>')
+    if ttype == 'attr':
+        ok = val.lower() in (html_code or combined).lower()
+        return ok, (f'Найден атрибут {val}' if ok else f'Не найден атрибут {val}')
+    if ttype == 'css_prop':
+        src = css_code or combined
+        parts = [p.strip() for p in val.split(':', 1)]
+        if len(parts) == 2 and parts[1]:
+            pat = rf'{re.escape(parts[0])}\s*:\s*[^;}}]*{re.escape(parts[1])}'
+        else:
+            pat = rf'{re.escape(parts[0])}\s*:'
+        ok = bool(re.search(pat, src, re.IGNORECASE))
+        return ok, (f'Свойство «{val}» применено' if ok else f'Не найдено CSS-свойство «{val}»')
+    if ttype == 'regex':
+        if len(val) > 200 or re.search(r'\([^)]*[+*][^)]*\)[+*?{]', val):
+            ok = val.lower() in combined.lower()
+            return ok, ('Совпадение найдено' if ok else 'Не соответствует шаблону')
+        try:
+            ok = bool(re.search(val, combined[:16000], re.IGNORECASE | re.DOTALL))
+        except re.error:
+            ok = val.lower() in combined.lower()
+        return ok, ('Совпадение найдено' if ok else 'Не соответствует шаблону')
+    ok = val.lower() in combined.lower()
+    return ok, ('Найдено в коде' if ok else f'В коде отсутствует «{val}»')
+
+
+def _norm_sql_cell(v):
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return round(float(v), 4)
+    s = str(v).strip()
+    try:
+        if re.match(r'^-?\d+(?:\.\d+)?$', s):
+            return round(float(s), 4)
+    except Exception:
+        pass
+    return s.lower()
+
+
+def _norm_sql_rows(rows: list) -> list[tuple]:
+    out = []
+    for r in (rows or []):
+        if isinstance(r, dict):
+            out.append(tuple(_norm_sql_cell(v) for v in r.values()))
+        elif isinstance(r, (list, tuple)):
+            out.append(tuple(_norm_sql_cell(v) for v in r))
+        else:
+            out.append((_norm_sql_cell(r),))
+    return out
+
+
+def _eval_sql_tests(tests: list, sql_code: str, columns: list, rows: list, error_msg: str = '') -> list[dict]:
+    results = []
+    norm_actual = _norm_sql_rows(rows)
+    actual_cols = [str(c).strip().lower() for c in (columns or [])]
+    sql_clean = re.sub(r'--[^\n]*', ' ', sql_code or '')
+    sql_clean = re.sub(r'/\*[\s\S]*?\*/', ' ', sql_clean)
+
+    for idx, t in enumerate(tests):
+        if not isinstance(t, dict):
+            continue
+        label = str(t.get('label') or f'Проверка {idx + 1}')
+        hidden = bool(t.get('hidden'))
+
+        if error_msg:
+            results.append({'label': label, 'hidden': hidden, 'passed': False, 'detail': f'Ошибка SQL: {error_msg[:180]}'})
+            continue
+
+        req_kw = str(t.get('required_sql') or '').strip()
+        if req_kw:
+            ok = bool(re.search(rf'\b{re.escape(req_kw)}\b', sql_clean, re.IGNORECASE))
+            results.append({
+                'label': label,
+                'hidden': hidden,
+                'passed': ok,
+                'detail': f'Используется {req_kw.upper()}' if ok else f'Ожидается конструкция {req_kw.upper()}',
+            })
+            continue
+
+        exp_cols = t.get('expected_columns')
+        if isinstance(exp_cols, list) and exp_cols:
+            want_cols = [str(c).strip().lower() for c in exp_cols]
+            ok = actual_cols == want_cols or set(want_cols).issubset(set(actual_cols))
+            results.append({
+                'label': label,
+                'hidden': hidden,
+                'passed': ok,
+                'detail': 'Колонки совпадают' if ok else (
+                    'Колонки не совпали' if hidden else f'Ожидались колонки: {", ".join(exp_cols)}'
+                ),
+            })
+            continue
+
+        exp_rows = t.get('expected_rows')
+        if isinstance(exp_rows, list):
+            norm_exp = _norm_sql_rows(exp_rows)
+            ordered = bool(t.get('ordered', False))
+            if ordered:
+                ok = norm_actual == norm_exp
+            else:
+                ok = sorted(norm_actual, key=lambda x: str(x)) == sorted(norm_exp, key=lambda x: str(x))
+            detail = f'Совпало строк: {len(norm_actual)}' if ok else (
+                'Результат запроса не совпал с эталоном' if hidden
+                else f'Получено строк: {len(norm_actual)}, ожидалось: {len(norm_exp)}'
+            )
+            results.append({'label': label, 'hidden': hidden, 'passed': ok, 'detail': detail})
+            continue
+
+        min_rows = t.get('min_rows')
+        if min_rows is not None:
+            ok = len(norm_actual) >= int(min_rows)
+            results.append({
+                'label': label,
+                'hidden': hidden,
+                'passed': ok,
+                'detail': f'Строк: {len(norm_actual)}' if ok else f'Нужно минимум {min_rows} строк, получено {len(norm_actual)}',
+            })
+    return results
+
+
+def _sync_gradebook(task: CodeTask, user, score: float, code_text: str = '') -> bool:
+    """Если задача привязана к классу — сохраняет лучший авто-балл ученика прямо в журнал класса."""
+    if not task.classroom_id or not user or not user.is_authenticated:
+        return False
+    try:
+        from apps.classroom.models import Assignment, Submission
+        asgn = task.assignment
+        if asgn is None:
+            asgn = Assignment.objects.create(
+                classroom=task.classroom,
+                kind='manual',
+                manual_title=f'[Практика] {task.title}'[:290],
+                instructions=task.description[:1000] if task.description else '',
+                max_score=task.max_score or 100,
+            )
+            task.assignment = asgn
+            task.save(update_fields=['assignment'])
+        sub, created = Submission.objects.get_or_create(
+            assignment=asgn,
+            student=user,
+            defaults={'status': 'submitted', 'score': score, 'answer': (code_text or '')[:4000]},
+        )
+        if not created:
+            if sub.score is None or score >= sub.score:
+                sub.score = score
+                sub.answer = (code_text or '')[:4000]
+                sub.status = 'submitted'
+                sub.save(update_fields=['score', 'answer', 'status', 'updated_at'])
+        return True
+    except Exception:
+        return False
+
+
 class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
-    queryset = CodeTask.objects.all().order_by('-created_at')
+    queryset = CodeTask.objects.select_related('classroom', 'owner').all().order_by('-created_at')
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     throttle_classes = [throttling.UserRateThrottle, throttling.AnonRateThrottle]
 
     def get_serializer_class(self):
-        # только владелец/админ видит solution
+        # владелец/учитель/админ видит solution и все тесты
         if self.action in ['retrieve','create','update','partial_update']:
             user = self.request.user
-            if user.is_authenticated and (user.is_staff or user.role == 'admin'):
+            if user.is_authenticated and (user.is_staff or getattr(user, 'role', None) in ('admin', 'teacher')):
                 return CodeTaskDetailSerializer
-            # для остальных скрываем solution
-            # но при создании/обновлении владелец может передать solution — разрешаем
             if self.action in ['create','update','partial_update']:
                 return CodeTaskDetailSerializer
         return CodeTaskSerializer
 
     def get_queryset(self):
-        # list — всем, но без solution уже
-        return super().get_queryset()
+        qs = super().get_queryset()
+        lang = self.request.query_params.get('language')
+        if lang:
+            langs = [x.strip().lower() for x in lang.split(',') if x.strip()]
+            if langs:
+                qs = qs.filter(language__in=langs)
+        cid = self.request.query_params.get('classroom')
+        if cid and cid.isdigit():
+            qs = qs.filter(classroom_id=int(cid))
+        return qs
 
     def perform_create(self, serializer):
-        serializer.save(owner=self.request.user if self.request.user.is_authenticated else None)
+        task = serializer.save(owner=self.request.user if self.request.user.is_authenticated else None)
+        # Если учитель привязал задачу к классу — сразу создаём колонку в журнале класса
+        if task.classroom_id and task.assignment_id is None:
+            try:
+                from apps.classroom.models import Assignment
+                asgn = Assignment.objects.create(
+                    classroom=task.classroom,
+                    kind='manual',
+                    manual_title=f'[Практика] {task.title}'[:290],
+                    instructions=task.description[:1000] if task.description else '',
+                    max_score=task.max_score or 100,
+                )
+                task.assignment = asgn
+                task.save(update_fields=['assignment'])
+            except Exception:
+                pass
 
     def perform_update(self, serializer):
         obj = self.get_object()
@@ -289,51 +549,179 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
     def run(self, request, pk=None):
         task = self.get_object()
         code = request.data.get('code','')
+        css_code = str(request.data.get('css', '') or '')[:8000]
+        js_code = str(request.data.get('js', '') or '')[:8000]
         stdin_data = request.data.get('input', request.data.get('stdin', ''))
         if stdin_data is None:
             stdin_data = ''
         if not isinstance(stdin_data, str):
             stdin_data = str(stdin_data)
+        stdin_data = stdin_data[:8000]
         if not isinstance(code, str):
             return Response({'error':'code должен быть строкой'}, status=400)
         if len(code.strip()) == 0:
             return Response({'error':'Пустой код'}, status=400)
         task_lang = (task.language or '').lower().strip()
+        if task_lang == 'sql':
+            return Response({'error': 'Для SQL-задач используйте /submit_sql/'}, status=400)
         if task_lang not in ALLOWED_LANGS:
             return Response({'output': f"Язык «{task.language}» отключен. Доступны: python, javascript, html, css.", 'passed': False}, status=400)
         safe, msg = _is_safe_code(code, task.language)
         if not safe:
             return Response({'output': f"Блокировка: {msg}", 'passed': False}, status=400)
-        from .services.runner import run_single
-        output, passed = run_single(code, task.language, stdin_data)
-        if task.tests:
-            try:
-                # строгое сравнение построчно: expected должен совпасть с целой строкой вывода,
-                # а не с подстрокой ("1" больше не проходит при любом выводе с единицей)
-                if isinstance(task.tests, list) and task.tests:
-                    out_lines = [ln.strip() for ln in (output or '').splitlines()]
-                    out_full = (output or '').strip()
-                    ok_all = True
-                    for t in task.tests:
-                        if not isinstance(t, dict):
-                            continue
-                        exp = str(t.get('expected', '') or '')
-                        if not exp.strip():
-                            continue
-                        exp_s = exp.strip()
-                        if exp_s != out_full and exp_s not in out_lines and exp_s not in out_full.split():
-                            # fallback: подстрока только если expected длиннее 1 символа
-                            if len(exp_s) <= 1 or exp_s not in (output or ''):
-                                ok_all = False
-                                break
-                    passed = ok_all
-            except Exception:
-                passed = False
+
+        is_teacher_view = (
+            request.user.is_authenticated and (
+                request.user.is_staff
+                or getattr(request.user, 'role', None) in ('admin', 'teacher')
+                or task.owner_id == request.user.id
+            )
+        )
+        tests_list = task.tests if isinstance(task.tests, list) else []
+        test_results = []
+        output = ''
+        passed = False
+        passed_tests = 0
+        total_tests = len(tests_list)
+        max_score = task.max_score or 100
+
+        if task_lang in ('html', 'css'):
+            output = 'HTML/CSS проверка выполнена'
+            if tests_list:
+                for idx, t in enumerate(tests_list):
+                    if not isinstance(t, dict):
+                        continue
+                    label = str(t.get('label') or f'Проверка {idx + 1}')
+                    hidden = bool(t.get('hidden'))
+                    ok, detail = _eval_web_test(t, code if task_lang == 'html' else '', css_code or (code if task_lang == 'css' else ''), js_code)
+                    if ok:
+                        passed_tests += 1
+                    test_results.append({
+                        'label': label,
+                        'hidden': hidden,
+                        'passed': ok,
+                        'detail': detail if (not hidden or is_teacher_view) else ('Пройден' if ok else 'Не пройден'),
+                    })
+                total_tests = len(test_results)
+                passed = total_tests > 0 and passed_tests == total_tests
+            else:
+                passed = True
+        else:
+            from .services.runner import run_single
+            if tests_list:
+                outputs_log = []
+                for idx, t in enumerate(tests_list[:15]):
+                    if not isinstance(t, dict):
+                        continue
+                    label = str(t.get('label') or f'Тест {idx + 1}')
+                    hidden = bool(t.get('hidden'))
+                    t_in = str(t.get('input', '') or '')
+                    t_exp = str(t.get('expected', '') or '')
+                    out_i, ran_ok = run_single(code, task_lang, t_in)
+                    matched = ran_ok and _match_stdout(out_i, t_exp)
+                    if matched:
+                        passed_tests += 1
+                    entry = {
+                        'label': label,
+                        'hidden': hidden,
+                        'passed': matched,
+                    }
+                    if not hidden or is_teacher_view:
+                        entry['input'] = t_in
+                        entry['expected'] = t_exp
+                        entry['actual'] = (out_i or '')[:600]
+                    else:
+                        entry['detail'] = 'Пройден' if matched else 'Ответ не совпал со скрытым тестом'
+                    test_results.append(entry)
+                    if not hidden or is_teacher_view:
+                        outputs_log.append(f"[{label}] {'✓' if matched else '✗'}\n{(out_i or '').strip()}")
+                    else:
+                        outputs_log.append(f"[{label} (скрытый)] {'✓ Пройден' if matched else '✗ Не пройден'}")
+                total_tests = len(test_results)
+                passed = total_tests > 0 and passed_tests == total_tests
+                output = '\n\n'.join(outputs_log)[:5000]
+            else:
+                output, passed = run_single(code, task_lang, stdin_data)
+
+        if total_tests > 0:
+            score = round((passed_tests / total_tests) * max_score, 1)
+        else:
+            score = float(max_score) if passed else 0.0
+
+        gradebook_synced = False
         if request.user.is_authenticated:
             try:
-                CodeSubmission.objects.create(task=task, user=request.user, code=code[:8000], output=output[:5000], passed=passed)
-            except: pass
-        return Response({'output': output[:5000], 'passed': passed})
+                CodeSubmission.objects.create(
+                    task=task,
+                    user=request.user,
+                    code=code[:8000],
+                    output=output[:5000],
+                    passed=passed,
+                    score=score,
+                    passed_tests=passed_tests,
+                    total_tests=total_tests,
+                    test_results=test_results,
+                )
+            except Exception:
+                pass
+            gradebook_synced = _sync_gradebook(task, request.user, score, code)
+
+        return Response({
+            'output': output[:5000],
+            'passed': passed,
+            'score': score,
+            'max_score': max_score,
+            'passed_tests': passed_tests,
+            'total_tests': total_tests,
+            'test_results': test_results,
+            'gradebook_synced': gradebook_synced,
+        })
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated], throttle_classes=[CodeRunThrottle], url_path='submit_sql')
+    def submit_sql(self, request, pk=None):
+        """POST /api/code-tasks/<id>/submit_sql/ — автопроверка результата PostgreSQL-запроса и запись в журнал."""
+        task = self.get_object()
+        sql_code = str(request.data.get('sql') or request.data.get('code') or '')
+        columns = request.data.get('columns') or []
+        rows = request.data.get('rows') or []
+        error_msg = str(request.data.get('error') or '')
+
+        tests_list = task.tests if isinstance(task.tests, list) else []
+        test_results = _eval_sql_tests(tests_list, sql_code, columns, rows, error_msg)
+        total_tests = len(test_results)
+        passed_tests = sum(1 for r in test_results if r.get('passed'))
+        passed = (total_tests > 0 and passed_tests == total_tests) if total_tests > 0 else (not error_msg)
+        max_score = task.max_score or 100
+        score = round((passed_tests / total_tests) * max_score, 1) if total_tests > 0 else (float(max_score) if passed else 0.0)
+
+        out_summary = f"Пройдено проверок: {passed_tests}/{total_tests}" if total_tests else ('Выполнено' if passed else error_msg)
+        gradebook_synced = False
+        if request.user.is_authenticated:
+            try:
+                CodeSubmission.objects.create(
+                    task=task,
+                    user=request.user,
+                    code=sql_code[:8000],
+                    output=out_summary[:5000],
+                    passed=passed,
+                    score=score,
+                    passed_tests=passed_tests,
+                    total_tests=total_tests,
+                    test_results=test_results,
+                )
+            except Exception:
+                pass
+            gradebook_synced = _sync_gradebook(task, request.user, score, sql_code)
+
+        return Response({
+            'passed': passed,
+            'score': score,
+            'max_score': max_score,
+            'passed_tests': passed_tests,
+            'total_tests': total_tests,
+            'test_results': test_results,
+            'gradebook_synced': gradebook_synced,
+        })
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated], throttle_classes=[CodeRunThrottle])
     def run_project(self, request):
@@ -346,27 +734,53 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             stdin_data = ''
         if not isinstance(stdin_data, str):
             stdin_data = str(stdin_data)
+        stdin_data = stdin_data[:8000]
         if not isinstance(files, list):
             return Response({'error': 'files должен быть списком'}, status=400)
         if len(files) > 99:
             return Response({'error': 'Слишком много файлов (макс 99)'}, status=400)
-        # Проверка безопасности (AST + denylist) для каждого файла проекта перед запуском
+        # Собираем имена локальных Python-модулей проекта и жёстко валидируем пути (защита от traversal / пропуска AST)
+        local_py_modules = set()
+        sanitized_files = []
         for fitem in files:
             if not isinstance(fitem, dict):
                 continue
-            fpath = str(fitem.get('path') or fitem.get('name') or fitem.get('filename') or '').lower()
-            fcontent = str(fitem.get('content') or fitem.get('code') or '')
-            if fpath.endswith('.py'):
-                safe, msg = _is_safe_code(fcontent, 'python')
+            raw_path = str(fitem.get('path') or fitem.get('name') or fitem.get('filename') or 'main.py').strip()
+            norm_path = raw_path.replace('\\', '/').lstrip('/')
+            if not norm_path or ':' in norm_path or '\x00' in norm_path or '..' in norm_path.split('/') or os.path.isabs(norm_path):
+                return Response({'output': f'Недопустимый путь файла: {raw_path[:80]}', 'passed': False}, status=400)
+            ext = os.path.splitext(norm_path)[1].lower()
+            if ext not in _ALLOWED_PROJECT_EXTS:
+                return Response({'output': f'Запрещённое расширение файла: {ext or "(без расширения)"}', 'passed': False}, status=400)
+            fcontent = fitem.get('content') if fitem.get('content') is not None else (fitem.get('code') or '')
+            if not isinstance(fcontent, str):
+                return Response({'output': f'Содержимое файла {norm_path} должно быть строкой', 'passed': False}, status=400)
+            if ext == '.py':
+                stem = os.path.splitext(norm_path)[0].split('/')[0]
+                if stem and stem.isidentifier():
+                    local_py_modules.add(stem)
+            sanitized_files.append({'path': norm_path, 'content': fcontent})
+
+        if not sanitized_files:
+            return Response({'output': 'Нет файлов проекта', 'passed': False}, status=400)
+
+        # Проверка безопасности (строгий AST-allowlist) для каждого файла проекта перед запуском
+        for fitem in sanitized_files:
+            fpath = fitem['path']
+            fcontent = fitem['content']
+            if fpath.lower().endswith('.py'):
+                safe, msg = _is_safe_code(fcontent, 'python', local_modules=local_py_modules)
                 if not safe:
                     return Response({'output': f'Блокировка ({fpath}): {msg}', 'passed': False}, status=400)
-            elif fpath.endswith('.js'):
+            elif fpath.lower().endswith('.js'):
                 safe, msg = _is_safe_code(fcontent, 'javascript')
                 if not safe:
                     return Response({'output': f'Блокировка ({fpath}): {msg}', 'passed': False}, status=400)
+            elif len(fcontent) > 15000:
+                return Response({'output': f'Файл {fpath} слишком большой (макс 15000 символов)', 'passed': False}, status=400)
         try:
             from .services.runner import run_project as runner_run_project
-            output, passed = runner_run_project(files, entry=entry, requirements=requirements, stdin_data=stdin_data)
+            output, passed = runner_run_project(sanitized_files, entry=entry, requirements=requirements, stdin_data=stdin_data)
             return Response({'output': output[:5000], 'passed': passed})
         except Exception:
             import logging as _lg
@@ -401,6 +815,7 @@ class CodeTaskViewSet(TeacherWriteMixin, viewsets.ModelViewSet):
             stdin_data = ''
         if not isinstance(stdin_data, str):
             stdin_data = str(stdin_data)
+        stdin_data = stdin_data[:8000]
         if not isinstance(code, str):
             return Response({'error': 'code должен быть строкой'}, status=400)
         if len(code.strip()) == 0:

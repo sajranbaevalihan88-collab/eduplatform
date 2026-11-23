@@ -83,11 +83,16 @@ export default function FarmerField3D({
     const host = hostRef.current
     if (!host) return
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    const lowEnd = ((navigator as any).hardwareConcurrency || 4) <= 4 || ((navigator as any).deviceMemory || 8) <= 4
+    const renderer = new THREE.WebGLRenderer({
+      antialias: !lowEnd,
+      alpha: false,
+      powerPreference: lowEnd ? 'low-power' : 'high-performance',
+    })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowEnd ? 1.25 : 1.75))
     renderer.setSize(host.clientWidth || 520, host.clientHeight || 340)
-    renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.shadowMap.enabled = !lowEnd
+    if (!lowEnd) renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.08
     host.appendChild(renderer.domElement)
@@ -971,8 +976,16 @@ export default function FarmerField3D({
 
       controls.update()
       renderer.render(scene, camera)
-      raf = requestAnimationFrame(animate)
+      if (!document.hidden) raf = requestAnimationFrame(animate)
+      else raf = 0
     }
+    const onVis = () => {
+      if (!document.hidden && !raf) {
+        clock.getDelta()
+        raf = requestAnimationFrame(animate)
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
     raf = requestAnimationFrame(animate)
 
     const ro = new ResizeObserver(() => {
@@ -985,7 +998,8 @@ export default function FarmerField3D({
     ro.observe(host)
 
     return () => {
-      cancelAnimationFrame(raf)
+      document.removeEventListener('visibilitychange', onVis)
+      if (raf) cancelAnimationFrame(raf)
       ro.disconnect()
       controls.dispose()
       renderer.dispose()

@@ -1,6 +1,5 @@
-// sound.ts — Единый продуктовый аудио-слой сайта (тосты, уведомления, Аркан тартыш, тесты).
-// Маршрутизируется через студийный WebAudio-движок sfx.ts (тёплая маримба, фильтр и реверб
-// вместо старых резких mp3-писков).
+// sound.ts — Единый продуктовый аудио-слой (тосты, заметки, тесты, Аркан тартыш).
+// Использует студийные CC0-сэмплы из /audio/sfx/ через движок sfx.ts.
 
 import { sfx, isSfxMuted } from './sfx'
 
@@ -14,7 +13,7 @@ export function playGameSound(name: GameSound, volume = 0.85) {
   if (name === 'correct') sfx('ui.success', volume)
   else if (name === 'wrong') sfx('ui.error', volume)
   else if (name === 'win') sfx('ui.win', volume)
-  else if (name === 'tick') sfx('clock', volume * 0.75)
+  else if (name === 'tick') sfx('clock', volume * 0.8)
   else if (name === 'go') sfx('ws.go', volume)
 }
 
@@ -23,7 +22,7 @@ export function playArkanSound(name: ArkanSound, volume = 0.9) {
   if (name === 'correct') sfx('mb.strike', volume)
   else if (name === 'wrong') sfx('ui.error', volume)
   else if (name === 'win') sfx('ui.win', volume)
-  else if (name === 'tick') sfx('clock', volume * 0.75)
+  else if (name === 'tick') sfx('clock', volume * 0.8)
   else if (name === 'go') sfx('ws.go', volume)
 }
 
@@ -40,7 +39,7 @@ export function playUiSound(name: UiSound, volume = 0.8) {
   else if (name === 'ui-error') sfx('ui.error', volume)
   else if (name === 'ui-notify') sfx('ui.notify', volume)
   else if (name === 'ui-win') sfx('ui.win', volume)
-  else if (name === 'ui-save') sfx('fb.print', volume * 0.75)
+  else if (name === 'ui-save') sfx('fb.print', volume * 0.8)
   else if (name === 'ui-pop') sfx('ui.click', volume)
 }
 

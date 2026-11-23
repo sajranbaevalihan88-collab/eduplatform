@@ -156,10 +156,21 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def members(self, request, pk=None):
         room = self.get_object()
-        if not room.is_member(request.user):
-            raise PermissionDenied('Ты не участник класса')
+        u = request.user
+        is_owner_or_admin = _is_admin(u) or room.owner_id == u.id
+        if not is_owner_or_admin and not room.has_access(u):
+            raise PermissionDenied('Нет доступа к списку участников класса')
         qs = room.enrollments.select_related('student').all()
-        return Response(EnrollmentSerializer(qs, many=True).data)
+        data = EnrollmentSerializer(qs, many=True).data
+        if not is_owner_or_admin:
+            # Скрываем чужие чеки оплаты и статусы оплаты от одноклассников
+            for row in data:
+                if row.get('student') != u.id:
+                    row['receipt'] = None
+                    row['receipt_at'] = None
+                    row['paid_requested_at'] = None
+                    row['access_granted'] = None
+        return Response(data)
 
     @action(detail=True, methods=['post'])
     def add_member(self, request, pk=None):
@@ -199,10 +210,11 @@ class ClassroomViewSet(SchoolMixin, viewsets.ModelViewSet):
             if e:
                 my = 'pending' if (room.is_paid and not e.access_granted) else 'active'
                 my_receipt = e.receipt.url if e.receipt else ''
+        is_owner_or_admin = _is_admin(request.user) or room.owner_id == request.user.id
         return Response({
             'is_paid': room.is_paid, 'price': room.price,
             'payment_details': room.payment_details, 'title': room.title,
-            'code_fmt': room.code_fmt, 'my_status': my, 'my_receipt': my_receipt,
+            'code_fmt': room.code_fmt if is_owner_or_admin else '', 'my_status': my, 'my_receipt': my_receipt,
             # СВОЙ QR учителя приоритетнее: ученики сканируют его в приложении банка
             'payment_qr': (room.payment_qr.url if room.payment_qr else ''),
             'qr': _pay_qr_data_uri(room) if room.is_paid else '',
@@ -606,13 +618,27 @@ class AssignmentViewSet(viewsets.ModelViewSet):
             .filter(classroom__in=_visible_classrooms(self.request.user))
         u = self.request.user
         # платный класс: пока оплата не подтверждена, материалы (задания) не отдаём —
-        # иначе неоплативший видит названия/инструкции/ссылки (лик контента)
-        paid_ids = list(Classroom.objects.filter(is_paid=True, enrollments__student=u).values_list('id', flat=True))
-        if paid_ids:
-            granted = set(Enrollment.objects.filter(student=u, classroom_id__in=paid_ids, access_granted=True).values_list('classroom_id', flat=True))
-            hidden = set(paid_ids) - granted - set(Classroom.objects.filter(owner=u).values_list('id', flat=True))
-            if hidden:
-                qs = qs.exclude(classroom_id__in=hidden)
+        # ни ученику, ни его родителю (иначе неоплативший видит названия/инструкции/ссылки)
+        role = getattr(u, 'role', None)
+        if not _is_admin(u):
+            if role == 'parent':
+                paid_ids = list(Classroom.objects.filter(
+                    is_paid=True, enrollments__student__child_links__parent=u
+                ).values_list('id', flat=True).distinct())
+                if paid_ids:
+                    granted = set(Enrollment.objects.filter(
+                        student__child_links__parent=u, classroom_id__in=paid_ids, access_granted=True
+                    ).values_list('classroom_id', flat=True))
+                    hidden = set(paid_ids) - granted
+                    if hidden:
+                        qs = qs.exclude(classroom_id__in=hidden)
+            else:
+                paid_ids = list(Classroom.objects.filter(is_paid=True, enrollments__student=u).values_list('id', flat=True))
+                if paid_ids:
+                    granted = set(Enrollment.objects.filter(student=u, classroom_id__in=paid_ids, access_granted=True).values_list('classroom_id', flat=True))
+                    hidden = set(paid_ids) - granted - set(Classroom.objects.filter(owner=u).values_list('id', flat=True))
+                    if hidden:
+                        qs = qs.exclude(classroom_id__in=hidden)
         # счёт «сдано/оценено» для учителя: классы маленькие, поэтому подзапросы дёшевы,
         # а руками на фронте их не собрать — экономит N лишних fetch'ей
         qs = qs.annotate(
@@ -648,14 +674,32 @@ class AssignmentViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('Задания создаёт владелец класса')
         return room
 
+    def _validate_assignment_refs(self, room, validated_data):
+        u = self.request.user
+        is_adm = _is_admin(u)
+        assigned_to = validated_data.get('assigned_to')
+        if assigned_to is not None and not Enrollment.objects.filter(classroom=room, student=assigned_to).exists():
+            raise ValidationError({'assigned_to': 'Ученик не состоит в этом классе'})
+        lesson = validated_data.get('lesson')
+        if lesson is not None and not is_adm and not lesson.is_public and lesson.owner_id != u.id:
+            raise PermissionDenied('Можно привязывать только свой или публичный урок')
+        test = validated_data.get('test')
+        if test is not None and not is_adm and not test.is_public and test.owner_id != u.id:
+            raise PermissionDenied('Можно привязывать только свой или публичный тест')
+
     def perform_create(self, serializer):
         room = serializer.validated_data.get('classroom')
         self._owned_room(room)
+        self._validate_assignment_refs(room, serializer.validated_data)
         serializer.save()
 
     def perform_update(self, serializer):
         obj = self.get_object()
         self._owned_room(obj.classroom)
+        new_room = serializer.validated_data.get('classroom')
+        if new_room is not None and new_room.id != obj.classroom_id:
+            self._owned_room(new_room)
+        self._validate_assignment_refs(new_room or obj.classroom, serializer.validated_data)
         serializer.save()
 
     def perform_destroy(self, instance):
@@ -670,8 +714,10 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         u = request.user
         if not a.classroom.has_access(u):
             raise PermissionDenied('Нет доступа к заданиям класса')
-        if a.classroom.owner_id == u.id or _is_admin(u):
-            raise PermissionDenied('Учитель или администратор не сдаёт задания как ученик')
+        if a.classroom.owner_id == u.id or _is_admin(u) or getattr(u, 'role', None) == 'parent':
+            raise PermissionDenied('Сдавать задания может только ученик')
+        if a.kind == 'manual':
+            raise PermissionDenied('Ручная колонка журнала не сдаётся учеником')
         score = request.data.get('score')
         answer = str(request.data.get('answer') or '').strip()
         if a.kind == 'write' and not answer:
@@ -730,10 +776,15 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         u = self.request.user
         rooms = _visible_classrooms(u)
-        if not (_is_admin(u) or getattr(u, 'role', None) == 'parent'):
-            rooms = rooms.filter(
-                Q(owner=u) | Q(is_paid=False) | Q(enrollments__student=u, enrollments__access_granted=True)
-            ).distinct()
+        if not _is_admin(u):
+            if getattr(u, 'role', None) == 'parent':
+                rooms = rooms.filter(
+                    Q(is_paid=False) | Q(enrollments__student__child_links__parent=u, enrollments__access_granted=True)
+                ).distinct()
+            else:
+                rooms = rooms.filter(
+                    Q(owner=u) | Q(is_paid=False) | Q(enrollments__student=u, enrollments__access_granted=True)
+                ).distinct()
         qs = Announcement.objects.select_related('author', 'classroom').filter(classroom__in=rooms)
         room = self.request.query_params.get('classroom')
         if room:
@@ -762,8 +813,18 @@ class AnnouncementCommentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         u = self.request.user
+        rooms = _visible_classrooms(u)
+        if not _is_admin(u):
+            if getattr(u, 'role', None) == 'parent':
+                rooms = rooms.filter(
+                    Q(is_paid=False) | Q(enrollments__student__child_links__parent=u, enrollments__access_granted=True)
+                ).distinct()
+            else:
+                rooms = rooms.filter(
+                    Q(owner=u) | Q(is_paid=False) | Q(enrollments__student=u, enrollments__access_granted=True)
+                ).distinct()
         qs = AnnouncementComment.objects.select_related('author', 'announcement', 'announcement__classroom').filter(
-            announcement__classroom__in=_visible_classrooms(u))
+            announcement__classroom__in=rooms)
         ann = self.request.query_params.get('announcement')
         if ann:
             qs = qs.filter(announcement_id=ann)
@@ -772,8 +833,8 @@ class AnnouncementCommentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         ann = serializer.validated_data['announcement']
         u = self.request.user
-        if not ann.classroom.is_member(u):
-            raise PermissionDenied('Ты не участник класса')
+        if not ann.classroom.has_access(u):
+            raise PermissionDenied('Нет доступа к обсуждению класса')
         text = serializer.validated_data.get('text', '').strip()
         if not text:
             raise ValidationError({'text': 'Пустой комментарий'})

@@ -50,39 +50,39 @@ export default function Lessons(){
     <div className="space-y-6 page-enter">
       <div className="flex flex-wrap items-center justify-between gap-3 animate-fadeIn">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-indigo-600 text-white"><Layers size={20}/></span> {t('lessons')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{filtered.length}</span></h1>
-          {subjectFilter && <span className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-sm font-medium">{t('lessons_subject')} {subjectName||subjectFilter} <button onClick={()=>setSearchParams({})} className="p-1 rounded-full hover:bg-indigo-200"><X size={14}/></button></span>}
+          <h1 className="text-2xl font-display font-bold flex items-center gap-2 dark:text-white"><span className="p-2 rounded-xl bg-indigo-600 text-white"><Layers size={20}/></span> {t('lessons')} <span className="text-sm font-normal text-slate-500 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">{filtered.length}</span></h1>
+          {subjectFilter && <span className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-sm font-medium">{t('lessons_subject')} {subjectName||subjectFilter} <button onClick={()=>setSearchParams({})} className="p-1 rounded-full hover:bg-indigo-200 dark:hover:bg-indigo-900"><X size={14}/></button></span>}
         </div>
         <div className="flex flex-wrap gap-2">
-          <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:min-w-[240px]"><div className="relative group flex-1 max-w-full sm:max-w-[260px] md:max-w-[320px]"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('lessons_search_ph')} className="pl-9 pr-4 py-2.5 rounded-xl border bg-white w-full focus-ring"/></div></div>
+          <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:min-w-[240px]"><div className="relative group flex-1 max-w-full sm:max-w-[260px] md:max-w-[320px]"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t('lessons_search_ph')} className="pl-9 pr-4 py-2.5 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-white w-full focus-ring"/></div></div>
           {!isStudent() && (
           <Link to={subjectFilter?`/lessons/new?subject=${encodeURIComponent(subjectFilter)}`:'/lessons/new'} className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-2 shadow-md btn-hover"><Plus size={18}/>{t('create')}</Link>
           )}
         </div>
       </div>
       {subjectFilter && (
-        <div className="sm:hidden flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-sm text-indigo-700">
+        <div className="sm:hidden flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-sm text-indigo-700 dark:text-indigo-300">
           <span>{t('lessons_filter')} {subjectName||subjectFilter}</span>
-          <button onClick={()=>setSearchParams({})} className="ml-auto px-2 py-1 rounded-full bg-white border text-xs">{t('lessons_reset')}</button>
+          <button onClick={()=>setSearchParams({})} className="ml-auto px-2 py-1 rounded-full bg-white dark:bg-slate-800 border dark:border-slate-700 text-xs">{t('lessons_reset')}</button>
         </div>
       )}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 stagger">
         {filtered.map(l=>(
-          <div key={l.id} onClick={()=>nav(`/lessons/${l.id}`)} className="bg-white rounded-2xl border border-slate-100 overflow-hidden card-hover group cursor-pointer" style={{borderLeft: `4px solid ${l.subject_color||'#e2e8f0'}`}}>
+          <div key={l.id} onClick={()=>nav(`/lessons/${l.id}`)} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden card-hover group cursor-pointer" style={{borderLeft: `4px solid ${l.subject_color||'#e2e8f0'}`}}>
             <div className="p-5">
               <div className="text-xs px-2 py-1 rounded-full text-white inline-block" style={{background: l.subject_color||'#6366F1'}}>{l.subject_icon||'📚'} {l.subject_name||t('lessons_no_subject')} {l.course_title?`• ${l.course_title}`:''}</div>
-              <h3 className="font-bold text-lg mt-2 line-clamp-1" style={{color: l.subject_color ? l.subject_color : '#0f172a'}}>{l.title}</h3>
-              <p className="text-sm text-slate-500 line-clamp-2 mt-1">{l.description||t('lessons_no_desc')}</p>
+              <h3 className="font-bold text-lg mt-2 line-clamp-1 text-slate-900 dark:text-white">{l.title}</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2 mt-1">{l.description||t('lessons_no_desc')}</p>
               <div className="mt-3 flex items-center gap-2 text-xs text-slate-400"><span>{l.blocks_count} {t('lessons_blocks')}</span> • <span>{new Date(l.created_at).toLocaleDateString()}</span></div>
             </div>
-            <div className="px-5 py-3 bg-slate-50 border-t flex gap-2" onClick={e=>e.stopPropagation()}>
-              <button onClick={()=>nav(`/lessons/${l.id}`)} className="flex-1 text-sm font-semibold text-indigo-700 text-left">{t('lessons_open')}</button>
+            <div className="px-5 py-3 bg-slate-50 dark:bg-slate-800/70 border-t dark:border-slate-800 flex gap-2" onClick={e=>e.stopPropagation()}>
+              <button onClick={()=>nav(`/lessons/${l.id}`)} className="flex-1 text-sm font-semibold text-indigo-700 dark:text-indigo-400 text-left">{t('lessons_open')}</button>
               {canEdit(l) ? (
-                <button onClick={()=>nav(`/lessons/${l.id}/edit`)} className="text-sm px-4 py-2 min-h-[44px] rounded-full bg-white border hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 transition-colors">{t('edit')}</button>
+                <button onClick={()=>nav(`/lessons/${l.id}/edit`)} className="text-sm px-4 py-2 min-h-[44px] rounded-full bg-white dark:bg-slate-800 dark:text-slate-200 border dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-slate-700 hover:border-indigo-200 hover:text-indigo-700 transition-colors">{t('edit')}</button>
               ) : (
                 <span className="text-sm px-3 py-2 text-slate-400" title={t('lessons_edit_lock')}>🔒</span>
               )}
-              {canEdit(l) && <button onClick={(e)=>handleDelete(e,l.id)} className="p-2.5 min-w-[44px] min-h-[44px] rounded-full bg-white border text-red-500 hover:bg-red-50 hover:border-red-200 transition-colors flex items-center justify-center" title={t('delete')} aria-label={t('delete')}><Trash2 size={16}/></button>}
+              {canEdit(l) && <button onClick={(e)=>handleDelete(e,l.id)} className="p-2.5 min-w-[44px] min-h-[44px] rounded-full bg-white dark:bg-slate-800 border dark:border-slate-700 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:border-red-200 transition-colors flex items-center justify-center" title={t('delete')} aria-label={t('delete')}><Trash2 size={16}/></button>}
             </div>
           </div>
         ))}

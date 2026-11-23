@@ -299,24 +299,97 @@ export default function Board() {
     'H₂O + CO₂ → H₂CO₃',
   ]
 
-  // Безопасный вычислитель формулы y = f(x) для построения графика на 2D-доске
+  // Безопасный рекурсивный парсер формулы y = f(x) без eval и new Function
   const evalMathExpr = (raw: string, xVal: number): number => {
-    const clean = raw
+    const src = raw
       .toLowerCase()
       .replace(/,/g, '.')
-      .replace(/\^/g, '**')
-      .replace(/(\d)(x)/g, '$1*$2')
-      .replace(/(\d)\(/g, '$1*(')
-      .replace(/\)(x|\d)/g, ')*$1')
-      .replace(/\bpi\b/g, 'Math.PI')
-      .replace(/\b(sin|cos|tan|abs|sqrt|log|exp|floor|ceil)\b/g, 'Math.$1')
-    if (/[^0-9x+\-*/().\sMathPIsincotabqrlgefxp,_*]/.test(clean.replace(/Math\.[a-zA-Z]+/g, ''))) {
+      .replace(/\s+/g, '')
+    if (!src || src.length > 160) return NaN
+    const FUNCS: Record<string, (v: number) => number> = {
+      sin: Math.sin,
+      cos: Math.cos,
+      tan: Math.tan,
+      abs: Math.abs,
+      sqrt: Math.sqrt,
+      log: Math.log,
+      exp: Math.exp,
+      floor: Math.floor,
+      ceil: Math.ceil,
+    }
+    let pos = 0
+    const peek = () => src[pos] || ''
+    const parseExpr = (): number => {
+      let left = parseTerm()
+      while (peek() === '+' || peek() === '-') {
+        const op = src[pos++]
+        const right = parseTerm()
+        left = op === '+' ? left + right : left - right
+      }
+      return left
+    }
+    const parseTerm = (): number => {
+      let left = parsePower()
+      while (peek() === '*' || peek() === '/' || peek() === '(' || /[a-z]/.test(peek())) {
+        if (peek() === '*' || peek() === '/') {
+          const op = src[pos++]
+          const right = parsePower()
+          left = op === '*' ? left * right : left / right
+        } else {
+          // Неявное умножение: 2x, 3(x+1), 2sin(x)
+          left = left * parsePower()
+        }
+      }
+      return left
+    }
+    const parsePower = (): number => {
+      const base = parseUnary()
+      if (peek() === '^') {
+        pos++
+        return Math.pow(base, parsePower())
+      }
+      return base
+    }
+    const parseUnary = (): number => {
+      if (peek() === '+') { pos++; return parseUnary() }
+      if (peek() === '-') { pos++; return -parseUnary() }
+      return parsePrimary()
+    }
+    const parsePrimary = (): number => {
+      if (peek() === '(') {
+        pos++
+        const val = parseExpr()
+        if (peek() !== ')') return NaN
+        pos++
+        return val
+      }
+      const numMatch = src.slice(pos).match(/^(?:\d+\.?\d*|\.\d+)/)
+      if (numMatch) {
+        pos += numMatch[0].length
+        return Number(numMatch[0])
+      }
+      const idMatch = src.slice(pos).match(/^[a-z]+/)
+      if (idMatch) {
+        const id = idMatch[0]
+        pos += id.length
+        if (id === 'x') return xVal
+        if (id === 'pi') return Math.PI
+        if (id === 'e') return Math.E
+        if (id in FUNCS) {
+          if (peek() !== '(') return NaN
+          pos++
+          const arg = parseExpr()
+          if (peek() !== ')') return NaN
+          pos++
+          return FUNCS[id](arg)
+        }
+        return NaN
+      }
       return NaN
     }
     try {
-      // eslint-disable-next-line no-new-func
-      const fn = new Function('x', `return (${clean})`)
-      const y = fn(xVal)
+      const y = parseExpr()
+      if (pos !== src.length) return NaN
       return typeof y === 'number' && Number.isFinite(y) ? y : NaN
     } catch {
       return NaN

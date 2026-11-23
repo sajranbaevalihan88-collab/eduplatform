@@ -1,0 +1,22 @@
+EduPlatform Audio Suite — CC0 1.0 Universal (Public Domain)
+===========================================================
+
+All sound effects (audio/sfx/*.mp3) and per-game music loops (audio/music/*.mp3)
+are mastered from verified CC0 1.0 Universal (Public Domain) open-source packs.
+No attribution is legally required; free for educational and commercial use.
+
+1. Site & Game Sound Effects (audio/sfx/*.mp3 — 16 files):
+   - Kenney Interface Sounds, Music Jingles, Casino Audio, Impact Sounds (kenney.nl)
+   - Mirrored via github.com/kapishdima/soundcn — License: CC0 1.0 Universal
+
+2. Per-Game Background Music (audio/music/*.mp3 — 8 tracks):
+   - Efface Studios Royalty-Free Music Pack (github.com/effacestudios/Royalty-Free-Music-Pack)
+   - arkan.mp3    <- "The Champion" (Аркан Тартыш)
+   - battle.mp3   <- "Sports Spirit" (Математический бой / Live-квиз раунды)
+   - lobby.mp3    <- "Happy Life" (Live-квиз лобби)
+   - farm.mp3     <- "Bubbles" (Фермер Бала)
+   - sprint.mp3   <- "technologist" (Спринт печати)
+   - arcade.mp3   <- "Party Time" (Цвет-матч)
+   - puzzle.mp3   <- "Planning" (Память, Поиск слов, Виселица)
+   - strategy.mp3 <- "Mysterious" (4 в ряд, Блокада)
+   - License: CC0 1.0 Universal

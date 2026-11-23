@@ -61,8 +61,11 @@ export function enableShotGuard(onViolation: () => void, texts: ShotGuardTexts):
   doc.head.appendChild(style)
   doc.body.classList.add('edu-shot-guard')
 
-  // Создаем динамический SVG водяной знак
-  const watermarkSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="340" height="200" viewBox="0 0 340 200"><text x="20" y="100" fill="#000" font-size="14" font-weight="bold" font-family="sans-serif" transform="rotate(-22 170 100)">${studentLabel} • ТЕСТИРОВАНИЕ • КОПИРОВАНИЕ ЗАПРЕЩЕНО</text></svg>`
+  // Создаем динамический SVG водяной знак (строго с XML-экранированием studentLabel)
+  const escXml = (s: string) =>
+    String(s || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] || ch))
+  const safeLabel = String(studentLabel || 'Ученик').slice(0, 80)
+  const watermarkSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="340" height="200" viewBox="0 0 340 200"><text x="20" y="100" fill="#000" font-size="14" font-weight="bold" font-family="sans-serif" transform="rotate(-22 170 100)">${escXml(safeLabel)} • ТЕСТИРОВАНИЕ • КОПИРОВАНИЕ ЗАПРЕЩЕНО</text></svg>`
   const watermarkDataUri = `data:image/svg+xml;utf8,${encodeURIComponent(watermarkSvg)}`
 
   const wm = doc.createElement('div')
@@ -89,7 +92,28 @@ export function enableShotGuard(onViolation: () => void, texts: ShotGuardTexts):
   }
 
   const show = (title: string, msg: string, blur: boolean, autoMs?: number) => {
-    ov.innerHTML = `<div style="max-width:440px"><div style="font-size:48px">${blur ? '🛡️' : '🚫'}</div><div style="font-size:22px;margin:12px 0 6px;color:#fff">${title}</div><div style="font-size:15px;color:#94a3b8">${msg}</div><div style="margin-top:20px;padding:8px 14px;background:#0f172a;border-radius:10px;font-size:12px;color:#cbd5e1;display:inline-block">👤 Сдача теста: ${studentLabel}</div></div>`
+    ov.textContent = ''
+    const box = doc.createElement('div')
+    box.style.maxWidth = '440px'
+
+    const iconEl = doc.createElement('div')
+    iconEl.style.fontSize = '48px'
+    iconEl.textContent = blur ? '🛡️' : '🚫'
+
+    const titleEl = doc.createElement('div')
+    titleEl.setAttribute('style', 'font-size:22px;margin:12px 0 6px;color:#fff')
+    titleEl.textContent = String(title || '')
+
+    const msgEl = doc.createElement('div')
+    msgEl.setAttribute('style', 'font-size:15px;color:#94a3b8')
+    msgEl.textContent = String(msg || '')
+
+    const badgeEl = doc.createElement('div')
+    badgeEl.setAttribute('style', 'margin-top:20px;padding:8px 14px;background:#0f172a;border-radius:10px;font-size:12px;color:#cbd5e1;display:inline-block')
+    badgeEl.textContent = `👤 Сдача теста: ${safeLabel}`
+
+    box.append(iconEl, titleEl, msgEl, badgeEl)
+    ov.appendChild(box)
     ov.style.display = 'flex'
     doc.body.classList.add('edu-shot-blur')
     doc.body.classList.add('edu-blackout')

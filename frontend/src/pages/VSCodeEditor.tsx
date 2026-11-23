@@ -1,11 +1,23 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
 import Editor from '@monaco-editor/react'
-import { Files, Search, Plus, Trash2, FileCode2, Cloud, HardDrive, LogIn, Save, Play, X, File, Command, Copy, RefreshCw, Download, Share2, Maximize2, Image as ImageIcon, ImagePlus, Upload, Check, Terminal } from 'lucide-react'
+import { configureMonacoLocale } from '../monacoLocale'
+import { Files, Search, Plus, Trash2, FileCode2, Cloud, HardDrive, LogIn, Save, Play, X, File, Command, Copy, RefreshCw, Download, Share2, Maximize2, Image as ImageIcon, ImagePlus, Upload, Check, Terminal, LayoutTemplate, ClipboardCheck, CheckCircle2, XCircle, Loader2, GraduationCap } from 'lucide-react'
 import client from '../api/client'
 import { useRunSession } from '../hooks/useRunSession'
 import { Link } from 'react-router-dom'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
+import { canTeach } from '../utils/role'
+import {
+  BUILTIN_CODE_TASKS,
+  VSCODE_TEMPLATES,
+  type VSCodeTemplate,
+  type PracticeCodeTask,
+  type AutoTestItem,
+} from '../components/vscode/vscodeTemplates'
+import { VSCodeTemplatesModal, VSCodeTasksModal } from '../components/vscode/VSCodeModals'
+
+configureMonacoLocale()
 
 type VFile = { id:string, name:string, content:string, lang:string }
 
@@ -121,37 +133,53 @@ function rewriteCssAssetUrls(css: string, assetMap: Record<string, string>): str
 
 function rewriteHtmlAssets(html: string, assetMap: Record<string, string>): string {
   if (!Object.keys(assetMap).length) return html
-  // src="..." / poster="..." / xlink:href="..."
-  let out = html.replace(/(\b(?:src|poster|xlink:href)\s*=\s*)(["'])([^"']+)\2/gi, (m, pre: string, q: string, url: string) => {
-    const resolved = resolveAssetUrl(url, assetMap)
-    return resolved ? `${pre}${q}${resolved}${q}` : m
+  // Защищаем содержимое <script>...</script>, чтобы регулярка тегов <...> не трогала операторы < и > в JS-коде!
+  const savedScripts: string[] = []
+  let out = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, (m) => {
+    savedScripts.push(m)
+    return `\x00EDP_SCRIPT_${savedScripts.length - 1}\x00`
   })
-  // <link href="icon.png"> / <image href="pic.svg">
-  out = out.replace(/(<(?:link|image)\b[^>]*\bhref\s*=\s*)(["'])([^"']+)\2/gi, (m, pre: string, q: string, url: string) => {
-    const resolved = resolveAssetUrl(url, assetMap)
-    return resolved ? `${pre}${q}${resolved}${q}` : m
-  })
-  // srcset="img1.png 1x, img2.png 2x"
-  out = out.replace(/(\bsrcset\s*=\s*)(["'])([^"']+)\2/gi, (_m, pre: string, q: string, val: string) => {
-    const next = val.split(',').map(part => {
-      const trimmed = part.trim()
-      if (!trimmed) return trimmed
-      const pieces = trimmed.split(/\s+/)
-      const resolved = resolveAssetUrl(pieces[0], assetMap)
-      if (!resolved) return trimmed
-      pieces[0] = resolved
-      return pieces.join(' ')
-    }).join(', ')
-    return `${pre}${q}${next}${q}`
-  })
-  // inline style="background-image: url('bg.jpg')"
-  out = out.replace(/(\bstyle\s*=\s*)(["'])([^"']+)\2/gi, (_m, pre: string, q: string, val: string) => {
-    return `${pre}${q}${rewriteCssAssetUrls(val, assetMap)}${q}`
+  // Подменяем атрибуты (src, poster, href, srcset, style) ТОЛЬКО внутри HTML-тегов <...>,
+  // чтобы обычный текст внутри <p> / <code> (например: поменяй src="avatar.svg") оставался нетронутым!
+  out = out.replace(/<[a-zA-Z][^>]*>/g, (tag) => {
+    let t = tag
+    // src="..." / poster="..." / xlink:href="..."
+    t = t.replace(/(\b(?:src|poster|xlink:href)\s*=\s*)(["'])([^"']+)\2/gi, (m, pre: string, q: string, url: string) => {
+      const resolved = resolveAssetUrl(url, assetMap)
+      return resolved ? `${pre}${q}${resolved}${q}` : m
+    })
+    // <link href="icon.png"> / <image href="pic.svg">
+    if (/^<(?:link|image)\b/i.test(t)) {
+      t = t.replace(/(\bhref\s*=\s*)(["'])([^"']+)\2/gi, (m, pre: string, q: string, url: string) => {
+        const resolved = resolveAssetUrl(url, assetMap)
+        return resolved ? `${pre}${q}${resolved}${q}` : m
+      })
+    }
+    // srcset="img1.png 1x, img2.png 2x"
+    t = t.replace(/(\bsrcset\s*=\s*)(["'])([^"']+)\2/gi, (_m, pre: string, q: string, val: string) => {
+      const next = val.split(',').map(part => {
+        const trimmed = part.trim()
+        if (!trimmed) return trimmed
+        const pieces = trimmed.split(/\s+/)
+        const resolved = resolveAssetUrl(pieces[0], assetMap)
+        if (!resolved) return trimmed
+        pieces[0] = resolved
+        return pieces.join(' ')
+      }).join(', ')
+      return `${pre}${q}${next}${q}`
+    })
+    // inline style="background-image: url('bg.jpg')"
+    t = t.replace(/(\bstyle\s*=\s*)(["'])([^"']+)\2/gi, (_m, pre: string, q: string, val: string) => {
+      return `${pre}${q}${rewriteCssAssetUrls(val, assetMap)}${q}`
+    })
+    return t
   })
   // inline <style>...</style>
   out = out.replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi, (_m, open: string, body: string, close: string) => {
     return `${open}${rewriteCssAssetUrls(body, assetMap)}${close}`
   })
+  // Возвращаем <script>...</script> без изменений
+  out = out.replace(/\x00EDP_SCRIPT_(\d+)\x00/g, (_m, idx: string) => savedScripts[Number(idx)] || '')
   return out
 }
 
@@ -166,9 +194,14 @@ function previewHookScript(missing: string[], assetMap: Record<string, string>){
     '(function(){',
     '  var s=function(a){try{return [].slice.call(a).map(function(v){try{return typeof v==="string"?v:JSON.stringify(v)}catch(e){return String(v)}}).join(" ")}catch(e){return ""}}',
     '  var snd=function(k,t){try{parent.postMessage({__edp_console:1,kind:k,text:t},"*")}catch(e){}};',
+    '  snd("clear","");',
     '  ;["log","info","warn","error"].forEach(function(m){var o=console[m];console[m]=function(){try{snd(m==="info"?"log":m,s(arguments))}catch(e){}try{o&&o.apply(console,arguments)}catch(e){}}});',
     '  window.addEventListener("error",function(e){snd("error",(e.message||"Ошибка")+(e.lineno?("  [строка "+e.lineno+"]"):""))});',
-    '  window.addEventListener("unhandledrejection",function(e){var r=e&&e.reason;snd("error","Promise: "+((r&&r.message)||String(r)))});',
+    '  window.addEventListener("unhandledrejection",function(e){var r=e&&e.reason;var msg=(r&&r.message)||String(r||"");if(/pointerlock|fullscreen|play\\(\\) failed|user didn\'t interact/i.test(msg))return;snd("error","Promise: "+msg)});',
+    '  window.addEventListener("pointerdown",function(){try{window.focus()}catch(e){}},true);',
+    '  try{window.localStorage.getItem("_")}catch(e){var mkS=function(){var d=Object.create(null);var a={getItem:function(k){k=String(k);return Object.prototype.hasOwnProperty.call(d,k)?d[k]:null},setItem:function(k,v){d[String(k)]=String(v)},removeItem:function(k){delete d[String(k)]},clear:function(){d=Object.create(null)},key:function(i){var ks=Object.keys(d);return ks[i]!==undefined?ks[i]:null},get length(){return Object.keys(d).length}};return typeof Proxy==="function"?new Proxy(a,{get:function(t,p){if(p in t)return typeof t[p]==="function"?t[p].bind(t):t[p];return typeof p==="string"&&Object.prototype.hasOwnProperty.call(d,p)?d[p]:undefined},set:function(t,p,v){if(typeof p==="string"&&!(p in t)){d[p]=String(v);return true}t[p]=v;return true},deleteProperty:function(t,p){if(typeof p==="string")delete d[p];return true}}):a};try{Object.defineProperty(window,"localStorage",{configurable:true,get:(function(st){return function(){return st}})(mkS())})}catch(e2){}try{Object.defineProperty(window,"sessionStorage",{configurable:true,get:(function(st){return function(){return st}})(mkS())})}catch(e3){}try{var _cj="";Object.defineProperty(document,"cookie",{configurable:true,get:function(){return _cj},set:function(v){_cj=String(v||"")}})}catch(e4){}}',
+    '  try{var origPl=Element.prototype.requestPointerLock;if(origPl){Element.prototype.requestPointerLock=function(){try{var p=origPl.apply(this,arguments);if(p&&typeof p.catch==="function")p.catch(function(){});return p}catch(e){}}}}catch(e){}',
+    '  try{var origFs=Element.prototype.requestFullscreen;if(origFs){Element.prototype.requestFullscreen=function(){try{var p=origFs.apply(this,arguments);if(p&&typeof p.catch==="function")p.catch(function(){});return p}catch(e){return Promise.resolve()}}}}catch(e){}',
     hasAssets ? '  var A=' + safeAssetsJson + ';' : '',
     hasAssets ? '  var res=function(u){if(!u||typeof u!=="string")return u;var t=u.trim();if(/^(?:data:|blob:|https?:|\\/\\/|#|javascript:|mailto:)/i.test(t))return u;var c=t.split("?")[0].split("#")[0].replace(/^(\\.\\/|\\/)+/,"").toLowerCase();if(A[c])return A[c];var b=c.split("/").pop();if(b&&A[b])return A[b];try{var d=decodeURIComponent(c);if(A[d])return A[d];var db=d.split("/").pop();if(db&&A[db])return A[db]}catch(e){}return u};' : '',
     hasAssets ? '  var rwCss=function(v){if(typeof v!=="string"||v.indexOf("url(")===-1)return v;return v.replace(/url\\(\\s*([\'"]?)([^\'")]+)\\1\\s*\\)/gi,function(m,q,u){var r=res(u);return r!==u?\'url("\'+r+\'")\':m})};' : '',
@@ -188,39 +221,81 @@ function previewHookScript(missing: string[], assetMap: Record<string, string>){
 function buildPreviewDoc(files: VFile[], entryName?: string){
   const assetMap = buildImageAssetMap(files)
   const norm=(s:string)=> s.toLowerCase().replace(/^\.?\/?/,'').split('?')[0].split('#')[0]
-  const find=(ref?:string)=>{
-    const want=norm((ref||'').split('/').pop()||'')
+  const find=(ref?:string, expectedLang?: 'css' | 'javascript' | 'html')=>{
+    const rawRef = (ref || '').trim()
+    if (/^(?:https?:|\/\/|data:|blob:)/i.test(rawRef)) return undefined
+    const want=norm(rawRef.split('/').pop()||'')
     if(!want) return undefined
-    return files.find(f=>norm(f.name)===want)
+    const exact = files.find(f=>norm(f.name)===want)
+    if (exact) return exact
+    // Умный фолбэк для частых учебных имён: если в HTML написано <script src="script.js">,
+    // а файл в проекте называется app.js (или наоборот), либо в проекте ровно один JS/CSS файл — подхватываем его без ошибки!
+    if (expectedLang === 'javascript' || want.endsWith('.js')) {
+      const jsFiles = files.filter(f => getLang(f.name) === 'javascript')
+      if (jsFiles.length === 1) return jsFiles[0]
+      if (['script.js', 'app.js', 'main.js', 'index.js'].includes(want)) {
+        const commonJs = jsFiles.find(f => ['app.js', 'script.js', 'main.js', 'index.js'].includes(norm(f.name)))
+        if (commonJs) return commonJs
+      }
+    }
+    if (expectedLang === 'css' || want.endsWith('.css')) {
+      const cssFiles = files.filter(f => getLang(f.name) === 'css')
+      if (cssFiles.length === 1) return cssFiles[0]
+      if (['style.css', 'styles.css', 'main.css', 'index.css'].includes(want)) {
+        const commonCss = cssFiles.find(f => ['style.css', 'styles.css', 'main.css', 'index.css'].includes(norm(f.name)))
+        if (commonCss) return commonCss
+      }
+    }
+    return undefined
   }
-  const inline=new Set<string>()
+  const inlineCss=new Set<string>()
+  const inlineJs=new Set<string>()
   const missing:string[]=[]
-  let entry = (entryName && entryName.toLowerCase().endsWith('.html') && find(entryName)) || find('index.html') || find('main.html') || files.find(f=>getLang(f.name)==='html')
+  let entry = (entryName && entryName.toLowerCase().endsWith('.html') && find(entryName, 'html')) || find('index.html', 'html') || find('main.html', 'html') || files.find(f=>getLang(f.name)==='html')
   let html = entry?.content || '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body></body></html>'
+  const hasOwnInlineStyle = /<style\b[^>]*>[\s\S]*?<\/style>/i.test(html)
+  const hasOwnInlineScript = /<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/i.test(html)
+
   // <link rel=stylesheet href="style.css"> → <style>…
-  html = html.replace(/<link\b[^>]*href=["']([^"']+\.css)["'][^>]*>/gi, (m, href: string)=>{
-    const f = find(href)
-    if(f){ inline.add(f.name); return `<style>\n${rewriteCssAssetUrls(f.content, assetMap)}\n</style>` }
+  html = html.replace(/<link\b[^>]*href=["']([^"']+\.css(?:\?[^"']*)?)["'][^>]*>/gi, (m, href: string)=>{
+    if (/^(?:https?:|\/\/)/i.test(href.trim())) return m
+    const f = find(href, 'css')
+    if(f){ inlineCss.add(f.name); return `<style>\n${rewriteCssAssetUrls(f.content, assetMap)}\n</style>` }
     missing.push(`${href} (CSS)`)
-    return m
+    return `<!-- missing css: ${norm(href)} -->`
   })
   // <script src="app.js"></script> → выносим в КОНЕЦ <body> (как defer).
   const deferredJs: string[] = []
-  html = html.replace(/<script\b[^>]*src=["']([^"']+\.js)["'][^>]*>\s*<\/script>/gi, (m, src: string)=>{
-    const f = find(src)
-    if(f){ inline.add(f.name); deferredJs.push(f.content); return `<!-- ${norm(src)}: inline -->` }
+  html = html.replace(/<script\b[^>]*src=["']([^"']+\.js(?:\?[^"']*)?)["'][^>]*>\s*<\/script>/gi, (m, src: string)=>{
+    if (/^(?:https?:|\/\/)/i.test(src.trim())) return m
+    const f = find(src, 'javascript')
+    if(f){ inlineJs.add(f.name); deferredJs.push(f.content); return `<!-- ${norm(src)} -> ${f.name}: inline -->` }
     missing.push(`${src} (JS)`)
-    return m
+    return `<!-- missing js: ${norm(src)} -->`
   })
-  // Подменяем пути к загруженным изображениям прямо в HTML и inline стилях
+  // Подменяем пути к загруженным изображениям прямо в HTML и inline стилях (не трогая <script>)
   html = rewriteHtmlAssets(html, assetMap)
-  // куда вставлять: css — перед </head>, все js — перед </body> (в порядке подключения)
-  const headCss = files
-    .filter(f=>getLang(f.name)==='css' && !f.name.toLowerCase().startsWith('_') && !inline.has(f.name))
-    .map(f=>`<style>/* ${f.name} */\n${rewriteCssAssetUrls(f.content, assetMap)}\n</style>`)
-    .join('\n')
-  const restJs = files.filter(f=>getLang(f.name)==='javascript' && !inline.has(f.name)).map(f=>`<script>/* ${f.name} */\n${f.content}\n\n</script>`).join('\n')
-  const bodyJs = deferredJs.map(c=>`<script>\n${c}\n\n</script>`).join('\n') + (deferredJs.length && restJs ? '\n' : '') + restJs
+
+  // ВАЖНО: если index.html уже содержит свои <style>/<link> или свои <script>, НЕ подмешиваем
+  // посторонние несвязанные файлы (например старый app.js/style.css от другого шаблона или задачи),
+  // иначе старый app.js падает с TypeError/SyntaxError поверх новой однофайловой HTML-игры!
+  const shouldAutoInjectCss = !entry || (inlineCss.size === 0 && !hasOwnInlineStyle)
+  const shouldAutoInjectJs = !entry || (inlineJs.size === 0 && deferredJs.length === 0 && !hasOwnInlineScript)
+
+  const headCss = shouldAutoInjectCss
+    ? files
+        .filter(f=>getLang(f.name)==='css' && !f.name.toLowerCase().startsWith('_') && !inlineCss.has(f.name) && !f.name.startsWith('task_'))
+        .map(f=>`<style>/* ${f.name} */\n${rewriteCssAssetUrls(f.content, assetMap)}\n</style>`)
+        .join('\n')
+    : ''
+  const safeInlineJs = (jsCode: string) => jsCode.replace(/<\/script/gi, '<\\/script')
+  const restJs = shouldAutoInjectJs
+    ? files
+        .filter(f=>getLang(f.name)==='javascript' && !inlineJs.has(f.name) && !f.name.startsWith('task_'))
+        .map(f=>`<script>/* ${f.name} */\n${safeInlineJs(f.content)}\n</script>`)
+        .join('\n')
+    : ''
+  const bodyJs = deferredJs.map(c=>`<script>\n${safeInlineJs(c)}\n</script>`).join('\n') + (deferredJs.length && restJs ? '\n' : '') + restJs
   const hook = previewHookScript(missing, assetMap)
   // одиночный css без html: рисуем демо-разметку по найденным селекторам
   if(!entry){
@@ -234,18 +309,19 @@ function buildPreviewDoc(files: VFile[], entryName?: string){
     html = `<!DOCTYPE html><html><head><meta charset="utf-8">\n${hook}\n${headCss}</head><body style="font-family:sans-serif;padding:16px">\n${demo}\n${bodyJs}</body></html>`
     return html
   }
+  // Используем функции-реплейсеры () => ..., чтобы спецсимволы $&, $$, $', $` в JS-коде (например `$${money}`) НЕ искажались!
   if(headCss){
-    if(/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, `${headCss}</head>`)
+    if(/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, () => `${headCss}</head>`)
     else if(/<body[^>]*>/i.test(html)) html = html.replace(/<body([^>]*)>/i, (m)=>`<head>${headCss}</head>${m}`)
     else html = `${headCss}\n${html}`
   }
   if(bodyJs){
-    if(/<\/body>/i.test(html)) html = html.replace(/<\/body>/i, `${bodyJs}\n</body>`)
+    if(/<\/body>/i.test(html)) html = html.replace(/<\/body>/i, () => `${bodyJs}\n</body>`)
     else html += '\n' + bodyJs
   }
   // хук консоли и резолвер картинок для JS: в <head>, иначе в <body>, иначе в начало документа
-  if(/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, m=>m + '\n' + hook)
-  if(/<body[^>]*>/i.test(html)) return html.replace(/<body[^>]*>/i, m=>m + '\n' + hook)
+  if(/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => m + '\n' + hook)
+  if(/<body[^>]*>/i.test(html)) return html.replace(/<body[^>]*>/i, (m) => m + '\n' + hook)
   return hook + '\n' + html
 }
 function FileIcon({name, content}:{name:string, content?:string}){
@@ -283,6 +359,11 @@ export default function VSCodeEditor(){
             if(!content || !content.trim()){
               const d=DEFAULT_FILES.find(d=>d.name===name)
               content=d?d.content:(getLang(name)==='python'?'print("hello")':getLang(name)==='html'?'<!DOCTYPE html><p>new</p>':'console.log("hi")')
+            }
+            // Автопочинка старого шаблона калькулятора в localStorage (замена Function/битой регулярки на парсер safeCalc)
+            if (typeof content === 'string' && (content.includes('/^[0-9+-*/.%() ]+$/') || content.includes('Function(\'"use strict"; return (\''))) {
+              const calcTpl = VSCODE_TEMPLATES.find(t => t.id === 'calculator')?.files.find(tf => tf.name === 'app.js')
+              if (calcTpl) content = calcTpl.content
             }
             return {id:String(f.id||Date.now()+Math.random()), name, content, lang:getLang(name)}
           })
@@ -374,6 +455,223 @@ export default function VSCodeEditor(){
   const [imgZoom, setImgZoom] = useState<'fit' | '100' | '50'>('fit')
   const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null)
   const [dragOverImg, setDragOverImg] = useState(false)
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false)
+  const [showTasksModal, setShowTasksModal] = useState(false)
+  const [serverTasks, setServerTasks] = useState<PracticeCodeTask[]>([])
+  const [classrooms, setClassrooms] = useState<{ id: number; title: string }[]>([])
+  const [activeTask, setActiveTask] = useState<PracticeCodeTask | null>(null)
+  const [checkingTask, setCheckingTask] = useState(false)
+  const [taskReport, setTaskReport] = useState<{
+    passed: boolean
+    score: number
+    max_score: number
+    passed_tests: number
+    total_tests: number
+    gradebook_synced?: boolean
+    test_results: { label: string; hidden?: boolean; passed: boolean; input?: string; expected?: string; actual?: string; detail?: string }[]
+  } | null>(null)
+  const isTeacher = canTeach()
+
+  useEffect(() => {
+    client
+      .get('/code-tasks/', { params: { language: 'python,javascript,html,css' } })
+      .then((r) => {
+        const arr = Array.isArray(r.data) ? r.data : r.data?.results || []
+        setServerTasks(arr.filter((x: any) => x.language !== 'sql'))
+      })
+      .catch(() => {})
+    if (isTeacher && isAuth) {
+      client
+        .get('/classrooms/')
+        .then((r) => {
+          const arr = Array.isArray(r.data) ? r.data : r.data?.results || []
+          setClassrooms(arr.map((c: any) => ({ id: c.id, title: c.title })))
+        })
+        .catch(() => {})
+    }
+  }, [isAuth, isTeacher])
+
+  const allPracticeTasks = useMemo<PracticeCodeTask[]>(
+    () => [...serverTasks, ...BUILTIN_CODE_TASKS],
+    [serverTasks]
+  )
+
+  const applyTemplate = (tpl: VSCodeTemplate) => {
+    const stamped = Date.now()
+    const nextFiles: VFile[] = tpl.files.map((tf, i) => ({
+      id: `${stamped}_${i}`,
+      name: tf.name,
+      content: tf.content,
+      lang: tf.lang || getLang(tf.name),
+    }))
+    setFiles(nextFiles)
+    const entryObj = nextFiles.find((f) => f.name === tpl.entryFile) || nextFiles[0]
+    setActiveId(entryObj.id)
+    setActiveTask(null)
+    setTaskReport(null)
+    setPreviewLogs([])
+    setMobPrev(false)
+    setFilesOpen(false)
+    if (entryObj.lang === 'html') setPreviewNonce((n) => n + 1)
+    toast(`Открыт шаблон «${tpl.title}»`, 'success')
+  }
+
+  const selectPracticeTask = (task: PracticeCodeTask) => {
+    setActiveTask(task)
+    setTaskReport(null)
+    const ext = task.language === 'python' ? '.py' : task.language === 'javascript' ? '.js' : task.language === 'css' ? '.css' : '.html'
+    const fname = `task_${String(task.id).replace(/[^a-zA-Z0-9_-]/g, '')}${ext}`
+    const existing = files.find((f) => f.name === fname)
+    if (existing) {
+      setActiveId(existing.id)
+    } else {
+      const nf: VFile = {
+        id: `task_${Date.now()}`,
+        name: fname,
+        content: task.starter_code || TEMPLATES[task.language] || '',
+        lang: task.language,
+      }
+      setFiles((prev) => [...prev, nf])
+      setActiveId(nf.id)
+    }
+    setMobPrev(false)
+    setFilesOpen(false)
+    toast(`Задача «${task.title}» открыта — решите и нажмите «Проверить и сдать»`, 'info')
+  }
+
+  const evalWebTestLocal = (t: AutoTestItem, html: string, css: string, js: string) => {
+    const combined = `${html}\n${css}\n${js}`
+    const val = (t.value || t.expected || '').trim()
+    const tp = t.type || 'contains'
+    if (!val) return { passed: true, detail: 'OK' }
+    if (tp === 'tag') {
+      const ok = new RegExp(`<\\s*${val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(html || combined)
+      return { passed: ok, detail: ok ? `Найден тег <${val}>` : `Добавьте тег <${val}>` }
+    }
+    if (tp === 'attr') {
+      const ok = (html || combined).toLowerCase().includes(val.toLowerCase())
+      return { passed: ok, detail: ok ? `Найден ${val}` : `Не найден ${val}` }
+    }
+    if (tp === 'css_prop') {
+      const parts = val.split(':')
+      const pat = parts.length === 2 && parts[1].trim()
+        ? new RegExp(`${parts[0].trim()}\\s*:\\s*[^;}]*${parts[1].trim()}`, 'i')
+        : new RegExp(`${parts[0].trim()}\\s*:`, 'i')
+      const ok = pat.test(css || combined)
+      return { passed: ok, detail: ok ? `CSS «${val}» применён` : `Добавьте CSS «${val}»` }
+    }
+    const ok = combined.toLowerCase().includes(val.toLowerCase())
+    return { passed: ok, detail: ok ? 'Найдено в коде' : `Отсутствует «${val}»` }
+  }
+
+  const submitActiveTask = async () => {
+    if (!activeTask || checkingTask) return
+    const code = active.lang === 'image' ? '' : active.content
+    if (!code.trim()) {
+      toast('Сначала напишите решение в файле задачи', 'error')
+      return
+    }
+    setCheckingTask(true)
+    setTaskReport(null)
+    const cssAll = files.filter((f) => f.lang === 'css').map((f) => f.content).join('\n')
+    const jsAll = files.filter((f) => f.lang === 'javascript').map((f) => f.content).join('\n')
+
+    try {
+      if (!activeTask.builtin) {
+        if (!isAuth) {
+          toast('Войдите в аккаунт, чтобы сдать задачу на сервер', 'error')
+          setCheckingTask(false)
+          return
+        }
+        const res = await client.post(`/code-tasks/${activeTask.id}/run/`, {
+          code,
+          css: cssAll,
+          js: jsAll,
+        })
+        const rep = {
+          passed: Boolean(res.data.passed),
+          score: Number(res.data.score ?? 0),
+          max_score: Number(res.data.max_score ?? activeTask.max_score ?? 100),
+          passed_tests: Number(res.data.passed_tests ?? 0),
+          total_tests: Number(res.data.total_tests ?? 0),
+          gradebook_synced: Boolean(res.data.gradebook_synced),
+          test_results: Array.isArray(res.data.test_results) ? res.data.test_results : [],
+        }
+        setTaskReport(rep)
+        if (res.data.output) {
+          setOutput(res.data.output)
+          setShowOutput(true)
+        }
+        if (rep.passed) {
+          setServerTasks((prev) =>
+            prev.map((x) =>
+              String(x.id) === String(activeTask.id)
+                ? { ...x, my_passed: true, my_best_score: Math.max(x.my_best_score || 0, rep.score) }
+                : x
+            )
+          )
+          toast(
+            rep.gradebook_synced
+              ? `Все тесты пройдены (${rep.score}/${rep.max_score}) — балл записан в журнал!`
+              : `Все тесты пройдены (${rep.score}/${rep.max_score})!`,
+            'success'
+          )
+        } else {
+          toast(`Пройдено ${rep.passed_tests} из ${rep.total_tests} тестов`, 'info')
+        }
+        return
+      }
+
+      // Встроенные учебные задачи
+      const tests = activeTask.tests || []
+      if (activeTask.language === 'html' || activeTask.language === 'css') {
+        const results = tests.map((tst, idx) => {
+          const ev = evalWebTestLocal(tst, activeTask.language === 'html' ? code : '', activeTask.language === 'css' ? code : cssAll, jsAll)
+          return { label: tst.label || `Проверка ${idx + 1}`, hidden: tst.hidden, passed: ev.passed, detail: ev.detail }
+        })
+        const passedTests = results.filter((r) => r.passed).length
+        const score = results.length ? Math.round((passedTests / results.length) * activeTask.max_score) : 100
+        const passed = results.length > 0 && passedTests === results.length
+        setTaskReport({ passed, score, max_score: activeTask.max_score, passed_tests: passedTests, total_tests: results.length, test_results: results })
+        toast(passed ? `Отлично! Все ${results.length} проверки пройдены (${score}/${activeTask.max_score})` : `Пройдено ${passedTests} из ${results.length}`, passed ? 'success' : 'info')
+        return
+      }
+
+      if (!isAuth) {
+        toast('Войдите в аккаунт, чтобы запустить автотесты Python/JS', 'error')
+        setCheckingTask(false)
+        return
+      }
+
+      const norm = (s: string) => s.replace(/\r\n/g, '\n').split('\n').map((l) => l.trim()).filter(Boolean).join('\n')
+      const results: any[] = []
+      for (let i = 0; i < tests.length; i++) {
+        const tst = tests[i]
+        const r = await client.post('/code-tasks/run_code/', {
+          code,
+          language: activeTask.language,
+          input: tst.input || '',
+        })
+        const actual = String(r.data.output || '')
+        const ok = Boolean(r.data.passed) && norm(actual) === norm(tst.expected || '')
+        results.push({
+          label: tst.label || `Тест ${i + 1}`,
+          hidden: tst.hidden,
+          passed: ok,
+          ...(tst.hidden ? { detail: ok ? 'Пройден' : 'Ответ не совпал со скрытым тестом' } : { input: tst.input, expected: tst.expected, actual: actual.trim() }),
+        })
+      }
+      const passedTests = results.filter((r) => r.passed).length
+      const score = results.length ? Math.round((passedTests / results.length) * activeTask.max_score) : 100
+      const passed = results.length > 0 && passedTests === results.length
+      setTaskReport({ passed, score, max_score: activeTask.max_score, passed_tests: passedTests, total_tests: results.length, test_results: results })
+      toast(passed ? `Все тесты пройдены (${score}/${activeTask.max_score})!` : `Пройдено ${passedTests} из ${results.length} тестов`, passed ? 'success' : 'info')
+    } catch (e: any) {
+      toast(e?.response?.data?.output || e?.response?.data?.error || 'Ошибка автопроверки', 'error')
+    } finally {
+      setCheckingTask(false)
+    }
+  }
   const [isMobileView, setIsMobileView] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
   useEffect(() => {
     const onResize = () => setIsMobileView(window.innerWidth < 768)
@@ -387,11 +685,22 @@ export default function VSCodeEditor(){
   // Консоль превью: bootstrap-хук в iframe постит console.* и ошибки сюда.
   const [previewLogs,setPreviewLogs]=useState<{kind:string,text:string}[]>([])
   const [previewNonce,setPreviewNonce]=useState(0)
+  const [fullPreviewOpen,setFullPreviewOpen]=useState(false)
+  const fullPreviewIframeRef=useRef<HTMLIFrameElement>(null)
   useEffect(()=>{
     const onMsg=(e:MessageEvent)=>{
+      const fromMain = iframeRef.current && e.source === iframeRef.current.contentWindow
+      const fromFull = fullPreviewIframeRef.current && e.source === fullPreviewIframeRef.current.contentWindow
+      if(!fromMain && !fromFull) return
       const d=e.data as any
       if(d && d.__edp_console===1){
-        setPreviewLogs(ls=>[...ls.slice(-200), {kind:String(d.kind||'log'), text:String(d.text||'')}])
+        if (d.kind === 'clear') {
+          setPreviewLogs([])
+          return
+        }
+        const kind = d.kind === 'error' || d.kind === 'warn' ? d.kind : 'log'
+        const text = String(d.text || '').slice(0, 2000)
+        setPreviewLogs(ls=>[...ls.slice(-200), {kind, text}])
       }
     }
     window.addEventListener('message',onMsg)
@@ -403,7 +712,9 @@ export default function VSCodeEditor(){
     setPreviewLogs([])
     setPreviewNonce(n=>n+1)
     const doc=buildPreviewDoc(files, entryName)
+    setPreviewSrcDoc(doc)
     if(iframeRef.current) iframeRef.current.srcdoc=doc
+    if(fullPreviewIframeRef.current) fullPreviewIframeRef.current.srcdoc=doc
     if(window.innerWidth < 1024) setMobPrev(true)
   }
   const hasHtmlFile = useMemo(()=> files.some(f=>getLang(f.name)==='html'), [files])
@@ -525,15 +836,22 @@ export default function VSCodeEditor(){
       setEntry(next)
     }
   },[active.name, active.lang, files, entry])
-  // Стабильный srcDoc: раньше любое изменение state (Run, toast) ререндерило iframe
-  // и ОБНУЛЯЛО встроенные script.js/style.css — превью «не работало».
-  const previewSrcDoc=useMemo(()=>{
+  // Дебаунс живого превью (280мс): чтобы во время быстрого набора кода iframe не перезагружался
+  // на каждой незаконченной букве и не спамил в консоль промежуточными SyntaxError.
+  const rawPreviewSrcDoc=useMemo(()=>{
     if(active.lang==='html' || active.lang==='css'){
       return buildPreviewDoc(files, active.lang==='css'?undefined:active.name)
     }
     if(hasHtmlFile) return buildPreviewDoc(files)
     return active.lang==='image' ? '' : active.content
   },[files, active.id, active.name, active.lang, active.content, hasHtmlFile, previewNonce])
+  const [previewSrcDoc, setPreviewSrcDoc] = useState(rawPreviewSrcDoc)
+  useEffect(() => {
+    const tmr = window.setTimeout(() => {
+      setPreviewSrcDoc(rawPreviewSrcDoc)
+    }, 280)
+    return () => window.clearTimeout(tmr)
+  }, [rawPreviewSrcDoc])
 
   useEffect(()=>{
     const onMove=(e:MouseEvent)=>{
@@ -592,18 +910,30 @@ export default function VSCodeEditor(){
   const handleSave=async()=>{
     let savedLocal = true
     try{ localStorage.setItem('vscode-files', JSON.stringify(files)) }
-    catch{ savedLocal = false; toast(t('vsc_ls_full'),'error') }
+    catch{
+      try {
+        localStorage.setItem('vscode-files', JSON.stringify(files.filter(f => f.lang !== 'image')))
+      } catch {
+        savedLocal = false
+        toast(t('vsc_ls_full'),'error')
+      }
+    }
     if(active.lang==='image'){
       if(savedLocal) toast(`Изображение ${active.name} сохранено в проекте`, 'success')
       return
     }
-    if(!isAuth){ setOutput(t('vsc_saved_local')); toast(t('vsc_saved_local_t'),'success'); return }
+    // Для учеников и гостей сохраняем проект локально в браузере (чтобы не получать 403 от учительского API /code-tasks/)
+    if(!isAuth || !isTeacher){
+      if(savedLocal) toast(t('vsc_saved_local_t'),'success')
+      return
+    }
     setSaving(true)
     try{
       await client.post('/code-tasks/',{ title:active.name, language: active.lang, description:'VS Code', starter_code: active.content })
-      setOutput(t('vsc_saved_cloud'))
       toast(t('vsc_saved_cloud_t'),'success')
-    }catch(e:any){ setOutput(t('vsc_error_a')+(e.response?.data?.detail||e.message)); toast(t('vsc_save_err'),'error') }
+    }catch{
+      if(savedLocal) toast(t('vsc_saved_local_t'),'success')
+    }
     setSaving(false)
   }
 
@@ -652,10 +982,16 @@ export default function VSCodeEditor(){
       }
       return
     }
-    // Если JS использует DOM/Canvas/Image и в проекте есть HTML — при открытом превью обновляем живую страницу
-    if(active.lang==='javascript' && hasHtmlFile && (jsPreviewOpen || mobPrev || /\b(document|window|Image|querySelector|getElementById)\b/.test(active.content))){
+    // HTML и CSS всегда запускаются мгновенно в браузерном превью (без лимита 8000 символов и без лишней нижней панели)
+    if(active.lang==='html' || active.lang==='css'){
+      refreshPreview(active.lang==='html' ? active.name : undefined)
+      toast(t('vsc_preview_upd'),'success')
+      return
+    }
+    // Если в проекте есть HTML с подключённым скриптом или JS использует DOM/браузерные API — обновляем живое превью
+    const htmlLinksJs = files.some(f => f.lang === 'html' && /<script\b[^>]*src=/i.test(f.content))
+    if(active.lang==='javascript' && hasHtmlFile && (htmlLinksJs || jsPreviewOpen || mobPrev || /\b(document|window|Image|Audio|AudioContext|webkitAudioContext|requestAnimationFrame|querySelector|querySelectorAll|getElementById|addEventListener|alert|prompt|confirm|localStorage|sessionStorage|canvas|ctx|innerWidth|innerHeight|navigator)\b/.test(active.content))){
       setJsPreviewOpen(true)
-      setShowPreviewConsole(true)
       refreshPreview()
       toast(t('vsc_preview_upd'),'success')
       return
@@ -691,7 +1027,7 @@ export default function VSCodeEditor(){
     setRunning(true); setOutput(''); setExplanation(null)
     const code=active.content
     if(!code.trim()){ setOutput(t('vsc_empty_file')); setRunning(false); return }
-    if(code.length>8000){ setOutput(t('vsc_too_long')); setRunning(false); return }
+    if((active.lang==='python' || active.lang==='javascript') && code.length>50000){ setOutput('Код слишком длинный для серверного раннера (макс 50000 символов)'); setRunning(false); return }
     const withFile=(out:string)=> '▶ '+active.name+'\n'+((out||'').trim()?out:t('vsc_empty_out'))
     try{
       if(active.lang==='html'){
@@ -926,6 +1262,12 @@ export default function VSCodeEditor(){
             </div>
             <div className="flex items-center gap-1 px-1.5 py-1 sm:py-0.5 sm:ml-auto shrink-0 overflow-x-auto tab-scroll">
               <button onClick={()=>setFilesOpen(v=>!v)} className="h-8 w-8 rounded hover:bg-white/10 text-slate-300 text-xs md:hidden flex items-center justify-center shrink-0" title="Файлы"><Files size={14}/></button>
+              <button onClick={()=>setShowTemplatesModal(true)} className="h-8 sm:h-6 px-2 rounded bg-[#333333] hover:bg-[#3e3e42] text-sky-300 text-xs font-medium flex items-center justify-center gap-1 shrink-0" title="Готовые шаблоны (HTML/CSS/JS с картинками, Canvas-игра, Python)">
+                <LayoutTemplate size={12}/><span className="hidden md:inline">Шаблоны</span>
+              </button>
+              <button onClick={()=>setShowTasksModal(true)} className={`h-8 sm:h-6 px-2 rounded text-xs font-medium flex items-center justify-center gap-1 shrink-0 ${activeTask ? 'bg-emerald-700 text-white' : 'bg-[#333333] hover:bg-[#3e3e42] text-emerald-300'}`} title="Практические задачи с автопроверкой">
+                <ClipboardCheck size={12}/><span className="hidden md:inline">Задачи</span>
+              </button>
               <button onClick={()=>imageInputRef.current?.click()} className="h-8 sm:h-6 px-2 rounded hover:bg-white/10 text-emerald-400 hover:text-emerald-300 text-xs flex items-center justify-center gap-1 shrink-0" title="Загрузить изображение (PNG, JPG, WEBP, GIF, SVG)">
                 <ImagePlus size={13}/><span className="hidden xl:inline">Фото</span>
               </button>
@@ -973,6 +1315,87 @@ export default function VSCodeEditor(){
             </select>
             <input value={requirements} onChange={e=>setRequirements(e.target.value)} placeholder="requirements: django pygame" className="flex-1 min-w-0 bg-[#3c3c3c] border border-transparent focus:border-[#007acc] text-white text-xs rounded px-2 py-0.5 hidden sm:block" title={t('vsc_req_hint')}/>
           </div>
+          {/* Панель активной практической задачи с автопроверкой */}
+          {activeTask && (
+            <div className="bg-[#1b2430] border-b border-[#2c3b4f] px-3 py-2 space-y-2 shrink-0 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-white flex items-center gap-1.5">
+                  <ClipboardCheck size={14} className="text-emerald-400 shrink-0" />
+                  {activeTask.title}
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-[#2a3444] text-[10px] font-mono uppercase text-sky-300">{activeTask.language}</span>
+                {activeTask.classroom_title && (
+                  <span className="px-1.5 py-0.5 rounded bg-indigo-950 border border-indigo-700/60 text-[10px] text-indigo-300 flex items-center gap-1">
+                    <GraduationCap size={10} /> {activeTask.classroom_title}
+                  </span>
+                )}
+                <div className="ml-auto flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={checkingTask}
+                    onClick={submitActiveTask}
+                    className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5"
+                  >
+                    {checkingTask ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                    {checkingTask ? 'Проверка…' : 'Проверить и сдать'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTask(null); setTaskReport(null) }}
+                    className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white"
+                    title="Выйти из задачи"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              </div>
+              {activeTask.description && (
+                <p className="text-slate-300 text-[11.5px] leading-snug">{activeTask.description}</p>
+              )}
+              {taskReport && (
+                <div className="space-y-1.5 pt-1 border-t border-white/10">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`font-bold ${taskReport.passed ? 'text-emerald-400' : 'text-amber-300'}`}>
+                      {taskReport.passed ? '✓ Задача решена!' : `Пройдено ${taskReport.passed_tests} из ${taskReport.total_tests}`} — {taskReport.score}/{taskReport.max_score} балл.
+                    </span>
+                    {taskReport.gradebook_synced && (
+                      <span className="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-700/60 text-emerald-300 text-[10.5px]">
+                        Записано в журнал класса
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {taskReport.test_results.map((tr, i) => (
+                      <div
+                        key={i}
+                        className={`px-2 py-1 rounded border text-[11px] flex items-center gap-1.5 ${
+                          tr.passed
+                            ? 'bg-emerald-950/50 border-emerald-700/60 text-emerald-200'
+                            : 'bg-rose-950/50 border-rose-700/60 text-rose-200'
+                        }`}
+                        title={
+                          tr.hidden
+                            ? tr.detail || (tr.passed ? 'Скрытый тест пройден' : 'Скрытый тест не пройден')
+                            : tr.detail || (tr.expected !== undefined ? `Ожидалось: ${tr.expected} | Получено: ${tr.actual ?? ''}` : '')
+                        }
+                      >
+                        {tr.passed ? <CheckCircle2 size={11} className="text-emerald-400 shrink-0" /> : <XCircle size={11} className="text-rose-400 shrink-0" />}
+                        <span>{tr.label}</span>
+                        {!tr.passed && !tr.hidden && tr.expected !== undefined && (
+                          <span className="text-[10px] font-mono text-rose-300">
+                            (ожид. «{tr.expected}», получ. «{(tr.actual || '').slice(0, 30)}»)
+                          </span>
+                        )}
+                        {!tr.passed && tr.detail && (
+                          <span className="text-[10px] text-rose-300">— {tr.detail}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           <div ref={splitBoxRef} className="flex-1 min-h-0 relative flex">
             <div className={mobPrev ? 'hidden' : 'flex-1 min-w-0 relative flex flex-col'}>
               {active.lang === 'image' ? (
@@ -1124,17 +1547,35 @@ export default function VSCodeEditor(){
                       )}
                     </button>
                     <button onClick={()=>refreshPreview(active.lang==='html'?active.name:undefined)} className="px-2 py-0.5 rounded bg-[#007acc] text-white text-xs">{t('vsc_refresh')}</button>
-                    <button onClick={()=>{
-                      try{
-                        const blob=new Blob([previewSrcDoc],{type:'text/html'})
-                        const url=URL.createObjectURL(blob)
-                        window.open(url,'_blank')
-                        setTimeout(()=>URL.revokeObjectURL(url),60000)
-                      }catch{}
-                    }} className="px-2 py-0.5 rounded bg-[#3c3c3c] hover:bg-[#505050] text-white text-xs hidden sm:inline" title={t('vsc_open_tab')}>{t('vsc_open_tab')}</button>
+                    <button onClick={()=>setFullPreviewOpen(true)} className="px-2 py-0.5 rounded bg-[#3c3c3c] hover:bg-[#505050] text-white text-xs hidden sm:inline" title="Открыть превью на весь экран (в изолированной песочнице)">На весь экран</button>
                   </div>
                 </div>
-                <iframe ref={iframeRef} srcDoc={previewSrcDoc} className="flex-1 w-full border-0 min-h-0" sandbox="allow-scripts allow-modals allow-forms" allow="fullscreen"/>
+                <iframe
+                  ref={iframeRef}
+                  srcDoc={previewSrcDoc}
+                  className="flex-1 w-full border-0 min-h-0"
+                  sandbox="allow-scripts allow-modals allow-forms allow-pointer-lock allow-popups allow-downloads"
+                  allow="fullscreen; autoplay; gamepad; clipboard-write"
+                />
+                {fullPreviewOpen && (
+                  <div className="fixed inset-0 z-[95] bg-slate-950/85 flex flex-col p-2 sm:p-4" role="dialog" aria-modal="true" aria-label="Полноэкранный предпросмотр HTML">
+                    <div className="h-10 px-3 bg-[#252526] border border-[#3c3c3c] rounded-t-xl flex items-center justify-between text-xs text-slate-200 shrink-0">
+                      <span className="font-semibold">Предпросмотр — изолированная песочница (Esc — освободить курсор мыши)</span>
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={()=>refreshPreview(active.lang==='html'?active.name:undefined)} className="px-2.5 py-1 rounded bg-[#007acc] text-white font-medium">{t('vsc_refresh')}</button>
+                        <button type="button" onClick={()=>setFullPreviewOpen(false)} className="p-1.5 rounded hover:bg-[#3c3c3c] text-slate-300" aria-label="Закрыть"><X size={15}/></button>
+                      </div>
+                    </div>
+                    <iframe
+                      ref={fullPreviewIframeRef}
+                      srcDoc={previewSrcDoc}
+                      title="HTML Preview Fullscreen"
+                      className="flex-1 w-full bg-white border-x border-b border-[#3c3c3c] rounded-b-xl"
+                      sandbox="allow-scripts allow-modals allow-forms allow-pointer-lock allow-popups allow-downloads"
+                      allow="fullscreen; autoplay; gamepad; clipboard-write"
+                    />
+                  </div>
+                )}
                 {showPreviewConsole && (
                   <div className="h-32 bg-[#181818] border-t border-[#2d2d2d] flex flex-col shrink-0 text-xs font-mono">
                     <div className="px-2 py-1 bg-[#252526] border-b border-[#2d2d2d] flex items-center justify-between text-[11px] text-slate-400 shrink-0">
@@ -1279,6 +1720,24 @@ export default function VSCodeEditor(){
         <button onClick={()=>imageInputRef.current?.click()} className="px-2.5 py-1.5 rounded bg-emerald-700 text-white text-xs flex items-center gap-1 shrink-0" title="Загрузить изображение"><ImagePlus size={13}/></button>
         <button onClick={()=>{ setFilesOpen(true); setShowNew(true) }} className="px-2.5 py-1.5 rounded bg-[#007acc] text-white shrink-0" title="Новый файл"><Plus size={13}/></button>
       </div>
+      <VSCodeTemplatesModal
+        open={showTemplatesModal}
+        onClose={() => setShowTemplatesModal(false)}
+        onApply={applyTemplate}
+      />
+      <VSCodeTasksModal
+        open={showTasksModal}
+        onClose={() => setShowTasksModal(false)}
+        tasks={allPracticeTasks}
+        activeTaskId={activeTask?.id ?? null}
+        canCreate={isTeacher && isAuth}
+        classrooms={classrooms}
+        onSelectTask={selectPracticeTask}
+        onTaskCreated={(created) => {
+          setServerTasks((prev) => [created, ...prev])
+          selectPracticeTask(created)
+        }}
+      />
     </div>
   )
 }

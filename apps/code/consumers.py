@@ -14,15 +14,20 @@
 """
 import asyncio
 import json
+import logging
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 
+from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+
+_log = logging.getLogger(__name__)
 
 SESSION_TTL = 60          # максимум секунд на один запуск
 WAIT_IDLE = 1.2           # тишина без вывода = похоже ждёт ввод
@@ -31,6 +36,14 @@ MAX_GLOBAL_SESSIONS = 20  # максимум одновременных запу
 RUNS_PER_MINUTE = 20      # лимит запусков на пользователя
 
 _global_running = 0
+_global_lock = asyncio.Lock()
+
+
+@database_sync_to_async
+def _is_user_still_active(user_id: int) -> bool:
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    return User.objects.filter(pk=user_id, is_active=True).exists()
 
 
 def _limit_memory():
@@ -40,6 +53,10 @@ def _limit_memory():
         resource.setrlimit(resource.RLIMIT_CPU, (20, 20))
         resource.setrlimit(resource.RLIMIT_FSIZE, (2 * 1024 * 1024, 2 * 1024 * 1024))
         resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
+        try:
+            resource.setrlimit(resource.RLIMIT_NPROC, (32, 32))
+        except Exception:
+            pass
     except Exception:
         pass
 
@@ -51,7 +68,7 @@ class RunSession:
         self.loop = loop
         self.tmpdir = tempfile.mkdtemp(prefix='edu_live_')
         self.proc = None
-        self.queue = asyncio.Queue()
+        self.queue = asyncio.Queue(maxsize=64)
         self.total_out = 0
         self.last_out_ts = time.time()
         self._buf = []
@@ -65,22 +82,22 @@ class RunSession:
         # os.environ.copy() отдавал программе ученика GEMINI_API_KEY, POSTGRES_PASSWORD и т.п.
         from .services.runner import _get_run_env
         env = _get_run_env(self.tmpdir)
+        preexec = _limit_memory if os.name != 'nt' else None
         if self.language == 'python':
             fname = os.path.join(self.tmpdir, 'main.py')
             with open(fname, 'w', encoding='utf-8') as f:
                 f.write(self.code)
             # -I -u -X utf8: изолированный режим, без буферизации (для input()) и UTF-8 для кириллицы
             cmd = [sys.executable, '-I', '-u', '-X', 'utf8', fname]
-            preexec = _limit_memory if os.name != 'nt' else None
         else:
             fname = os.path.join(self.tmpdir, 'main.js')
             with open(fname, 'w', encoding='utf-8') as f:
                 f.write(self.code)
             cmd = ['node', '--disallow-code-generation-from-strings', '--max-old-space-size=128', fname]
-            preexec = None
         self.proc = subprocess.Popen(
             cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             cwd=self.tmpdir, env=env, preexec_fn=preexec,
+            start_new_session=(os.name != 'nt'),
             text=True, encoding='utf-8', errors='replace', bufsize=1,
         )
         th = threading.Thread(target=self._reader, daemon=True)
@@ -89,13 +106,21 @@ class RunSession:
         fl.start()
         self.last_out_ts = time.time()
 
+    def _safe_put(self, item):
+        try:
+            self.queue.put_nowait(item)
+        except asyncio.QueueFull:
+            # при переполнении очереди вывода немедленно останавливаем процесс (защита от OOM)
+            if item[0] == 'out':
+                self.kill()
+
     def _emit_buf(self):
         # вытолкнуть накопленное (вызывается из reader и flusher под локом снаружи)
         if not self._buf:
             return
         text = ''.join(self._buf)
         del self._buf[:]
-        self.loop.call_soon_threadsafe(self.queue.put_nowait, ('out', text[:4000]))
+        self.loop.call_soon_threadsafe(self._safe_put, ('out', text[:4000]))
 
     def _flusher(self):
         # Windows: peek по пайпам нет, поэтому недописанная строка (приглашение input)
@@ -132,12 +157,12 @@ class RunSession:
                 rc = self.proc.wait(timeout=5)
             except Exception:
                 rc = self.proc.returncode if self.proc.returncode is not None else -1
-            self.loop.call_soon_threadsafe(self.queue.put_nowait, ('exit', rc))
+            self.loop.call_soon_threadsafe(self._safe_put, ('exit', rc))
 
     def send_input(self, text):
         try:
             if self.proc and self.proc.poll() is None and self.proc.stdin:
-                self.proc.stdin.write((text or '') + '\n')
+                self.proc.stdin.write((text or '')[:4096] + '\n')
                 self.proc.stdin.flush()
                 self.waiting_sent = False
                 self.last_out_ts = time.time()
@@ -153,6 +178,12 @@ class RunSession:
         self._stop_reader = True
         try:
             if self.proc and self.proc.poll() is None:
+                if os.name != 'nt':
+                    try:
+                        os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
+                        return
+                    except Exception:
+                        pass
                 self.proc.kill()
         except Exception:
             pass
@@ -190,27 +221,28 @@ class RunConsumer(AsyncWebsocketConsumer):
         """Не больше RUNS_PER_MINUTE запусков в минуту и одной живой сессии на пользователя."""
         from django.core.cache import cache
         uid = self.scope['user'].id
+        active_k = f'ws-run-active:{uid}'
+        if not cache.add(active_k, 1, SESSION_TTL + 5):
+            return False, 'У тебя уже запущена программа в другой вкладке — останови её'
         k = f'ws-run-rate:{uid}'
         n = cache.get(k, 0)
         if n >= RUNS_PER_MINUTE:
+            cache.delete(active_k)
             return False, f'Слишком часто: не больше {RUNS_PER_MINUTE} запусков в минуту'
         cache.set(k, n + 1, 60)
-        active_k = f'ws-run-active:{uid}'
-        if cache.get(active_k):
-            return False, 'У тебя уже запущена программа в другой вкладке — останови её'
-        cache.set(active_k, 1, SESSION_TTL + 5)
         return True, ''
 
-    def _release(self):
+    async def _release(self):
         global _global_running
-        if self._counted:
-            self._counted = False
-            _global_running = max(0, _global_running - 1)
-            try:
-                from django.core.cache import cache
-                cache.delete(f"ws-run-active:{self.scope['user'].id}")
-            except Exception:
-                pass
+        async with _global_lock:
+            if self._counted:
+                self._counted = False
+                _global_running = max(0, _global_running - 1)
+                try:
+                    from django.core.cache import cache
+                    cache.delete(f"ws-run-active:{self.scope['user'].id}")
+                except Exception:
+                    pass
 
     async def disconnect(self, code):
         if self.session:
@@ -218,27 +250,36 @@ class RunConsumer(AsyncWebsocketConsumer):
             self.session = None
         if self._pump_task:
             self._pump_task.cancel()
-        self._release()
+        await self._release()
 
     async def receive(self, text_data=None, bytes_data=None):
         global _global_running
+        if text_data and len(text_data) > 16384:
+            await self._send({'type': 'error', 'message': 'Слишком большое сообщение'})
+            return
         try:
             msg = json.loads(text_data or '{}')
         except Exception:
             await self._send({'type': 'error', 'message': 'Битый JSON'})
+            return
+        if not isinstance(msg, dict):
             return
         kind = msg.get('type')
         if kind == 'start':
             if self.session:
                 await self._send({'type': 'error', 'message': 'Сессия уже запущена'})
                 return
+            user = self.scope.get('user')
+            if not user or not await _is_user_still_active(user.id):
+                await self.close(code=4401)
+                return
             lang = str(msg.get('language') or 'python').lower().strip()
             lang = {'py': 'python', 'js': 'javascript'}.get(lang, lang)
             if lang not in ('python', 'javascript'):
                 await self._send({'type': 'error', 'message': 'Интерактив доступен для python и javascript'})
                 return
-            code = str(msg.get('code') or '')
-            if not code.strip():
+            code = msg.get('code')
+            if not isinstance(code, str) or not code.strip():
                 await self._send({'type': 'error', 'message': 'Пустой код'})
                 return
             if len(code) > 8000:
@@ -249,26 +290,33 @@ class RunConsumer(AsyncWebsocketConsumer):
             if not safe:
                 await self._send({'type': 'error', 'message': f'Блокировка: {why}'})
                 return
-            ok, why = await asyncio.to_thread(self._rate_ok)
-            if not ok:
-                await self._send({'type': 'error', 'message': why})
-                return
-            _global_running += 1
-            self._counted = True
+            async with _global_lock:
+                if _global_running >= MAX_GLOBAL_SESSIONS:
+                    await self._send({'type': 'error', 'message': 'Сервер занят, попробуй через пару секунд'})
+                    return
+                ok, why = await asyncio.to_thread(self._rate_ok)
+                if not ok:
+                    await self._send({'type': 'error', 'message': why})
+                    return
+                _global_running += 1
+                self._counted = True
             try:
                 self.session = RunSession(lang, code, asyncio.get_running_loop())
                 await asyncio.to_thread(self.session.start)
                 await self._send({'type': 'started'})
                 self._pump_task = asyncio.create_task(self._pump())
-            except Exception as e:
+            except Exception:
+                _log.exception("WS RunSession start failed")
                 self.session = None
-                self._release()
-                await self._send({'type': 'error', 'message': f'Не запустилось: {e}'})
+                await self._release()
+                await self._send({'type': 'error', 'message': 'Не удалось запустить программу'})
         elif kind == 'input':
             if not self.session:
                 await self._send({'type': 'error', 'message': 'Нет активной сессии'})
                 return
-            ok = await asyncio.to_thread(self.session.send_input, str(msg.get('text') or ''))
+            raw_txt = msg.get('text')
+            txt = raw_txt[:4096] if isinstance(raw_txt, str) else ''
+            ok = await asyncio.to_thread(self.session.send_input, txt)
             if not ok:
                 await self._send({'type': 'error', 'message': 'Программа уже завершилась'})
         elif kind == 'stop':
@@ -279,7 +327,7 @@ class RunConsumer(AsyncWebsocketConsumer):
                 self.session = None
                 if self._pump_task:
                     self._pump_task.cancel()
-                self._release()
+                await self._release()
         else:
             await self._send({'type': 'error', 'message': 'Неизвестная команда'})
 
@@ -315,9 +363,11 @@ class RunConsumer(AsyncWebsocketConsumer):
                     sess.total_out += len(payload)
                     if sess.total_out <= MAX_OUTPUT:
                         await self._send({'type': 'output', 'text': payload})
-                    elif not getattr(sess, '_truncated', False):
-                        sess._truncated = True
-                        await self._send({'type': 'output', 'text': '\n…вывод обрезан (лимит)…\n'})
+                    else:
+                        await asyncio.to_thread(sess.kill)
+                        await self._send({'type': 'output', 'text': '\n…вывод обрезан (лимит) — программа остановлена…\n'})
+                        await self._send({'type': 'done', 'passed': False, 'code': -1})
+                        break
                 elif kind == 'exit':
                     await self._send({'type': 'done', 'passed': (payload == 0), 'code': payload})
                     break
@@ -328,4 +378,4 @@ class RunConsumer(AsyncWebsocketConsumer):
                 sess.cleanup()
                 self.session = None
             # счётчик уменьшается ровно один раз (раньше stop + finally уменьшали дважды)
-            self._release()
+            await self._release()

@@ -8,6 +8,7 @@
 """
 import asyncio
 import base64
+import hmac
 import io
 import json
 import random
@@ -22,6 +23,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 ROOM_TTL_SECONDS = 3 * 3600  # 3 часа
+MAX_LIVE_ROOMS = 100
+MAX_PLAYERS_PER_ROOM = 100
+REACTION_COOLDOWN_SEC = 1.0
 
 BOT_PRESETS = [
     ('Айдана', 'av:fox:none:blook'),
@@ -169,10 +173,10 @@ def _prune_rooms():
 
 def _make_pin() -> str:
     for _ in range(50):
-        pin = f'{random.randint(100000, 999999)}'
+        pin = f'{secrets.randbelow(900000) + 100000}'
         if pin not in LIVE_ROOMS:
             return pin
-    return str(random.randint(100000, 999999))
+    return str(secrets.randbelow(900000) + 100000)
 
 
 def _make_qr_data_uri(url: str) -> str:
@@ -222,6 +226,8 @@ class LiveQuizCreateView(APIView):
         u = request.user
         if not (u.is_staff or getattr(u, 'role', '') in ('teacher', 'admin')):
             return Response({'detail': 'Запускать Live-квиз может только учитель или администратор'}, status=status.HTTP_403_FORBIDDEN)
+        if len(LIVE_ROOMS) >= MAX_LIVE_ROOMS:
+            return Response({'detail': 'Слишком много активных комнат Live-квиза, попробуйте чуть позже'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
         test_id = request.data.get('test_id')
         title = str(request.data.get('title') or '').strip()
@@ -237,8 +243,9 @@ class LiveQuizCreateView(APIView):
         questions = []
         if test_id:
             from .models import Test
+            is_admin = bool(u.is_staff or getattr(u, 'role', '') == 'admin')
             test = Test.objects.prefetch_related('questions__options').filter(pk=test_id).first()
-            if not test:
+            if not test or (not is_admin and test.owner_id != u.id and not test.is_public):
                 return Response({'detail': 'Тест не найден'}, status=status.HTTP_404_NOT_FOUND)
             if not title:
                 title = test.title
@@ -272,8 +279,16 @@ class LiveQuizCreateView(APIView):
         )
         LIVE_ROOMS[pin] = room
 
-        origin = str(request.data.get('origin') or '').rstrip('/')
-        join_url = f'{origin}/live?pin={pin}' if origin else f'/live?pin={pin}'
+        from django.conf import settings as _dj_settings
+        raw_origin = str(request.data.get('origin') or '').strip().rstrip('/')
+        allowed_origins = set(getattr(_dj_settings, 'CORS_ALLOWED_ORIGINS', []) or [])
+        safe_origin = ''
+        if raw_origin and (
+            raw_origin in allowed_origins
+            or raw_origin.startswith(('http://localhost:', 'http://127.0.0.1:'))
+        ):
+            safe_origin = raw_origin
+        join_url = f'{safe_origin}/live?pin={pin}' if safe_origin else f'/live?pin={pin}'
         qr_data_url = _make_qr_data_uri(join_url)
 
         return Response({
@@ -319,6 +334,8 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
         self.group_name = f'live_quiz_{self.pin}'
         self.role = None  # 'host' | 'player'
         self.player_id = None
+        self._in_group = False
+        self._last_reaction_ts = 0.0
 
         room = LIVE_ROOMS.get(self.pin)
         if not room:
@@ -327,7 +344,7 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
             await self.close(code=4404)
             return
 
-        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        # Добавляем в broadcast-группу ТОЛЬКО после авторизации через host_join / player_join
         await self.accept()
 
     async def disconnect(self, code):
@@ -338,10 +355,12 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
                 'type': 'players_update',
                 'players': room.player_list(),
             })
-        try:
-            await self.channel_layer.group_discard(self.group_name, self.channel_name)
-        except Exception:
-            pass
+        if self._in_group:
+            try:
+                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            except Exception:
+                pass
+            self._in_group = False
 
     async def send_json(self, payload: dict[str, Any]):
         await self.send(text_data=json.dumps(payload, ensure_ascii=False))
@@ -354,6 +373,11 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
 
     async def quiz_event(self, event):
         payload = dict(event['payload'])
+        if payload.get('type') == 'kicked':
+            if self.role == 'player' and self.player_id == payload.get('player_id'):
+                await self.send_json({'type': 'error', 'message': 'Ведущий удалил вас из комнаты'})
+                await self.close(code=4403)
+            return
         # Индивидуальная обратная связь игроку при reveal
         if payload.get('type') == 'reveal' and self.role == 'player' and self.player_id:
             room = LIVE_ROOMS.get(self.pin)
@@ -390,12 +414,17 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
 
         # --- ВХОД ВЕДУЩЕГО ---
         if mtype == 'host_join':
+            if self.role is not None:
+                return
             secret = str(msg.get('secret') or '')
-            if secret != room.host_secret:
+            if not secret or not hmac.compare_digest(secret, room.host_secret):
                 await self.send_json({'type': 'error', 'message': 'Неверный ключ ведущего'})
                 await self.close(code=4403)
                 return
             self.role = 'host'
+            if not self._in_group:
+                await self.channel_layer.group_add(self.group_name, self.channel_name)
+                self._in_group = True
             await self.send_json({
                 'type': 'host_ready',
                 'pin': room.pin,
@@ -412,6 +441,8 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
 
         # --- ВХОД ИГРОКА (телефон ученика, без логина) ---
         if mtype == 'player_join':
+            if self.role is not None:
+                return
             name = str(msg.get('name') or '').strip()[:24]
             if not name:
                 await self.send_json({'type': 'error', 'message': 'Введи имя'})
@@ -420,10 +451,16 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
             if room.state == 'finished':
                 await self.send_json({'type': 'error', 'message': 'Игра уже завершена'})
                 return
+            if len(room.players) >= MAX_PLAYERS_PER_ROOM:
+                await self.send_json({'type': 'error', 'message': 'Комната переполнена'})
+                return
             pid = secrets.token_hex(6)
             self.role = 'player'
             self.player_id = pid
             room.players[pid] = LivePlayer(id=pid, name=name, avatar=avatar)
+            if not self._in_group:
+                await self.channel_layer.group_add(self.group_name, self.channel_name)
+                self._in_group = True
             await self.send_json({
                 'type': 'joined',
                 'player_id': pid,
@@ -452,8 +489,12 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
             await self._broadcast({'type': 'players_update', 'players': room.player_list()})
             return
 
-        # --- ЖИВЫЕ РЕАКЦИИ (летят на проектор учителя) ---
+        # --- ЖИВЫЕ РЕАКЦИИ (летят на проектор учителя, с антиспам-кулдауном) ---
         if mtype == 'reaction' and self.role == 'player' and self.player_id:
+            now = time.time()
+            if now - self._last_reaction_ts < REACTION_COOLDOWN_SEC:
+                return
+            self._last_reaction_ts = now
             p = room.players.get(self.player_id)
             em = str(msg.get('emoji') or '🔥')[:4]
             if p and em in ('🔥', '👏', '😂', '🚀', '❤️', '⚡', '🤯', '🎉'):
@@ -602,6 +643,7 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
             pid = str(msg.get('player_id') or '')
             if pid in room.players:
                 room.players.pop(pid, None)
+                await self._broadcast({'type': 'kicked', 'player_id': pid})
                 await self._broadcast({'type': 'players_update', 'players': room.player_list()})
             return
 

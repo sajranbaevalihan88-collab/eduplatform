@@ -3,8 +3,10 @@ import Editor, { type OnMount } from '@monaco-editor/react'
 import {
   Play, PlayCircle, Database, Table2, Loader2, CircleCheck, RefreshCw, Plus, Trash2,
   Sparkles, BookOpen, Download, SearchCode, AlertTriangle, ChevronDown, ChevronRight,
-  GitFork, KeyRound, Link2, Eye, X,
+  GitFork, KeyRound, Link2, Eye, X, ClipboardCheck, CheckCircle2, XCircle, GraduationCap,
 } from 'lucide-react'
+import client from '../api/client'
+import { canTeach } from '../utils/role'
 import { toast } from '../context/UIContext'
 import {
   SqlLabSession,
@@ -16,6 +18,13 @@ import {
 } from '../components/sql/sqlPresets'
 import SqlResultTable from '../components/sql/SqlResultTable'
 import { ErDiagramSvg } from '../components/sql/SqlSchemaPanel'
+import {
+  BUILTIN_SQL_TASKS,
+  evaluateSqlLocal,
+  type SqlPracticeTask,
+  type SqlCheckResult,
+} from '../components/sql/sqlTasks'
+import { SqlTasksModal } from '../components/sql/SqlTasksModal'
 
 const STORE_KEY = 'sqllab-pg-v3'
 
@@ -81,6 +90,44 @@ export default function SqlLab() {
   const [showErModal, setShowErModal] = useState(false)
   const [selectedErTable, setSelectedErTable] = useState<string | null>(null)
   const [openMenu, setOpenMenu] = useState<null | 'presets' | 'snippets'>(null)
+
+  const [showTasksModal, setShowTasksModal] = useState(false)
+  const [serverSqlTasks, setServerSqlTasks] = useState<SqlPracticeTask[]>([])
+  const [classrooms, setClassrooms] = useState<{ id: number; title: string }[]>([])
+  const [activeTask, setActiveTask] = useState<SqlPracticeTask | null>(null)
+  const [checkingTask, setCheckingTask] = useState(false)
+  const [taskReport, setTaskReport] = useState<{
+    passed: boolean
+    score: number
+    max_score: number
+    passed_tests: number
+    total_tests: number
+    gradebook_synced?: boolean
+    results: SqlCheckResult[]
+  } | null>(null)
+  const isTeacher = canTeach()
+  const isAuth = Boolean(typeof window !== 'undefined' && localStorage.getItem('token'))
+
+  useEffect(() => {
+    client
+      .get('/code-tasks/', { params: { language: 'sql' } })
+      .then((r) => {
+        const arr = Array.isArray(r.data) ? r.data : r.data?.results || []
+        setServerSqlTasks(arr.map((x: any) => ({ ...x, tests: x.tests || x.public_tests || [] })))
+      })
+      .catch(() => {})
+    if (isTeacher && isAuth) {
+      client
+        .get('/classrooms/')
+        .then((r) => {
+          const arr = Array.isArray(r.data) ? r.data : r.data?.results || []
+          setClassrooms(arr.map((c: any) => ({ id: c.id, title: c.title })))
+        })
+        .catch(() => {})
+    }
+  }, [isAuth, isTeacher])
+
+  const allSqlTasks: SqlPracticeTask[] = [...serverSqlTasks, ...BUILTIN_SQL_TASKS]
 
   const sessionRef = useRef<SqlLabSession | null>(null)
   const blocksRef = useRef(blocks)
@@ -244,7 +291,153 @@ export default function SqlLab() {
   }
 
   const resetToDefault = async () => {
+    setActiveTask(null)
+    setTaskReport(null)
     await applyPreset(SQL_PRESETS[0])
+  }
+
+  const openSqlTask = async (task: SqlPracticeTask) => {
+    setActiveTask(task)
+    setTaskReport(null)
+    setInspectedTable(null)
+    const nextBlocks: SqlBlock[] = [
+      {
+        id: makeCellId(),
+        title: '1. Схема задачи (таблицы и данные)',
+        sql: task.schema_sql || SQL_PRESETS[0].schema,
+        isSchema: true,
+      },
+      {
+        id: makeCellId(),
+        title: `2. Ваше решение — ${task.title}`,
+        sql: task.starter_code || '-- Напишите SQL-запрос здесь\n',
+      },
+    ]
+    setBlocks(nextBlocks)
+    blocksRef.current = nextBlocks
+    setCollapsedSchema(true)
+    if (sessionRef.current && phase === 'ready') {
+      await sessionRef.current.reset()
+      dbInitializedRef.current = true
+      const schemaOut = await sessionRef.current.execute(nextBlocks[0].sql)
+      setOutcomes({ [nextBlocks[0].id]: schemaOut })
+      await refreshSchema()
+    }
+    toast(`Открыта SQL-задача «${task.title}»`, 'info')
+  }
+
+  const captureReferenceSql = async (schemaSql: string, solutionSql: string): Promise<SqlExecOutcome | null> => {
+    const s = sessionRef.current
+    if (!s || phase !== 'ready') return null
+    await s.reset()
+    dbInitializedRef.current = true
+    if (schemaSql.trim()) {
+      const schemaOut = await s.execute(schemaSql)
+      if (schemaOut.error) return schemaOut
+    }
+    const solOut = await s.execute(solutionSql)
+    await refreshSchema()
+    return solOut
+  }
+
+  const verifyActiveSqlTask = async () => {
+    if (!activeTask || checkingTask) return
+    const s = sessionRef.current
+    if (!s || phase !== 'ready') {
+      toast('Подождите, PostgreSQL ещё запускается…', 'info')
+      return
+    }
+    const schemaBlk = blocks[0]
+    const queryBlk = blocks[1] || blocks[0]
+    const querySql = queryBlk?.sql || ''
+    if (!querySql.trim()) {
+      toast('Напишите SQL-запрос перед проверкой', 'error')
+      return
+    }
+    setCheckingTask(true)
+    setTaskReport(null)
+    try {
+      // Всегда проверяем на чистой схеме задачи, чтобы правки предыдущих запусков не мешали
+      await s.reset()
+      dbInitializedRef.current = true
+      const schemaSql = activeTask.schema_sql || schemaBlk?.sql || ''
+      const nextOut: Record<string, SqlExecOutcome> = {}
+      if (schemaSql.trim()) {
+        const sOut = await s.execute(schemaSql)
+        if (schemaBlk) nextOut[schemaBlk.id] = sOut
+      }
+      const qOut = await s.execute(querySql)
+      if (queryBlk) nextOut[queryBlk.id] = qOut
+      setOutcomes(nextOut)
+      await refreshSchema()
+
+      const lastTable = qOut.results[qOut.results.length - 1]
+      const cols = (lastTable?.columns || []).map((c) => c.name)
+      const rows = (lastTable?.rows || []) as any[][]
+      const errMsg = qOut.error?.message || ''
+
+      if (!activeTask.builtin) {
+        if (!isAuth) {
+          toast('Войдите в аккаунт, чтобы сдать задачу учителю', 'error')
+          setCheckingTask(false)
+          return
+        }
+        const res = await client.post(`/code-tasks/${activeTask.id}/submit_sql/`, {
+          sql: querySql,
+          columns: cols,
+          rows,
+          error: errMsg,
+        })
+        const rep = {
+          passed: Boolean(res.data.passed),
+          score: Number(res.data.score ?? 0),
+          max_score: Number(res.data.max_score ?? activeTask.max_score ?? 100),
+          passed_tests: Number(res.data.passed_tests ?? 0),
+          total_tests: Number(res.data.total_tests ?? 0),
+          gradebook_synced: Boolean(res.data.gradebook_synced),
+          results: Array.isArray(res.data.test_results) ? res.data.test_results : [],
+        }
+        setTaskReport(rep)
+        if (rep.passed) {
+          setServerSqlTasks((prev) =>
+            prev.map((x) =>
+              String(x.id) === String(activeTask.id)
+                ? { ...x, my_passed: true, my_best_score: Math.max(x.my_best_score || 0, rep.score) }
+                : x
+            )
+          )
+          toast(
+            rep.gradebook_synced
+              ? `SQL-задача решена (${rep.score}/${rep.max_score}) — записано в журнал!`
+              : `SQL-задача решена (${rep.score}/${rep.max_score})!`,
+            'success'
+          )
+        } else {
+          toast(`Пройдено ${rep.passed_tests} из ${rep.total_tests} проверок`, 'info')
+        }
+        return
+      }
+
+      const ev = evaluateSqlLocal(activeTask.tests || [], querySql, cols, rows, errMsg)
+      setTaskReport({
+        passed: ev.passed,
+        score: ev.score,
+        max_score: activeTask.max_score,
+        passed_tests: ev.passedTests,
+        total_tests: ev.totalTests,
+        results: ev.results,
+      })
+      toast(
+        ev.passed
+          ? `Отлично! Задача решена (${ev.score}/${activeTask.max_score})`
+          : `Пройдено ${ev.passedTests} из ${ev.totalTests} проверок`,
+        ev.passed ? 'success' : 'info'
+      )
+    } catch (e: any) {
+      toast(e?.response?.data?.error || 'Не удалось проверить SQL-задачу', 'error')
+    } finally {
+      setCheckingTask(false)
+    }
   }
 
   const addQueryBlock = (sql = 'SELECT * FROM students LIMIT 10;', title?: string) => {
@@ -482,6 +675,21 @@ export default function SqlLab() {
           )}
         </div>
 
+        {/* Задачи с автопроверкой */}
+        <button
+          type="button"
+          onClick={() => setShowTasksModal(true)}
+          className={`h-8 px-2.5 rounded-lg border text-xs font-semibold flex items-center gap-1 shrink-0 whitespace-nowrap ${
+            activeTask
+              ? 'bg-emerald-700 border-emerald-500 text-white'
+              : 'bg-[#21262d] hover:bg-[#30363d] border-[#30363d] text-emerald-300'
+          }`}
+          title="Практические задачи PostgreSQL с автопроверкой"
+        >
+          <ClipboardCheck size={12} />
+          <span>Задачи</span>
+        </button>
+
         {/* ER-схема */}
         <button
           type="button"
@@ -615,6 +823,78 @@ export default function SqlLab() {
               <div className="rounded-xl border border-sky-800/60 bg-sky-950/30 px-4 py-3 flex items-center gap-3 text-xs text-sky-200">
                 <Loader2 size={16} className="animate-spin text-sky-400 shrink-0" />
                 <span>Загружается настоящий PostgreSQL (WASM)… это займёт пару секунд.</span>
+              </div>
+            )}
+
+            {/* Карточка активной SQL-задачи с автопроверкой */}
+            {activeTask && (
+              <div className="rounded-xl border border-emerald-700/60 bg-[#131d27] p-3.5 space-y-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <ClipboardCheck size={16} className="text-emerald-400 shrink-0" />
+                  <span className="font-bold text-sm text-white">{activeTask.title}</span>
+                  {activeTask.difficulty && (
+                    <span className="px-2 py-0.5 rounded bg-[#21262d] text-[10px] font-semibold text-sky-300">
+                      {activeTask.difficulty}
+                    </span>
+                  )}
+                  {activeTask.classroom_title && (
+                    <span className="px-2 py-0.5 rounded bg-indigo-950 border border-indigo-700/60 text-[10px] text-indigo-300 flex items-center gap-1">
+                      <GraduationCap size={10} /> {activeTask.classroom_title}
+                    </span>
+                  )}
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={phase !== 'ready' || checkingTask}
+                      onClick={verifyActiveSqlTask}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow"
+                    >
+                      {checkingTask ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                      {checkingTask ? 'Проверяем…' : 'Проверить решение'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTask(null); setTaskReport(null) }}
+                      className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
+                      title="Закрыть задачу"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">{activeTask.description}</p>
+                {taskReport && (
+                  <div className="pt-2 border-t border-white/10 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className={`font-bold ${taskReport.passed ? 'text-emerald-400' : 'text-amber-300'}`}>
+                        {taskReport.passed
+                          ? `✓ Все проверки пройдены — ${taskReport.score}/${taskReport.max_score} балл.`
+                          : `Пройдено ${taskReport.passed_tests} из ${taskReport.total_tests} (${taskReport.score}/${taskReport.max_score} балл.)`}
+                      </span>
+                      {taskReport.gradebook_synced && (
+                        <span className="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-700/60 text-emerald-300 text-[10.5px]">
+                          Записано в журнал класса
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {taskReport.results.map((r, i) => (
+                        <div
+                          key={i}
+                          className={`px-2.5 py-1 rounded-lg border text-[11px] flex items-center gap-1.5 ${
+                            r.passed
+                              ? 'bg-emerald-950/50 border-emerald-700/60 text-emerald-200'
+                              : 'bg-rose-950/50 border-rose-700/60 text-rose-200'
+                          }`}
+                        >
+                          {r.passed ? <CheckCircle2 size={12} className="text-emerald-400 shrink-0" /> : <XCircle size={12} className="text-rose-400 shrink-0" />}
+                          <span>{r.label}</span>
+                          {r.detail && <span className="text-[10px] opacity-80">— {r.detail}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -801,6 +1081,21 @@ export default function SqlLab() {
           </div>
         </div>
       )}
+      <SqlTasksModal
+        open={showTasksModal}
+        onClose={() => setShowTasksModal(false)}
+        tasks={allSqlTasks}
+        activeTaskId={activeTask?.id ?? null}
+        canCreate={isTeacher && isAuth}
+        classrooms={classrooms}
+        currentSchemaSql={blocks[0]?.sql || SQL_PRESETS[0].schema}
+        onSelectTask={openSqlTask}
+        onCaptureReferenceSql={captureReferenceSql}
+        onTaskCreated={(created) => {
+          setServerSqlTasks((prev) => [created, ...prev])
+          openSqlTask(created)
+        }}
+      />
     </div>
   )
 }

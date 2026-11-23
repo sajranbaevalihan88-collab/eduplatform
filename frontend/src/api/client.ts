@@ -45,10 +45,31 @@ client.interceptors.request.use(cfg => {
   return cfg
 })
 
+// Разрешаем офлайн-кэш в localStorage ТОЛЬКО для публичных учебных справочников (без личных данных, чатов, оценок, ответов тестов)
+const PUBLIC_OFFLINE_PREFIXES = ['/subjects', '/lessons', '/presentations', '/code-tasks', '/programs']
+
+export function clearLocalSession() {
+  ;['access', 'refresh', 'token', 'user', 'lesson-draft', 'edu-word-draft', 'edu-word-docs-v1'].forEach(k => {
+    try { localStorage.removeItem(k) } catch {}
+  })
+  try {
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith('offline_cache:')) localStorage.removeItem(k)
+    })
+  } catch {}
+  try {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_API_CACHE' })
+    }
+  } catch {}
+}
+
 function cacheKeyFor(cfg: any): string | null {
   if (!cfg || (cfg.method && cfg.method.toLowerCase() !== 'get')) return null
   if (cfg.responseType === 'blob') return null
   const u = String(cfg.url || '')
+  if (!PUBLIC_OFFLINE_PREFIXES.some(p => u === p || u.startsWith(p + '/') || u.startsWith(p + '?'))) return null
+  if (u.includes('owner=me') || u.includes('is_public=false')) return null
   const p = cfg.params ? JSON.stringify(cfg.params) : ''
   return `offline_cache:${u}:${p}`
 }
@@ -89,7 +110,7 @@ client.interceptors.response.use(
     // Если токен ссылается на несуществующего пользователя (после пересоздания БД) — сразу логаут
     const isUserNotFound = typeof detail === 'string' && (detail.includes('User not found') || detail.includes('No active account') || detail.includes('not found'))
     if (status === 401 && isUserNotFound) {
-      localStorage.removeItem('access'); localStorage.removeItem('refresh'); localStorage.removeItem('token'); localStorage.removeItem('user')
+      clearLocalSession()
       window.dispatchEvent(new Event('auth-change'))
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login'
@@ -118,11 +139,11 @@ client.interceptors.response.use(
           console.error('JWT refresh failed', e)
         }
       }
-      // refresh не сработал — сессия истекла, разлогиниваем
+      // refresh не сработал — сессия истекла, полностью чистим токены и офлайн-кэш
       const isAuthPage = window.location.pathname.includes('/login') || window.location.pathname.includes('/register')
       if (!isAuthPage && original.url && !String(original.url).includes('/auth/jwt/refresh')) {
-        localStorage.removeItem('access'); localStorage.removeItem('refresh'); localStorage.removeItem('token')
-        // не трогаем user сразу — пусть PrivateRoute редиректнет
+        clearLocalSession()
+        window.dispatchEvent(new Event('auth-change'))
       }
     }
     return Promise.reject(err)

@@ -22,17 +22,17 @@ if _env_file.exists():
     except Exception:
         pass
 
-# --- Security: SECRET_KEY без fallback в проде ---
+# --- Security: DEBUG парсится ДО проверки SECRET_KEY ---
+DEBUG = os.environ.get('DEBUG', 'False').strip().lower() in ('1', 'true', 'yes')
+
 _default_secret = 'dev-secret-key-change-in-production-edu-platform-2026'
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', _default_secret)
-if not os.environ.get('DJANGO_SECRET_KEY') and os.environ.get('DEBUG', 'False') == 'False':
-    # В проде ключ обязателен
-    raise ValueError("DJANGO_SECRET_KEY must be set in production")
+if not DEBUG:
+    if not os.environ.get('DJANGO_SECRET_KEY') or SECRET_KEY == _default_secret or len(SECRET_KEY) < 32:
+        raise ValueError("DJANGO_SECRET_KEY must be set (>= 32 chars, non-default) in production")
 
-DEBUG = os.environ.get('DEBUG', 'False') == 'True'
-
-# --- ALLOWED_HOSTS без wildcard ---
-_allowed_default = 'localhost,127.0.0.1,.onrender.com,testserver'
+# --- ALLOWED_HOSTS без wildcard '*' ---
+_allowed_default = 'localhost,127.0.0.1,.onrender.com'
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', _allowed_default).split(',') if h.strip()]
 # никогда не добавлять '*' автоматически
 if DEBUG and 'testserver' not in ALLOWED_HOSTS:
@@ -69,6 +69,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'django.middleware.gzip.GZipMiddleware',
+    'backend.middleware.SecurityHeadersMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -308,6 +310,8 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
     ],
+    # Доверяем только 1 прокси (Render/Nginx), чтобы подмена X-Forwarded-For не обходила троттлинг
+    'NUM_PROXIES': int(os.environ.get('NUM_PROXIES', '1')),
     'DEFAULT_THROTTLE_RATES': {
         # класс 30+ человек жмёт одновременно (игры, тесты) — 120/мин душили даже 10 потоков
         'anon': os.environ.get('THROTTLE_ANON', '60/minute'),
@@ -342,6 +346,7 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # Security headers
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'same-origin'
@@ -355,8 +360,8 @@ SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
 SECURE_HSTS_PRELOAD = not DEBUG
 
-# File upload limits — 100MB для презентаций
-FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024
+# File upload limits — в RAM держим до 2MB, более крупные (до 100MB PPTX) пишутся на диск потоково
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 # Allowed extensions
 ALLOWED_UPLOAD_EXTENSIONS = ['.pptx','.ppt','.docx','.doc','.pdf','.png','.jpg','.jpeg','.gif','.webp','.txt','.md','.csv']
@@ -388,6 +393,8 @@ elif _piston_env == 'True' and not _has_custom_piston:
     print('[settings] ВНИМАНИЕ: публичный Piston (emkc.org) отключён (HTTP 401 whitelist-only) — переключено на изолированный локальный раннер.', file=_sys.stderr)
 # Для Docker-изоляции каждого прогона (будущее): CODE_USE_DOCKER=True + DOCKER_IMAGE=python:3.11-slim
 CODE_USE_DOCKER = os.environ.get('CODE_USE_DOCKER', 'False') == 'True'
+# Установка pip-пакетов в рантайме выключена по умолчанию (защита от DoS диска/сети)
+CODE_ALLOW_PIP_INSTALL = os.environ.get('CODE_ALLOW_PIP_INSTALL', 'False') == 'True'
 
 # Внешний генератор вопросов (/api/tests/generate/): ключ задаётся через GEMINI_API_KEY.
 # Ключ взять: https://aistudio.google.com/apikey (бесплатный тариф).

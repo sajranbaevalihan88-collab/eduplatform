@@ -172,9 +172,15 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
+    const lowEnd = ((navigator as any).hardwareConcurrency || 4) <= 4 || ((navigator as any).deviceMemory || 8) <= 4
     let renderer: THREE.WebGLRenderer
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true })
+      renderer = new THREE.WebGLRenderer({
+        antialias: !lowEnd,
+        alpha: true,
+        preserveDrawingBuffer: true,
+        powerPreference: lowEnd ? 'low-power' : 'default',
+      })
     } catch {
       setWebglFail(true)
       return
@@ -182,9 +188,9 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(48, (host.clientWidth || 640) / (host.clientHeight || 420), 0.1, 500)
     camera.position.set(7.5, 6.2, 9.5)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
-    renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowEnd ? 1.25 : 1.75))
+    renderer.shadowMap.enabled = !lowEnd
+    if (!lowEnd) renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.05
     renderer.setSize(host.clientWidth || 640, host.clientHeight || 420)
@@ -741,8 +747,16 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
       })
 
       renderer.render(scene, camera)
-      raf = requestAnimationFrame(tick)
+      if (!document.hidden) raf = requestAnimationFrame(tick)
+      else raf = 0
     }
+    const onVis = () => {
+      if (!document.hidden && !raf) {
+        clock.getDelta()
+        raf = requestAnimationFrame(tick)
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
     tick()
 
     const removeById = (id: number, recordUndo = true) => {
@@ -871,7 +885,8 @@ export default function Board3D({ onSnapshot }: { onSnapshot: (dataUrl: string) 
     window.addEventListener('keydown', onKey)
 
     return () => {
-      cancelAnimationFrame(raf)
+      document.removeEventListener('visibilitychange', onVis)
+      if (raf) cancelAnimationFrame(raf)
       ro.disconnect()
       window.removeEventListener('keydown', onKey)
       renderer.domElement.removeEventListener('pointerdown', onDown)

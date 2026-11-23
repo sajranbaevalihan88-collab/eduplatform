@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from apps.accounts.views import RegisterView, login_view, me_view, list_users, logout_view, create_assistant_view, change_password_view, delete_user_view, bootstrap_admin_view, set_user_password_view, list_children_view, parents_list_view, parents_create_view, parents_link_view, ThrottledTokenObtainPairView
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
+from apps.accounts.views import RegisterView, login_view, me_view, list_users, logout_view, create_assistant_view, change_password_view, delete_user_view, bootstrap_admin_view, set_user_password_view, list_children_view, parents_list_view, parents_create_view, parents_link_view, ThrottledTokenObtainPairView, PasswordStampTokenRefreshView
+from rest_framework_simplejwt.views import TokenVerifyView
 from apps.catalog.views import SubjectViewSet, CourseViewSet
 from apps.content.views import UploadedFileViewSet, PresentationViewSet, SlideViewSet
 from apps.assessments.views import TestViewSet, AttemptViewSet, WordGenView
@@ -59,7 +59,7 @@ urlpatterns = [
     path('portfolio/achievements/<int:pk>/file/', AchievementFileView.as_view(), name='achievement-file'),
     path('auth/bootstrap-admin/', bootstrap_admin_view, name='bootstrap-admin'),
     path('auth/jwt/create/', ThrottledTokenObtainPairView.as_view(), name='jwt-create'),
-    path('auth/jwt/refresh/', TokenRefreshView.as_view(), name='jwt-refresh'),
+    path('auth/jwt/refresh/', PasswordStampTokenRefreshView.as_view(), name='jwt-refresh'),
     path('auth/jwt/verify/', TokenVerifyView.as_view(), name='jwt-verify'),
     path('shared/', SharedCodeView.as_view(), name='shared-create'),
     path('shared/<str:token>/', SharedCodeView.as_view(), name='shared-detail'),
