@@ -1,7 +1,7 @@
 import os
 import posixpath
 from django.contrib import admin
-from django.http import Http404
+from django.http import Http404, HttpResponse, FileResponse
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
@@ -20,7 +20,8 @@ _BLOCKED_MEDIA_EXTS = {'.svg', '.html', '.htm', '.js', '.mjs'}
 
 def safe_public_media(request, subpath=''):
     """Безопасная раздача публичных медиа (аватары, баннеры и т.п.):
-    нормализует путь и блокирует обход auth через /media/./payment_receipts/... или активные SVG/HTML."""
+    нормализует путь, блокирует обход auth через /media/./payment_receipts/... и активные SVG/HTML.
+    При промахе на диске (эфемерный диск Render после редеплоя) отдаёт файл из MediaBlob и восстанавливает на диск."""
     norm = posixpath.normpath('/' + (subpath or '').replace('\\', '/')).lstrip('/')
     if not norm or norm.startswith('..') or '/..' in norm:
         raise Http404()
@@ -30,9 +31,32 @@ def safe_public_media(request, subpath=''):
     ext = os.path.splitext(norm)[1].lower()
     if ext in _BLOCKED_MEDIA_EXTS:
         raise Http404()
-    resp = static_serve(request, norm, document_root=settings.MEDIA_ROOT)
-    resp['X-Content-Type-Options'] = 'nosniff'
-    return resp
+    disk = os.path.join(str(getattr(settings, 'MEDIA_ROOT', 'media')), norm.replace('/', os.sep))
+    if os.path.isfile(disk):
+        resp = static_serve(request, norm, document_root=settings.MEDIA_ROOT)
+        resp['X-Content-Type-Options'] = 'nosniff'
+        resp['Cache-Control'] = 'public, max-age=86400'
+        return resp
+    try:
+        from apps.content.models import MediaBlob
+        from apps.content.views import _MEDIA_MIME
+        blob = MediaBlob.objects.filter(key=norm).first()
+        if blob and blob.data:
+            raw = bytes(blob.data)
+            try:
+                os.makedirs(os.path.dirname(disk), exist_ok=True)
+                with open(disk, 'wb') as fh:
+                    fh.write(raw)
+            except Exception:
+                pass
+            ctype = _MEDIA_MIME.get(ext, blob.mime or 'application/octet-stream')
+            resp = HttpResponse(raw, content_type=ctype)
+            resp['X-Content-Type-Options'] = 'nosniff'
+            resp['Cache-Control'] = 'public, max-age=86400'
+            return resp
+    except Exception:
+        pass
+    raise Http404()
 
 
 urlpatterns = [

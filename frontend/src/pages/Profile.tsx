@@ -14,16 +14,31 @@ import BackupRestoreActions from '../components/BackupRestoreCard'
 import { useLang } from '../context/LangContext'
 
 const BANNER_PRESETS = [
-  { id: 'slate', name: 'Графит', css: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)' },
-  { id: 'steel', name: 'Сталь', css: 'linear-gradient(160deg, #1e3a5f 0%, #0f2035 100%)' },
-  { id: 'ink', name: 'Ночь', css: 'linear-gradient(160deg, #1e2444 0%, #11152b 100%)' },
-  { id: 'pine', name: 'Хвоя', css: 'linear-gradient(160deg, #16302a 0%, #0d1e1a 100%)' },
-  { id: 'sand', name: 'Камень', css: 'linear-gradient(160deg, #2c2825 0%, #1a1715 100%)' },
-  { id: 'burgundy', name: 'Бордо', css: 'linear-gradient(160deg, #3a1924 0%, #1d0c12 100%)' },
+  { id: 'slate', name: 'Графит', css: 'linear-gradient(135deg, #334155 0%, #1e293b 55%, #0f172a 100%)' },
+  { id: 'steel', name: 'Ала-Тоо', css: 'linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 55%, #172554 100%)' },
+  { id: 'ink', name: 'Индиго', css: 'linear-gradient(135deg, #4338ca 0%, #312e81 55%, #1e1b4b 100%)' },
+  { id: 'pine', name: 'Изумруд', css: 'linear-gradient(135deg, #047857 0%, #065f46 55%, #064e3b 100%)' },
+  { id: 'sand', name: 'Янтарь', css: 'linear-gradient(135deg, #b45309 0%, #78350f 55%, #451a03 100%)' },
+  { id: 'burgundy', name: 'Бордо', css: 'linear-gradient(135deg, #be123c 0%, #881337 55%, #4c0519 100%)' },
 ] as const
 
+const LEGACY_PRESET_MAP: Record<string, string> = {
+  aurora: 'steel',
+  ocean: 'steel',
+  emerald: 'pine',
+  sunset: 'sand',
+  rose: 'burgundy',
+}
+
+function normalizeBannerPreset(presetId?: string): string {
+  if (!presetId) return 'steel'
+  const mapped = LEGACY_PRESET_MAP[presetId] || presetId
+  return BANNER_PRESETS.some(p => p.id === mapped) ? mapped : 'steel'
+}
+
 function getBannerCss(presetId?: string): string {
-  return BANNER_PRESETS.find(p => p.id === presetId)?.css || BANNER_PRESETS[0].css
+  const norm = normalizeBannerPreset(presetId)
+  return BANNER_PRESETS.find(p => p.id === norm)?.css || BANNER_PRESETS[1].css
 }
 
 function syncStoredUser(nextUser: any) {
@@ -63,6 +78,9 @@ export default function Profile() {
   const [bannerPosDraft, setBannerPosDraft] = useState<number>(50)
   const [bannerDragOver, setBannerDragOver] = useState(false)
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false)
+  const [bannerImgBroken, setBannerImgBroken] = useState(false)
+  const [avatarImgBroken, setAvatarImgBroken] = useState(false)
+  const [mediaVersion, setMediaVersion] = useState<number>(() => Date.now())
   const [deployOpen, setDeployOpen] = useState(false)
 
   const showAndScroll = (nextTab: 'lessons' | 'presentations' | 'tests') => {
@@ -290,13 +308,15 @@ export default function Profile() {
   // ==================== ЗАГРУЗКА / УДАЛЕНИЕ ФОТО ПРОФИЛЯ И БАННЕРА ====================
   const uploadAvatarFile = async (file: File) => {
     if (!file) return
-    if (file.size > 6 * 1024 * 1024) { toast('Фото профиля больше 6 МБ', 'error'); return }
+    if (file.size > 10 * 1024 * 1024) { toast('Фото профиля больше 10 МБ', 'error'); return }
     setUploadingAvatar(true)
     setAvatarMenuOpen(false)
     try {
       const fd = new FormData()
       fd.append('avatar', file)
-      const r = await client.patch('/auth/me/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const r = await client.patch('/auth/me/', fd)
+      setAvatarImgBroken(false)
+      setMediaVersion(Date.now())
       setMe(r.data)
       syncStoredUser(r.data)
       toast('Фото профиля обновлено', 'success')
@@ -312,6 +332,8 @@ export default function Profile() {
     setAvatarMenuOpen(false)
     try {
       const r = await client.patch('/auth/me/', { remove_avatar: true })
+      setAvatarImgBroken(false)
+      setMediaVersion(Date.now())
       setMe(r.data)
       syncStoredUser(r.data)
       toast('Фото профиля удалено', 'info')
@@ -324,13 +346,15 @@ export default function Profile() {
 
   const uploadBannerFile = async (file: File) => {
     if (!file) return
-    if (file.size > 10 * 1024 * 1024) { toast('Баннер больше 10 МБ', 'error'); return }
+    if (file.size > 15 * 1024 * 1024) { toast('Баннер больше 15 МБ', 'error'); return }
     setUploadingBanner(true)
     try {
       const fd = new FormData()
       fd.append('banner', file)
-      fd.append('banner_position', String(bannerPosDraft))
-      const r = await client.patch('/auth/me/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      fd.append('banner_position', String(Math.round(Number(bannerPosDraft) || 50)))
+      const r = await client.patch('/auth/me/', fd)
+      setBannerImgBroken(false)
+      setMediaVersion(Date.now())
       setMe(r.data)
       syncStoredUser(r.data)
       toast('Баннер профиля обновлён', 'success')
@@ -345,6 +369,8 @@ export default function Profile() {
     setUploadingBanner(true)
     try {
       const r = await client.patch('/auth/me/', { remove_banner: true })
+      setBannerImgBroken(false)
+      setMediaVersion(Date.now())
       setMe(r.data)
       syncStoredUser(r.data)
       toast('Фото баннера удалено — используется градиент', 'info')
@@ -359,6 +385,8 @@ export default function Profile() {
     setUploadingBanner(true)
     try {
       const r = await client.patch('/auth/me/', { banner_preset: presetId, remove_banner: true })
+      setBannerImgBroken(false)
+      setMediaVersion(Date.now())
       setMe(r.data)
       syncStoredUser(r.data)
       toast('Тема баннера применена', 'success')
@@ -501,8 +529,14 @@ export default function Profile() {
         ? { label: t('users_parent'), cls: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700' }
         : { label: t('login_student'), cls: 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-900/70' }
 
-  const bannerUrl = me.banner ? mediaSrc(me.banner) : ''
-  const avatarUrl = me.avatar ? mediaSrc(me.avatar) : ''
+  const rawBannerUrl = me.banner ? mediaSrc(me.banner) : ''
+  const rawAvatarUrl = me.avatar ? mediaSrc(me.avatar) : ''
+  const bannerUrl = rawBannerUrl && !bannerImgBroken
+    ? `${rawBannerUrl}${rawBannerUrl.includes('?') ? '&' : '?'}v=${mediaVersion}`
+    : ''
+  const avatarUrl = rawAvatarUrl && !avatarImgBroken
+    ? `${rawAvatarUrl}${rawAvatarUrl.includes('?') ? '&' : '?'}v=${mediaVersion}`
+    : ''
   const activeBannerPos = bannerPosDraft ?? me.banner_position ?? 50
   const joinedLabel = me.date_joined ? new Date(me.date_joined).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
 
@@ -536,6 +570,7 @@ export default function Profile() {
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
         {/* Обложка профиля (без декоративных пятен и неона) */}
         <div
+          onClick={() => setBannerModalOpen(true)}
           onDragOver={e => { e.preventDefault(); setBannerDragOver(true) }}
           onDragLeave={() => setBannerDragOver(false)}
           onDrop={e => {
@@ -544,13 +579,15 @@ export default function Profile() {
             const f = e.dataTransfer.files?.[0]
             if (f) uploadBannerFile(f)
           }}
-          className={`relative h-32 sm:h-44 w-full overflow-hidden border-b border-slate-200/70 dark:border-slate-800 transition ${bannerDragOver ? 'ring-2 ring-inset ring-blue-500' : ''}`}
-          style={!bannerUrl ? { background: getBannerCss(me.banner_preset) } : undefined}
+          className={`relative h-32 sm:h-44 w-full overflow-hidden border-b border-slate-200/70 dark:border-slate-800 transition cursor-pointer group/bn ${bannerDragOver ? 'ring-2 ring-inset ring-blue-500' : ''}`}
+          style={{ background: getBannerCss(me.banner_preset) }}
+          title="Нажмите или перетащите картинку, чтобы изменить обложку"
         >
           {bannerUrl && (
             <img
               src={bannerUrl}
               alt="Обложка профиля"
+              onError={() => setBannerImgBroken(true)}
               className="w-full h-full object-cover"
               style={{ objectPosition: `50% ${activeBannerPos}%` }}
             />
@@ -571,8 +608,8 @@ export default function Profile() {
           {/* Одна спокойная кнопка управления обложкой */}
           <button
             type="button"
-            onClick={() => setBannerModalOpen(true)}
-            className="absolute bottom-3 right-3 z-10 px-3 py-1.5 min-h-[36px] rounded-lg bg-slate-950/60 hover:bg-slate-950/80 text-white/95 border border-white/15 text-xs font-medium flex items-center gap-1.5 transition"
+            onClick={e => { e.stopPropagation(); setBannerModalOpen(true) }}
+            className="absolute bottom-3 right-3 z-10 px-3 py-1.5 min-h-[36px] rounded-lg bg-slate-950/65 hover:bg-slate-950/85 text-white/95 border border-white/20 text-xs font-medium flex items-center gap-1.5 transition shadow-sm"
           >
             <ImageIcon size={13} />
             <span>Обложка</span>
@@ -596,7 +633,12 @@ export default function Profile() {
                   title="Изменить фото профиля"
                 >
                   {avatarUrl ? (
-                    <img src={avatarUrl} alt={me.username} className="w-full h-full object-cover" />
+                    <img
+                      src={avatarUrl}
+                      alt={me.username}
+                      onError={() => setAvatarImgBroken(true)}
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
                     <span className="w-full h-full flex items-center justify-center text-white text-2xl sm:text-3xl font-bold select-none">
                       {(me.username || 'U')[0].toUpperCase()}
@@ -1374,12 +1416,13 @@ export default function Profile() {
               <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800">
                 <div
                   className="h-28 relative overflow-hidden"
-                  style={!bannerUrl ? { background: getBannerCss(me.banner_preset) } : undefined}
+                  style={{ background: getBannerCss(me.banner_preset) }}
                 >
                   {bannerUrl && (
                     <img
                       src={bannerUrl}
                       alt=""
+                      onError={() => setBannerImgBroken(true)}
                       className="w-full h-full object-cover"
                       style={{ objectPosition: `50% ${activeBannerPos}%` }}
                     />
@@ -1387,7 +1430,7 @@ export default function Profile() {
                 </div>
                 <div className="px-4 pb-3 bg-white dark:bg-slate-900 flex items-end gap-3 -mt-7 relative z-10">
                   <div className="w-14 h-14 rounded-full ring-4 ring-white dark:ring-slate-900 bg-slate-800 dark:bg-slate-700 overflow-hidden flex items-center justify-center text-white font-bold text-lg shrink-0">
-                    {avatarUrl ? <img src={avatarUrl} alt="" className="w-full h-full object-cover" /> : (me.username || 'U')[0].toUpperCase()}
+                    {avatarUrl ? <img src={avatarUrl} alt="" onError={() => setAvatarImgBroken(true)} className="w-full h-full object-cover" /> : (me.username || 'U')[0].toUpperCase()}
                   </div>
                   <div className="pb-0.5 min-w-0">
                     <div className="font-semibold text-sm text-slate-900 dark:text-white truncate">{fullName || me.username}</div>
@@ -1478,7 +1521,7 @@ export default function Profile() {
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                   {BANNER_PRESETS.map(pr => {
-                    const active = !bannerUrl && (me.banner_preset || 'slate') === pr.id
+                    const active = !bannerUrl && normalizeBannerPreset(me.banner_preset) === pr.id
                     return (
                       <button
                         key={pr.id}

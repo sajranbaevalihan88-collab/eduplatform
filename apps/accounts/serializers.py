@@ -16,6 +16,40 @@ def _clean_person_name(value: str, field_label: str) -> str:
         raise serializers.ValidationError(f'{field_label} содержит недопустимые символы')
     return s[:150]
 
+def _resolve_profile_media_url(obj, field_name: str) -> str:
+    """Возвращает URL аватара/баннера, автоматически бэкапя файл с диска в MediaBlob.
+    Если файл отсутствует и на диске, и в MediaBlob (битая ссылка после старого деплоя), возвращает ''."""
+    try:
+        field_file = getattr(obj, field_name, None)
+        if not field_file or not getattr(field_file, 'name', ''):
+            return ''
+        rel_key = field_file.name.replace('\\', '/').strip('/')
+        if not rel_key:
+            return ''
+        import os
+        from django.conf import settings
+        disk_path = os.path.join(str(getattr(settings, 'MEDIA_ROOT', 'media')), rel_key.replace('/', os.sep))
+        if os.path.isfile(disk_path):
+            try:
+                from apps.content.models import MediaBlob
+                from apps.content.views import store_media_blob
+                if not MediaBlob.objects.filter(key=rel_key).exists():
+                    with open(disk_path, 'rb') as fh:
+                        store_media_blob(rel_key, fh.read())
+            except Exception:
+                pass
+            return field_file.url
+        try:
+            from apps.content.models import MediaBlob
+            if MediaBlob.objects.filter(key=rel_key).exists():
+                return field_file.url
+        except Exception:
+            pass
+        return ''
+    except Exception:
+        return ''
+
+
 class UserSerializer(serializers.ModelSerializer):
     is_staff = serializers.BooleanField(read_only=True)
     is_superuser = serializers.BooleanField(read_only=True)
@@ -23,16 +57,10 @@ class UserSerializer(serializers.ModelSerializer):
     banner = serializers.SerializerMethodField()
 
     def get_avatar(self, obj):
-        try:
-            return obj.avatar.url if obj.avatar else ''
-        except Exception:
-            return ''
+        return _resolve_profile_media_url(obj, 'avatar')
 
     def get_banner(self, obj):
-        try:
-            return obj.banner.url if obj.banner else ''
-        except Exception:
-            return ''
+        return _resolve_profile_media_url(obj, 'banner')
 
     class Meta:
         model = User

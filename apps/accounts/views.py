@@ -163,28 +163,49 @@ def login_view(request):
 
 def _validate_profile_image(uploaded, max_mb: int, label: str):
     """Безопасная проверка и перекодировка фото профиля/баннера через Pillow:
-    удаляет EXIF/GPS-метаданные и обезвреживает полиглот-файлы."""
+    удаляет EXIF/GPS-метаданные, работает с TemporaryUploadedFile (>2MB) и обезвреживает полиглот-файлы."""
     import io, uuid
     from django.core.files.base import ContentFile
     from PIL import Image, ImageOps
     if uploaded.size > max_mb * 1024 * 1024:
         return None, f'{label}: файл слишком большой (максимум {max_mb} МБ)'
-    allowed_formats = {'JPEG': ('.jpg', 'JPEG'), 'PNG': ('.png', 'PNG'), 'WEBP': ('.webp', 'WEBP'), 'GIF': ('.gif', 'GIF')}
+    allowed_formats = {
+        'JPEG': ('.jpg', 'JPEG'),
+        'MPO': ('.jpg', 'JPEG'),
+        'PNG': ('.png', 'PNG'),
+        'WEBP': ('.webp', 'WEBP'),
+        'GIF': ('.gif', 'GIF'),
+        'BMP': ('.png', 'PNG'),
+        'TIFF': ('.jpg', 'JPEG'),
+    }
     try:
         uploaded.seek(0)
-        with Image.open(uploaded) as img:
+        raw_input = uploaded.read()
+        if not raw_input:
+            return None, f'{label}: пустой файл изображения'
+        with Image.open(io.BytesIO(raw_input)) as img:
             fmt = (img.format or '').upper()
+            w, h = img.size
+            if w <= 0 or h <= 0 or w * h > 36_000_000:
+                return None, f'{label}: недопустимое разрешение изображения'
             img.verify()
         if fmt not in allowed_formats:
             return None, f'{label}: поддерживаются только JPG, PNG, WEBP и GIF'
         ext, save_fmt = allowed_formats[fmt]
-        uploaded.seek(0)
-        with Image.open(uploaded) as img:
+        with Image.open(io.BytesIO(raw_input)) as img:
             if fmt != 'GIF':
                 img = ImageOps.exif_transpose(img)
+                if save_fmt == 'JPEG':
+                    if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+                        rgba = img.convert('RGBA')
+                        bg = Image.new('RGB', rgba.size, (15, 23, 42))
+                        bg.paste(rgba, mask=rgba.split()[3])
+                        img = bg
+                    elif img.mode != 'RGB':
+                        img = img.convert('RGB')
+                elif img.mode not in ('RGB', 'RGBA'):
+                    img = img.convert('RGBA')
                 img.thumbnail((1920, 1920), Image.Resampling.LANCZOS)
-                if save_fmt == 'JPEG' and img.mode not in ('RGB', 'L'):
-                    img = img.convert('RGB')
                 buf = io.BytesIO()
                 save_kwargs = {'quality': 88, 'optimize': True} if save_fmt in ('JPEG', 'WEBP') else {'optimize': True}
                 img.save(buf, format=save_fmt, **save_kwargs)
@@ -193,26 +214,49 @@ def _validate_profile_image(uploaded, max_mb: int, label: str):
             from PIL import ImageSequence
             frames = []
             durations = []
+            need_resize = img.width > 1280 or img.height > 1280
             for idx, frame in enumerate(ImageSequence.Iterator(img)):
-                if idx >= 60:
+                if idx >= 80:
                     break
-                fr = frame.convert('RGBA')
-                fr.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
-                frames.append(fr.convert('P', palette=Image.Palette.ADAPTIVE))
-                durations.append(int(frame.info.get('duration', 100) or 100))
+                durations.append(int(frame.info.get('duration', 80) or 80))
+                if need_resize:
+                    fr = frame.convert('RGBA')
+                    fr.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
+                    frames.append(fr.convert('P', palette=Image.Palette.WEB))
+                else:
+                    fr = frame.copy()
+                    if fr.mode not in ('P', 'L'):
+                        fr = fr.convert('P', palette=Image.Palette.WEB)
+                    frames.append(fr)
             if not frames:
                 return None, f'{label}: пустой GIF-файл'
             buf = io.BytesIO()
             if len(frames) > 1:
                 frames[0].save(
                     buf, format='GIF', save_all=True, append_images=frames[1:],
-                    duration=durations, loop=0, optimize=True,
+                    duration=durations, loop=int(img.info.get('loop', 0) or 0),
                 )
             else:
                 frames[0].save(buf, format='GIF', optimize=True)
             return ContentFile(buf.getvalue(), name=f'{uuid.uuid4().hex}{ext}'), None
     except Exception:
         return None, f'{label}: не удалось прочитать изображение — выберите корректный файл JPG/PNG/WEBP/GIF'
+
+
+def _delete_profile_media(field_file) -> None:
+    if not field_file:
+        return
+    try:
+        rel_key = (getattr(field_file, 'name', '') or '').replace('\\', '/').strip('/')
+        if rel_key:
+            from apps.content.models import MediaBlob
+            MediaBlob.objects.filter(key=rel_key).delete()
+    except Exception:
+        pass
+    try:
+        field_file.delete(save=False)
+    except Exception:
+        pass
 
 
 @api_view(['GET','PATCH'])
@@ -222,60 +266,58 @@ def me_view(request):
     if request.method == 'GET':
         return Response(UserSerializer(user).data)
 
-    # 1. Обработка загрузки / удаления фото профиля (avatar) и баннера (banner)
-    media_changed = False
-    if request.data.get('remove_avatar') in (True, 'true', '1', 1):
-        if user.avatar:
-            try:
-                user.avatar.delete(save=False)
-            except Exception:
-                user.avatar = None
-        user.avatar = None
-        media_changed = True
-    elif 'avatar' in request.FILES:
-        clean_file, err = _validate_profile_image(request.FILES['avatar'], 6, 'Фото профиля')
-        if err:
-            return Response({'error': err, 'detail': err}, status=status.HTTP_400_BAD_REQUEST)
-        if user.avatar:
-            try:
-                user.avatar.delete(save=False)
-            except Exception:
-                pass
-        user.avatar = clean_file
-        media_changed = True
-
-    if request.data.get('remove_banner') in (True, 'true', '1', 1):
-        if user.banner:
-            try:
-                user.banner.delete(save=False)
-            except Exception:
-                user.banner = None
-        user.banner = None
-        media_changed = True
-    elif 'banner' in request.FILES:
-        clean_file, err = _validate_profile_image(request.FILES['banner'], 10, 'Баннер')
-        if err:
-            return Response({'error': err, 'detail': err}, status=status.HTTP_400_BAD_REQUEST)
-        if user.banner:
-            try:
-                user.banner.delete(save=False)
-            except Exception:
-                pass
-        user.banner = clean_file
-        media_changed = True
-
-    # 2. Обновление текстовых полей и пресета/позиции баннера (если переданы)
+    # 1. Сначала валидируем и сохраняем текстовые поля и пресет/позицию баннера
     text_fields = {'username', 'email', 'first_name', 'last_name', 'bio', 'banner_preset', 'banner_position'}
     text_payload = {k: request.data.get(k) for k in text_fields if k in request.data}
     if text_payload:
         serializer = MeUpdateSerializer(user, data=text_payload, partial=True)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=400)
-        serializer.save()
-        if media_changed:
-            user.save(update_fields=['avatar', 'banner'])
-    elif media_changed:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        user = serializer.save()
+
+    # 2. Обработка загрузки / удаления фото профиля (avatar) и баннера (banner)
+    media_changed = False
+    avatar_bytes = None
+    banner_bytes = None
+
+    if request.data.get('remove_avatar') in (True, 'true', '1', 1):
+        _delete_profile_media(user.avatar)
+        user.avatar = None
+        media_changed = True
+    elif 'avatar' in request.FILES:
+        clean_file, err = _validate_profile_image(request.FILES['avatar'], 10, 'Фото профиля')
+        if err:
+            return Response({'error': err, 'detail': err}, status=status.HTTP_400_BAD_REQUEST)
+        avatar_bytes = clean_file.read()
+        clean_file.seek(0)
+        _delete_profile_media(user.avatar)
+        user.avatar = clean_file
+        media_changed = True
+
+    if request.data.get('remove_banner') in (True, 'true', '1', 1):
+        _delete_profile_media(user.banner)
+        user.banner = None
+        media_changed = True
+    elif 'banner' in request.FILES:
+        clean_file, err = _validate_profile_image(request.FILES['banner'], 15, 'Баннер')
+        if err:
+            return Response({'error': err, 'detail': err}, status=status.HTTP_400_BAD_REQUEST)
+        banner_bytes = clean_file.read()
+        clean_file.seek(0)
+        _delete_profile_media(user.banner)
+        user.banner = clean_file
+        media_changed = True
+
+    if media_changed:
         user.save(update_fields=['avatar', 'banner'])
+        try:
+            from apps.content.views import store_media_blob
+            if avatar_bytes and user.avatar and getattr(user.avatar, 'name', ''):
+                store_media_blob(user.avatar.name.replace('\\', '/').strip('/'), avatar_bytes)
+            if banner_bytes and user.banner and getattr(user.banner, 'name', ''):
+                store_media_blob(user.banner.name.replace('\\', '/').strip('/'), banner_bytes)
+        except Exception:
+            pass
 
     user.refresh_from_db()
     return Response(UserSerializer(user).data)

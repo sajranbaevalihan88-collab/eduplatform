@@ -42,6 +42,10 @@ async function refreshPromiseGuard() {
 client.interceptors.request.use(cfg => {
   const token = localStorage.getItem('access') || localStorage.getItem('token')
   if (token) cfg.headers.Authorization = `Bearer ${token}`
+  if (typeof FormData !== 'undefined' && cfg.data instanceof FormData && cfg.headers) {
+    delete cfg.headers['Content-Type']
+    delete cfg.headers['content-type']
+  }
   return cfg
 })
 
