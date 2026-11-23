@@ -183,11 +183,11 @@ body { touch-action: manipulation; padding-bottom: env(safe-area-inset-bottom); 
 .word-sheet { position: absolute; left: 0; right: 0; background: #fff; border: 1px solid #94a3b8; border-radius: 10px; box-shadow: 0 10px 30px rgba(15, 23, 42, .18); overflow: hidden; }
 .word-sheet + .word-sheet { border-top-color: #94a3b8; }
 .dark .word-sheet { border-color: transparent; box-shadow: 0 12px 32px rgba(0, 0, 0, .45); }
-.word-sheet span { position: absolute; top: 8px; right: 8px; font-size: 11px; font-weight: 700; color: #64748b; }
+.word-sheet > span { position: absolute; top: 8px; right: 12px; font-size: 11px; font-weight: 700; color: #64748b; }
 /* на телефоне номера страниц показывает нижняя панель «Стр. N/…» — чипы убираем,
    иначе они залезают в узкую текстовую колонку */
 @media (max-width: 640px) {
-  .word-sheet span { display: none; }
+  .word-sheet > span { display: none; }
 }
 /* зазор между листами — непрозрачная маска ПОВЕРХ текста (z-20 > z-10 .word-page):
    даже во время перераскладки ни одна строка/тень не просвечивает между страницами */
@@ -203,20 +203,23 @@ body { touch-action: manipulation; padding-bottom: env(safe-area-inset-bottom); 
 /* разрыв страницы: служебный невидимый маркер, виден только при печати как разрыв */
 .word-page .page-break { height: 0; min-height: 0; border: 0; background: transparent; color: transparent; text-align: center; font-size: 0; padding: 0; margin: 0; user-select: none; break-after: page; }
 /* живой оверлей таблицы в Word: рамка + ручки */
-.word-tbl-box { position: absolute; border: 2px solid #2563eb; border-radius: 6px; pointer-events: none; box-shadow: 0 0 0 3px rgba(79,70,229,.12); }
-.word-tbl-move { position: absolute; width: 26px; height: 16px; border-radius: 5px; background: #2563eb; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 10px; line-height: 1; cursor: move; z-index: 7; pointer-events: auto; box-shadow: 0 2px 6px rgba(0,0,0,.3); user-select: none; }
-.word-col-h { position: absolute; width: 9px; margin-left: -4px; cursor: col-resize; z-index: 8; pointer-events: auto; border-radius: 4px; background: rgba(79,70,229,0); }
-.word-col-h:hover { background: rgba(79,70,229,.45); }
-.word-col-h::after { content: ''; position: absolute; inset: 4px 3px; border-left: 2px solid rgba(79,70,229,.35); }
-.word-row-h { position: absolute; height: 9px; margin-top: -4px; cursor: row-resize; z-index: 8; pointer-events: auto; border-radius: 4px; background: rgba(79,70,229,0); }
-.word-row-h:hover { background: rgba(79,70,229,.45); }
-.word-row-h::after { content: ''; position: absolute; inset: 3px 4px; border-top: 2px solid rgba(79,70,229,.35); }
-.word-drop-line { position: fixed; height: 4px; background: #2563eb; border-radius: 2px; z-index: 9999; pointer-events: none; opacity: .85; box-shadow: 0 0 0 3px rgba(79,70,229,.18); }
+.word-tbl-box { position: absolute; border: 2px solid #2b579a; border-radius: 6px; pointer-events: none; box-shadow: 0 0 0 3px rgba(43,87,154,.12); }
+.word-tbl-move { position: absolute; width: auto !important; min-width: 26px; height: 22px; padding: 0 8px; border-radius: 6px 6px 0 0; background: #2b579a; color: #fff; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; cursor: move; z-index: 30; pointer-events: auto; box-shadow: 0 2px 6px rgba(0,0,0,.28); user-select: none; }
+.word-col-h { position: absolute; width: 9px; margin-left: -4px; cursor: col-resize; z-index: 25; pointer-events: auto; border-radius: 4px; background: rgba(43,87,154,0); }
+.word-col-h:hover { background: rgba(43,87,154,.4); }
+.word-col-h::after { content: ''; position: absolute; inset: 4px 3px; border-left: 2px solid rgba(43,87,154,.35); }
+.word-row-h { position: absolute; height: 9px; margin-top: -4px; cursor: row-resize; z-index: 24; pointer-events: auto; border-radius: 4px; background: rgba(43,87,154,0); }
+.word-row-h:hover { background: rgba(43,87,154,.4); }
+.word-row-h::after { content: ''; position: absolute; inset: 3px 4px; border-top: 2px solid rgba(43,87,154,.35); }
+.word-drop-line { position: fixed; height: 4px; background: #2b579a; border-radius: 2px; z-index: 9999; pointer-events: none; opacity: .85; box-shadow: 0 0 0 3px rgba(43,87,154,.18); }
+.word-frame { margin: 10px 0; border-radius: 8px; padding: 12px 16px; position: relative; }
+.word-cols-2 { column-count: 2; column-gap: 28px; column-rule: 1px solid #cbd5e1; }
+@media (max-width: 640px) { .word-cols-2 { column-count: 1; } }
 @media (hover: none), (pointer: coarse) {
-  .word-tbl-move { width: 44px; height: 30px; font-size: 14px; }
+  .word-tbl-move { height: 28px; font-size: 12px; padding: 0 10px; }
   .word-col-h { width: 24px; margin-left: -12px; }
-  .word-row-h { height: 24px; margin-top: -12px; width: 44px; }
-  .word-col-h, .word-row-h, .word-tbl-move { background: rgba(79,70,229,.55); touch-action: none; }
+  .word-row-h { height: 24px; margin-top: -12px; }
+  .word-col-h, .word-row-h, .word-tbl-move { touch-action: none; }
 }
 .word-page th { background: rgba(148,163,184,.18); font-weight: 700; }
 /* Фермер Бала: живая анимация */
@@ -296,39 +299,161 @@ body { touch-action: manipulation; padding-bottom: env(safe-area-inset-bottom); 
   .animate-floatSubtle, .animate-float { animation: none !important; }
 }
 
-/* iOS: текст полей меньше 16px вызывает неожиданный зум всей страницы. */
+/* ==================== МОБИЛЬНАЯ АДАПТАЦИЯ ВСЕГО САЙТА ==================== */
+html, body {
+  max-width: 100%;
+  overflow-x: clip;
+  -webkit-text-size-adjust: 100%;
+}
+img, video, svg, canvas, iframe { max-width: 100%; }
+
 @media (max-width: 767px) {
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
   select, textarea { font-size: 16px !important; }
+  .monaco-editor textarea, .monaco-editor input { font-size: inherit !important; }
+  /* Таблицы и код внутри карточек не распирают ширину экрана телефона */
+  main table { max-width: 100%; }
+  main pre { max-width: 100%; overflow-x: auto; }
 }
 
-/* Poor vision — база под скринридер (NVDA/JAWS/VoiceOver/TalkBack) + свои кнопки.
-   Скринридер читает семантику сам; мы даём контраст, крупный шрифт, видимый фокус
-   (Tab-навигация без мыши) и гасим анимации. Esc — стоп озвучки (см. UIContext). */
+/* ==================== РЕЖИМ ДЛЯ СЛАБОВИДЯЩИХ (ГОСТ Р 52872 / WCAG AAA) ==================== */
 :root { --a11y-focus: #2563eb; }
 :focus-visible { outline: 3px solid var(--a11y-focus) !important; outline-offset: 3px; border-radius: 8px; }
-.poor-vision { --poor-contrast:1; color-scheme: light; }
-.poor-vision body { font-size: 112%; line-height:1.7; letter-spacing:0.02em; background:#fff !important; color:#000 !important; }
-.poor-vision.dark body,
-.poor-vision .dark body { background:#fff !important; color:#000 !important; }
-.poor-vision.dark [class*="dark:bg-slate"],
-.poor-vision.dark [class*="dark:bg-black"] { background-color:#fff !important; }
-.poor-vision.dark [class*="dark:text-white"],
-.poor-vision.dark [class*="dark:text-slate"] { color:#000 !important; }
-.poor-vision.dark [class*="dark:border-slate"] { border-color:#000 !important; }
-.poor-vision main { font-size: 1.125rem; }
-.poor-vision .card-hover, .poor-vision .btn-hover { transform:none !important; }
-.poor-vision * { border-color: #000 !important; }
-.poor-vision .bg-white { background: #fff !important; color:#000 !important; }
-.poor-vision .text-slate-500, .poor-vision .text-slate-400, .poor-vision .text-slate-600 { color:#000 !important; }
-.poor-vision :focus-visible { outline: 3px solid #000 !important; outline-offset: 2px; border-radius: 6px; }
-.poor-vision [role="button"][tabindex="0"]:focus { outline: 3px solid #2563eb !important; outline-offset: 2px; }
-.poor-vision .animate-enter, .poor-vision .animate-enterUp, .poor-vision .animate-enterScale,
-.poor-vision .stagger > *, .poor-vision .page-enter, .poor-vision .animate-floatSubtle { animation: none !important; opacity:1 !important; }
 
-/* Poor vision: крупный шрифт 125–200% разъезжает фиксированные ширины — чиним */
-.poor-vision aside { width: 320px !important; }
-.poor-vision aside .font-display { white-space: normal !important; line-height: 1.2 !important; }
+html.poor-vision {
+  --poor-contrast: 1;
+  --pv-bg: #ffffff;
+  --pv-surface: #ffffff;
+  --pv-fg: #000000;
+  --pv-border: #000000;
+  --pv-link: #0000cc;
+  --pv-btn-bg: #000000;
+  --pv-btn-fg: #ffffff;
+  --a11y-focus: #000000;
+  color-scheme: light;
+}
+html.poor-vision[data-a11y-scheme="bw"] {
+  --pv-bg: #000000;
+  --pv-surface: #0b0b0b;
+  --pv-fg: #ffffff;
+  --pv-border: #ffffff;
+  --pv-link: #93c5fd;
+  --pv-btn-bg: #ffffff;
+  --pv-btn-fg: #000000;
+  --a11y-focus: #ffffff;
+  color-scheme: dark;
+}
+html.poor-vision[data-a11y-scheme="yb"] {
+  --pv-bg: #000000;
+  --pv-surface: #0c0c00;
+  --pv-fg: #ffea00;
+  --pv-border: #ffea00;
+  --pv-link: #fff566;
+  --pv-btn-bg: #ffea00;
+  --pv-btn-fg: #000000;
+  --a11y-focus: #ffea00;
+  color-scheme: dark;
+}
+html.poor-vision[data-a11y-scheme="blue"] {
+  --pv-bg: #d8efff;
+  --pv-surface: #e6f5ff;
+  --pv-fg: #06264d;
+  --pv-border: #06264d;
+  --pv-link: #003380;
+  --pv-btn-bg: #06264d;
+  --pv-btn-fg: #ffffff;
+  --a11y-focus: #06264d;
+  color-scheme: light;
+}
+
+.poor-vision body {
+  background: var(--pv-bg) !important;
+  color: var(--pv-fg) !important;
+  line-height: 1.65;
+  letter-spacing: 0.02em;
+}
+.poor-vision[data-a11y-spacing="wide"] body { letter-spacing: 0.08em !important; word-spacing: 0.14em !important; }
+.poor-vision[data-a11y-spacing="xwide"] body { letter-spacing: 0.14em !important; word-spacing: 0.22em !important; }
+.poor-vision[data-a11y-lh="large"] body,
+.poor-vision[data-a11y-lh="large"] p,
+.poor-vision[data-a11y-lh="large"] li,
+.poor-vision[data-a11y-lh="large"] div { line-height: 2 !important; }
+
+/* Контрастные поверхности, текст и границы для всех 4 схем (кроме превью-свотчей в панели) */
+.poor-vision body *:not([data-a11y-swatch]):not([data-a11y-swatch] *):not(.monaco-editor):not(.monaco-editor *) {
+  border-color: var(--pv-border) !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+.poor-vision header,
+.poor-vision aside,
+.poor-vision nav,
+.poor-vision main,
+.poor-vision [role="dialog"] > div,
+.poor-vision [class*="bg-white"],
+.poor-vision [class*="bg-slate-"],
+.poor-vision [class*="bg-indigo-"],
+.poor-vision [class*="bg-blue-"],
+.poor-vision [class*="bg-amber-"],
+.poor-vision [class*="bg-emerald-"],
+.poor-vision [class*="bg-orange-"],
+.poor-vision [class*="bg-rose-"],
+.poor-vision [class*="bg-violet-"],
+.poor-vision [class*="dark:bg-"] {
+  background-color: var(--pv-surface) !important;
+  background-image: none !important;
+  color: var(--pv-fg) !important;
+}
+.poor-vision [class*="text-slate-"],
+.poor-vision [class*="text-white"],
+.poor-vision [class*="text-indigo-"],
+.poor-vision [class*="text-blue-"],
+.poor-vision [class*="text-emerald-"],
+.poor-vision [class*="text-rose-"],
+.poor-vision [class*="text-amber-"],
+.poor-vision [class*="dark:text-"] {
+  color: var(--pv-fg) !important;
+}
+.poor-vision input,
+.poor-vision select,
+.poor-vision textarea {
+  background-color: var(--pv-bg) !important;
+  color: var(--pv-fg) !important;
+  border: 2px solid var(--pv-border) !important;
+}
+.poor-vision button:not([data-a11y-swatch]),
+.poor-vision [role="button"] {
+  border: 2px solid var(--pv-border) !important;
+}
+.poor-vision button[aria-pressed="true"]:not([data-a11y-swatch]),
+.poor-vision a[aria-current="page"] {
+  background-color: var(--pv-btn-bg) !important;
+  color: var(--pv-btn-fg) !important;
+}
+.poor-vision button[aria-pressed="true"]:not([data-a11y-swatch]) *,
+.poor-vision a[aria-current="page"] * {
+  color: var(--pv-btn-fg) !important;
+}
+.poor-vision[data-a11y-links="1"] a {
+  text-decoration: underline !important;
+  text-underline-offset: 4px !important;
+  text-decoration-thickness: 2px !important;
+  color: var(--pv-link) !important;
+}
+.poor-vision[data-a11y-noimg="1"] img:not([alt="EduPlatform"]),
+.poor-vision[data-a11y-noimg="1"] video {
+  opacity: 0.08 !important;
+  filter: grayscale(100%) !important;
+}
+
+.poor-vision .card-hover, .poor-vision .btn-hover { transform: none !important; }
+.poor-vision :focus-visible { outline: 4px solid var(--a11y-focus) !important; outline-offset: 2px; border-radius: 6px; }
+.poor-vision .animate-enter, .poor-vision .animate-enterUp, .poor-vision .animate-enterScale,
+.poor-vision .stagger > *, .poor-vision .page-enter, .poor-vision .animate-floatSubtle { animation: none !important; opacity: 1 !important; }
+
+/* Крупный шрифт 125–200% не ломает шапку и меню */
+.poor-vision aside { width: 310px !important; }
+.poor-vision aside .font-display { white-space: normal !important; line-height: 1.25 !important; }
 .poor-vision header { flex-wrap: wrap !important; height: auto !important; min-height: 64px; row-gap: 8px; padding-top: 8px !important; padding-bottom: 8px !important; }
 .poor-vision main { overflow-x: hidden; }
 .poor-vision nav { overflow-x: auto; }

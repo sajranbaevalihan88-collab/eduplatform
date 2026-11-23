@@ -84,6 +84,7 @@ import FarmerBala from './pages/FarmerBala'
 import MathBattle from './pages/MathBattle'
 import SoundMemory from './pages/SoundMemory'
 import ConnectFour from './pages/ConnectFour'
+import Blocade from './pages/Blocade'
 const LiveQuizHost = lazy(()=>import('./pages/LiveQuizHost'))
 const LiveQuizPlay = lazy(()=>import('./pages/LiveQuizPlay'))
 import Login from './pages/Login'
@@ -146,6 +147,7 @@ export default function App() {
                 <Route path="/games/math-battle" element={<MathBattle />} />
                 <Route path="/games/sound-memory" element={<SoundMemory />} />
                 <Route path="/games/connect-four" element={<ConnectFour />} />
+                <Route path="/games/blocade" element={<Blocade />} />
                 <Route path="/live" element={<LiveQuizPlay />} />
                 <Route path="/live/host" element={<TeacherRoute><LiveQuizHost /></TeacherRoute>} />
                 <Route path="/s/:token" element={<SharedView />} />

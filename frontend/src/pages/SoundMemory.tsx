@@ -248,7 +248,7 @@ function playStudioPadNote(freq: number, timbre: Timbre, duration = 0.42) {
 
     filter.connect(master)
     master.connect(ctx.destination)
-  } catch {}
+  } catch { }
 }
 
 export default function SoundMemory() {
@@ -284,7 +284,7 @@ export default function SoundMemory() {
   const saveBestScore = (lv: number) => {
     setBest(prev => {
       const next = Math.max(prev, lv)
-      try { localStorage.setItem('edu-soundmem-best', String(next)) } catch {}
+      try { localStorage.setItem('edu-soundmem-best', String(next)) } catch { }
       return next
     })
   }
@@ -501,9 +501,8 @@ export default function SoundMemory() {
               return (
                 <div
                   key={i}
-                  className={`w-1.5 rounded-full transition-all duration-150 ${
-                    active ? 'bg-gradient-to-t from-emerald-400 via-amber-300 to-rose-400' : 'bg-indigo-500/40'
-                  }`}
+                  className={`w-1.5 rounded-full transition-all duration-150 ${active ? 'bg-gradient-to-t from-emerald-400 via-amber-300 to-rose-400' : 'bg-indigo-500/40'
+                    }`}
                   style={{ height: `${hPct}%` }}
                 />
               )
@@ -524,11 +523,10 @@ export default function SoundMemory() {
               key={m.id}
               type="button"
               onClick={() => { clearAllTimers(); setMode(m.id as Mode); setPhase(m.id === 'jam' ? 'input' : 'idle'); sfx('ui.click') }}
-              className={`p-2.5 rounded-2xl border text-left transition ${
-                mode === m.id
+              className={`p-2.5 rounded-2xl border text-left transition ${mode === m.id
                   ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-lg font-black'
                   : 'bg-white/10 hover:bg-white/15 text-white border-white/10'
-              }`}
+                }`}
             >
               <div className="text-xs font-extrabold flex items-center gap-1.5">{m.icon} {m.label}</div>
               <div className={`text-[10px] mt-0.5 ${mode === m.id ? 'text-slate-800 font-semibold' : 'text-indigo-200'}`}>{m.sub}</div>
@@ -550,9 +548,8 @@ export default function SoundMemory() {
                 key={k}
                 type="button"
                 onClick={() => { setTimbre(k); playStudioPadNote(392, k, 0.35) }}
-                className={`px-3 py-1.5 rounded-xl font-bold transition ${
-                  timbre === k ? 'bg-indigo-500 text-white shadow' : 'bg-white/10 text-indigo-200 hover:bg-white/20'
-                }`}
+                className={`px-3 py-1.5 rounded-xl font-bold transition ${timbre === k ? 'bg-indigo-500 text-white shadow' : 'bg-white/10 text-indigo-200 hover:bg-white/20'
+                  }`}
               >
                 {label}
               </button>
@@ -570,9 +567,8 @@ export default function SoundMemory() {
                 key={k}
                 type="button"
                 onClick={() => setSpeed(k)}
-                className={`px-2.5 py-1 rounded-lg font-bold ${
-                  speed === k ? 'bg-emerald-400 text-slate-950' : 'bg-white/10 text-indigo-200'
-                }`}
+                className={`px-2.5 py-1 rounded-lg font-bold ${speed === k ? 'bg-emerald-400 text-slate-950' : 'bg-white/10 text-indigo-200'
+                  }`}
               >
                 {label}
               </button>
@@ -588,9 +584,8 @@ export default function SoundMemory() {
                 key={mel.id}
                 type="button"
                 onClick={() => { setMelodyId(mel.id); setPhase('idle'); sfx('ui.click') }}
-                className={`p-3 rounded-2xl border text-left transition ${
-                  melodyId === mel.id ? 'bg-indigo-600/80 border-amber-300 text-white' : 'bg-slate-900/60 border-white/10 text-indigo-200'
-                }`}
+                className={`p-3 rounded-2xl border text-left transition ${melodyId === mel.id ? 'bg-indigo-600/80 border-amber-300 text-white' : 'bg-slate-900/60 border-white/10 text-indigo-200'
+                  }`}
               >
                 <div className="font-bold text-sm">{mel.title} ({mel.notes.length} нот)</div>
                 <div className="text-xs opacity-80">{mel.desc}</div>
@@ -663,9 +658,8 @@ export default function SoundMemory() {
 
       {/* Сетка музыкальных пэдов (2x2 для Саймона или 3x3 для Маримбы) */}
       <div
-        className={`grid gap-3.5 sm:gap-4 mx-auto ${
-          mode === 'simon4' ? 'grid-cols-2 max-w-lg' : 'grid-cols-3 max-w-xl'
-        }`}
+        className={`grid gap-3.5 sm:gap-4 mx-auto ${mode === 'simon4' ? 'grid-cols-2 max-w-lg' : 'grid-cols-3 max-w-xl'
+          }`}
       >
         {pads.map((pad, idx) => {
           const isLit = activePad === idx
@@ -676,9 +670,8 @@ export default function SoundMemory() {
               type="button"
               onClick={() => onPadPress(idx)}
               data-testid={`sm-pad-${idx}`}
-              className={`relative min-h-[115px] sm:min-h-[135px] rounded-3xl bg-gradient-to-br ${pad.color} border-2 ${pad.borderCls} text-white p-4 flex flex-col items-center justify-center gap-1 select-none transition-all duration-150 active:scale-95 shadow-xl ${
-                isLit ? pad.activeCls : 'opacity-90 hover:opacity-100'
-              } ${isErr ? 'ring-4 ring-rose-500 animate-shake' : ''}`}
+              className={`relative min-h-[115px] sm:min-h-[135px] rounded-3xl bg-gradient-to-br ${pad.color} border-2 ${pad.borderCls} text-white p-4 flex flex-col items-center justify-center gap-1 select-none transition-all duration-150 active:scale-95 shadow-xl ${isLit ? pad.activeCls : 'opacity-90 hover:opacity-100'
+                } ${isErr ? 'ring-4 ring-rose-500 animate-shake' : ''}`}
             >
               <span className="absolute top-2.5 left-3 px-2 py-0.5 rounded-lg bg-black/25 text-[11px] font-mono font-bold">
                 [{pad.keyHint}]

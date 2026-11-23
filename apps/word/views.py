@@ -19,17 +19,22 @@ from .serializers import WordDocumentSerializer
 WORD_IMPORT_MAX_BYTES = 20 * 1024 * 1024
 WORD_BODY_MAX_CHARS = 2_000_000
 
-_ALLOWED_TAGS = {'p', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'strong', 'em', 'u', 's',
-                 'a', 'table', 'tr', 'td', 'th', 'img', 'br', 'blockquote', 'span'}
+_ALLOWED_TAGS = {'p', 'b', 'i', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'strong', 'em', 'u', 's',
+                 'a', 'table', 'tr', 'td', 'th', 'img', 'br', 'hr', 'blockquote', 'span', 'sub', 'sup'}
 _ALLOWED_ATTRS = {'href', 'src', 'alt', 'style', 'colspan', 'rowspan'}
 _SAFE_FONTS = {
     'times new roman', 'arial', 'calibri', 'georgia', 'verdana',
     'courier new', 'comic sans ms',
 }
 
+_BORDER_RE = re.compile(
+    r'^(none|0|\d{1,2}px\s+(solid|dashed|dotted|double|groove|ridge)\s+(#[0-9a-f]{3,6}|transparent|rgba?\(\d{1,3},\s*\d{1,3},\s*\d{1,3}(,\s*[01]?(\.\d+)?)?\)))$'
+)
+_COLOR_RE = re.compile(r'^(transparent|#[0-9a-f]{3}([0-9a-f]{3})?|rgba?\(\d{1,3},\s*\d{1,3},\s*\d{1,3}(,\s*[01]?(\.\d+)?)?\))$')
+
 
 def _clean_style(value: str) -> str:
-    """Сохраняет форматирование редактора, отбрасывая URL и произвольный CSS."""
+    """Сохраняет форматирование редактора (включая рамки, таблицы, отступы), отбрасывая URL и произвольный CSS."""
     cleaned = []
     for declaration in str(value or '').split(';'):
         if ':' not in declaration:
@@ -40,15 +45,15 @@ def _clean_style(value: str) -> str:
         safe = False
         if prop in ('text-align',):
             safe = val in ('left', 'center', 'right', 'justify')
-        elif prop in ('color', 'background-color'):
-            safe = bool(re.fullmatch(r'#[0-9a-f]{3}([0-9a-f]{3})?', val))
+        elif prop in ('color', 'background-color', 'background'):
+            safe = bool(_COLOR_RE.fullmatch(val))
         elif prop == 'font-size':
             m = re.fullmatch(r'(\d{1,3})(px|pt)', val)
             safe = bool(m and 1 <= int(m.group(1)) <= 200)
         elif prop == 'font-family':
             safe = val.strip("'\"") in _SAFE_FONTS
         elif prop == 'font-weight':
-            safe = val in ('normal', 'bold', '400', '500', '600', '700')
+            safe = val in ('normal', 'bold', '400', '500', '600', '700', '800', '900')
         elif prop == 'font-style':
             safe = val in ('normal', 'italic')
         elif prop == 'text-decoration':
@@ -56,7 +61,7 @@ def _clean_style(value: str) -> str:
         elif prop == 'line-height':
             safe = bool(re.fullmatch(r'(\d(\.\d{1,2})?|\d{1,3}(px|pt))', val))
         elif prop in ('margin', 'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
-                      'left', 'top', 'width', 'height', 'max-width'):
+                      'left', 'top', 'width', 'height', 'max-width', 'min-width'):
             pattern = r'auto|0|-?\d{1,4}(\.\d{1,2})?(px|pt|%)'
             if prop == 'margin':
                 safe = all(re.fullmatch(pattern, part) for part in val.split()) and 1 <= len(val.split()) <= 4
@@ -65,10 +70,20 @@ def _clean_style(value: str) -> str:
         elif prop in ('padding', 'padding-left', 'padding-right', 'padding-top', 'padding-bottom'):
             pattern = r'0|\d{1,3}(px|pt|%)'
             safe = all(re.fullmatch(pattern, part) for part in val.split()) and 1 <= len(val.split()) <= 4
+        elif prop in ('border', 'border-top', 'border-bottom', 'border-left', 'border-right'):
+            safe = bool(_BORDER_RE.fullmatch(val))
+        elif prop == 'border-radius':
+            safe = bool(re.fullmatch(r'(\d{1,3}(px|%)\s*){1,4}', val))
+        elif prop == 'box-shadow':
+            safe = bool(re.fullmatch(r'none|0\s+\d{1,2}px\s+\d{1,2}px\s+rgba?\(\d{1,3},\s*\d{1,3},\s*\d{1,3}(,\s*[01]?(\.\d+)?)?\)', val))
+        elif prop == 'vertical-align':
+            safe = val in ('top', 'middle', 'bottom', 'baseline')
+        elif prop == 'word-break':
+            safe = val in ('break-word', 'normal')
         elif prop == 'float':
             safe = val in ('left', 'right', 'none')
         elif prop == 'display':
-            safe = val in ('block', 'inline', 'inline-block')
+            safe = val in ('block', 'inline', 'inline-block', 'table', 'none')
         elif prop == 'position':
             safe = val in ('relative', 'absolute')
         elif prop == 'z-index':
@@ -79,7 +94,7 @@ def _clean_style(value: str) -> str:
             safe = val == 'fixed'
         if safe:
             cleaned.append(f'{prop}: {val}')
-    return '; '.join(cleaned)[:1000]
+    return '; '.join(cleaned)[:1200]
 
 
 class _Sanitizer(HTMLParser):
@@ -95,13 +110,27 @@ class _Sanitizer(HTMLParser):
             if k == 'style' and isinstance(v, str):
                 style = _clean_style(v)
         if tag == 'div':
-            # храним только разрывы страниц, остальное разворачиваем на фронте
+            # храним разрывы страниц, текстовые рамки (word-frame) и метаданные макета (word-meta)
             cls = ''
+            meta_val = ''
+            frame_val = ''
             for k, v in attrs:
                 if k == 'class' and isinstance(v, str):
                     cls = v
+                elif k == 'data-word-meta' and isinstance(v, str):
+                    meta_val = v[:600]
+                elif k == 'data-frame' and isinstance(v, str):
+                    frame_val = re.sub(r'[^a-z0-9_-]', '', v.lower())[:32]
             if 'page-break' in cls:
                 self.out.append('<div class="page-break">')
+                self.div_stack.append(True)
+            elif 'word-meta' in cls and meta_val:
+                self.out.append(f'<div class="word-meta" data-word-meta="{escape(meta_val, quote=True)}" style="display: none">')
+                self.div_stack.append(True)
+            elif 'word-frame' in cls:
+                f_attr = f' data-frame="{frame_val}"' if frame_val else ''
+                css = f' style="{escape(style, quote=True)}"' if style else ''
+                self.out.append(f'<div class="word-frame"{f_attr}{css}>')
                 self.div_stack.append(True)
             else:
                 self.div_stack.append(False)
@@ -130,8 +159,13 @@ class _Sanitizer(HTMLParser):
             self.out.append(f'<img src="{escape(src, quote=True)}" alt="{escape(alt, quote=True)}"{free}{css}>' if src else '')
             return
         extra = ''
-        if tag == 'table' and any(k == 'data-fixed' and v == '1' for k, v in attrs):
-            extra += ' data-fixed="1"'
+        if tag == 'table':
+            if any(k == 'data-fixed' and v == '1' for k, v in attrs):
+                extra += ' data-fixed="1"'
+            if any(k == 'data-free' and v == '1' for k, v in attrs):
+                extra += ' data-free="1"'
+            if any(k == 'data-zebra' and v == '1' for k, v in attrs):
+                extra += ' data-zebra="1"'
         if tag in ('td', 'th'):
             for k, v in attrs:
                 if k in ('colspan', 'rowspan') and str(v).isdigit():
@@ -145,7 +179,7 @@ class _Sanitizer(HTMLParser):
             if kept:
                 self.out.append('</div>')
             return
-        if tag in _ALLOWED_TAGS and tag not in ('img', 'br'):
+        if tag in _ALLOWED_TAGS and tag not in ('img', 'br', 'hr'):
             self.out.append(f'</{tag}>')
 
     def handle_data(self, data):

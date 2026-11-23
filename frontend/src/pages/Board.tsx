@@ -275,8 +275,197 @@ export default function Board() {
     img.src = dataUrl
   }
 
-  type ClipKind = 'cube' | 'sphere' | 'cylinder' | 'cone' | 'pyramid' | 'prism' | 'axes'
+  type ClipKind = 'cube' | 'sphere' | 'cylinder' | 'cone' | 'pyramid' | 'prism' | 'axes' | 'protractor'
+  type BgStyle = 'plain' | 'grid' | 'lines' | 'dots' | 'chalk'
   type AxesCfg = { range: number; step: number; labels: boolean }
+  const [bgStyle, setBgStyle] = useState<BgStyle>('grid')
+  const [graphOpen, setGraphOpen] = useState(false)
+  const [graphExpr, setGraphExpr] = useState('x^2 - 3')
+  const [shapesOpen, setShapesOpen] = useState(false)
+  const [formulasOpen, setFormulasOpen] = useState(false)
+  const [laserOn, setLaserOn] = useState(false)
+  const imgInputRef = useRef<HTMLInputElement | null>(null)
+
+  const QUICK_FORMULAS = [
+    'a² + b² = c²',
+    'D = b² − 4ac',
+    'x = (−b ± √D) / 2a',
+    'S = π · r²',
+    'C = 2 · π · r',
+    '(a + b)² = a² + 2ab + b²',
+    'v = s / t',
+    'F = m · a',
+    'U = I · R',
+    'H₂O + CO₂ → H₂CO₃',
+  ]
+
+  // Безопасный вычислитель формулы y = f(x) для построения графика на 2D-доске
+  const evalMathExpr = (raw: string, xVal: number): number => {
+    const clean = raw
+      .toLowerCase()
+      .replace(/,/g, '.')
+      .replace(/\^/g, '**')
+      .replace(/(\d)(x)/g, '$1*$2')
+      .replace(/(\d)\(/g, '$1*(')
+      .replace(/\)(x|\d)/g, ')*$1')
+      .replace(/\bpi\b/g, 'Math.PI')
+      .replace(/\b(sin|cos|tan|abs|sqrt|log|exp|floor|ceil)\b/g, 'Math.$1')
+    if (/[^0-9x+\-*/().\sMathPIsincotabqrlgefxp,_*]/.test(clean.replace(/Math\.[a-zA-Z]+/g, ''))) {
+      return NaN
+    }
+    try {
+      // eslint-disable-next-line no-new-func
+      const fn = new Function('x', `return (${clean})`)
+      const y = fn(xVal)
+      return typeof y === 'number' && Number.isFinite(y) ? y : NaN
+    } catch {
+      return NaN
+    }
+  }
+
+  const placeFunctionGraph = () => {
+    const editor = editorRef.current
+    if (!editor || !graphExpr.trim()) return
+    const range = axesCfgRef.current.range || 10
+    const size = 560
+    const c = document.createElement('canvas')
+    c.width = size
+    c.height = size
+    const ctx = c.getContext('2d')!
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, size, size)
+    const pad = 42
+    const plotW = size - pad * 2
+    const mid = size / 2
+    const pxPerUnit = plotW / (range * 2)
+
+    // Лёгкая сетка
+    ctx.strokeStyle = '#e2e8f0'
+    ctx.lineWidth = 1
+    const step = range <= 10 ? 1 : range <= 20 ? 2 : 5
+    for (let v = -range; v <= range; v += step) {
+      const gx = mid + v * pxPerUnit
+      const gy = mid - v * pxPerUnit
+      ctx.beginPath(); ctx.moveTo(gx, pad); ctx.lineTo(gx, size - pad); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(pad, gy); ctx.lineTo(size - pad, gy); ctx.stroke()
+    }
+    // Оси X и Y
+    ctx.strokeStyle = '#0f172a'
+    ctx.lineWidth = 2.2
+    ctx.beginPath()
+    ctx.moveTo(pad, mid); ctx.lineTo(size - pad, mid)
+    ctx.moveTo(mid, pad); ctx.lineTo(mid, size - pad)
+    ctx.stroke()
+
+    // Подписи делений
+    ctx.fillStyle = '#475569'
+    ctx.font = 'bold 11px system-ui'
+    ctx.textAlign = 'center'
+    for (let v = -range; v <= range; v += step) {
+      if (v === 0) continue
+      const gx = mid + v * pxPerUnit
+      const gy = mid - v * pxPerUnit
+      ctx.fillText(String(v), gx, mid + 15)
+      ctx.textAlign = 'right'
+      ctx.fillText(String(v), mid - 7, gy + 4)
+      ctx.textAlign = 'center'
+    }
+    ctx.fillStyle = '#0f172a'
+    ctx.font = 'bold 14px system-ui'
+    ctx.fillText('X', size - pad + 14, mid + 5)
+    ctx.fillText('Y', mid + 14, pad - 8)
+
+    // График функции y = f(x)
+    ctx.strokeStyle = clipColorRef.current || '#4f46e5'
+    ctx.lineWidth = 3.5
+    ctx.lineJoin = 'round'
+    ctx.beginPath()
+    let started = false
+    let validPts = 0
+    for (let px = 0; px <= plotW; px += 1.5) {
+      const xv = (px - plotW / 2) / pxPerUnit
+      const yv = evalMathExpr(graphExpr.trim(), xv)
+      if (!Number.isFinite(yv) || Math.abs(yv) > range * 1.35) {
+        started = false
+        continue
+      }
+      const cy = mid - yv * pxPerUnit
+      const cx = pad + px
+      if (!started) { ctx.moveTo(cx, cy); started = true } else { ctx.lineTo(cx, cy) }
+      validPts++
+    }
+    ctx.stroke()
+
+    // Заголовок формулы
+    ctx.fillStyle = '#4f46e5'
+    ctx.font = 'bold 16px system-ui'
+    ctx.textAlign = 'left'
+    ctx.fillText(`y = ${graphExpr.trim()}`, pad, 24)
+
+    if (validPts < 2) {
+      showToast('Не удалось построить график — проверь формулу (напр. x^2 - 3 или sin(x)*4)')
+      return
+    }
+    addImageAsset(editor, c.toDataURL('image/png'), 420, 420, `graph-${Date.now()}`)
+    dirtyRef.current = true
+    setGraphOpen(false)
+    showToast(`График y = ${graphExpr.trim()} добавлен на доску ✓`)
+  }
+
+  const placeFormulaCard = (formula: string) => {
+    const editor = editorRef.current
+    if (!editor) return
+    const c = document.createElement('canvas')
+    c.width = 460
+    c.height = 110
+    const ctx = c.getContext('2d')!
+    ctx.fillStyle = '#fef9c3'
+    ctx.strokeStyle = '#eab308'
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    ctx.roundRect(4, 4, 452, 102, 18)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = '#0f172a'
+    ctx.font = 'bold 34px Georgia, serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(formula, 230, 56)
+    addImageAsset(editor, c.toDataURL('image/png'), 280, 68, `formula-${Date.now()}`)
+    dirtyRef.current = true
+    setFormulasOpen(false)
+    showToast(`Формула «${formula}» добавлена ✓`)
+  }
+
+  const onInsertImageFile = (file: File | null) => {
+    const editor = editorRef.current
+    if (!editor || !file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '')
+      const img = new Image()
+      img.onload = () => {
+        const maxW = 520
+        const ratio = Math.min(1, maxW / Math.max(1, img.naturalWidth))
+        addImageAsset(editor, dataUrl, Math.round(img.naturalWidth * ratio), Math.round(img.naturalHeight * ratio), file.name, file.type || 'image/png')
+        dirtyRef.current = true
+        showToast(`Картинка «${file.name}» вставлена на доску ✓`)
+      }
+      img.src = dataUrl
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const toggleLaserTool = () => {
+    const editor = editorRef.current
+    if (!editor) return
+    const next = !laserOn
+    setLaserOn(next)
+    setClipTool(null)
+    setPartTool(false)
+    try { editor.setCurrentTool(next ? 'laser' : 'draw') } catch {}
+  }
+
   const PALETTE = ['#0f172a', '#64748b', '#94a3b8', '#ffffff', '#78716c', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#16a34a', '#10b981', '#14b8a6', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#ec4899', '#ef4444', '#dc2626', '#1e3a8a', '#047857', '#7c2d12', '#111827']
   const shade = (hex: string, k: number): string => {
     const n = parseInt(hex.slice(1), 16)
@@ -357,6 +546,41 @@ export default function Board() {
         x.fillText('Y', mid + 12, 20)
       }
       return { url: c.toDataURL('image/png'), w: size, h: size }
+    }
+    if (kind === 'protractor') {
+      const c = document.createElement('canvas')
+      c.width = 360
+      c.height = 200
+      const x = c.getContext('2d')!
+      const cx = 180, cy = 180, R = 155
+      x.fillStyle = 'rgba(59, 130, 246, 0.12)'
+      x.strokeStyle = base
+      x.lineWidth = 3
+      x.beginPath()
+      x.arc(cx, cy, R, Math.PI, 0)
+      x.closePath()
+      x.fill()
+      x.stroke()
+      x.beginPath()
+      x.arc(cx, cy, 42, Math.PI, 0)
+      x.stroke()
+      x.fillStyle = base
+      x.font = 'bold 11px system-ui'
+      x.textAlign = 'center'
+      for (let deg = 0; deg <= 180; deg += 5) {
+        const rad = Math.PI - (deg * Math.PI) / 180
+        const len = deg % 30 === 0 ? 18 : deg % 10 === 0 ? 12 : 7
+        x.lineWidth = deg % 30 === 0 ? 2 : 1.1
+        x.beginPath()
+        x.moveTo(cx + Math.cos(rad) * R, cy - Math.sin(rad) * R)
+        x.lineTo(cx + Math.cos(rad) * (R - len), cy - Math.sin(rad) * (R - len))
+        x.stroke()
+        if (deg % 30 === 0) {
+          x.fillText(`${deg}°`, cx + Math.cos(rad) * (R - 29), cy - Math.sin(rad) * (R - 29) + 4)
+        }
+      }
+      x.beginPath(); x.arc(cx, cy, 4, 0, Math.PI * 2); x.fill()
+      return { url: c.toDataURL('image/png'), w: 360, h: 200 }
     }
     const c = document.createElement('canvas')
     c.width = 240
@@ -657,9 +881,34 @@ export default function Board() {
     try { editorRef.current?.squashToMark(d.markId) } catch {}
   }
 
+  const bgPatternStyle: React.CSSProperties =
+    mode !== '2d' || bgStyle === 'plain'
+      ? {}
+      : bgStyle === 'grid'
+        ? {
+            backgroundImage: 'linear-gradient(to right, rgba(99,102,241,0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(99,102,241,0.14) 1px, transparent 1px)',
+            backgroundSize: '28px 28px',
+          }
+        : bgStyle === 'lines'
+          ? {
+              backgroundImage: 'linear-gradient(to bottom, rgba(59,130,246,0.2) 1px, transparent 1px)',
+              backgroundSize: '100% 34px',
+            }
+          : bgStyle === 'dots'
+            ? {
+                backgroundImage: 'radial-gradient(rgba(71,85,105,0.28) 1.5px, transparent 1.5px)',
+                backgroundSize: '24px 24px',
+              }
+            : {
+                backgroundColor: '#113325',
+                backgroundImage: 'linear-gradient(to right, rgba(255,255,255,0.07) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.07) 1px, transparent 1px)',
+                backgroundSize: '32px 32px',
+              }
+
   const tldrawArea = (
     <div
-      className={`relative rounded-2xl border overflow-hidden bg-white ${isFullscreen ? 'flex-1 min-h-0' : 'h-full w-full'} ${clipTool ? '[&_.tl-container]:!cursor-crosshair' : ''} ${partTool ? '[&_.tl-canvas]:!cursor-cell' : ''}`}
+      className={`relative rounded-2xl border overflow-hidden ${bgStyle === 'chalk' && mode === '2d' ? 'bg-[#113325] [&_.tl-background]:!bg-transparent' : bgStyle !== 'plain' && mode === '2d' ? 'bg-white [&_.tl-background]:!bg-transparent' : 'bg-white'} ${isFullscreen ? 'flex-1 min-h-0' : 'h-full w-full'} ${clipTool ? '[&_.tl-container]:!cursor-crosshair' : ''} ${partTool ? '[&_.tl-canvas]:!cursor-cell' : ''}`}
+      style={bgPatternStyle}
       onPointerDownCapture={onAreaPointerDown}
       onPointerMoveCapture={mode === '2d' && (clipTool || partTool) ? onAreaPointerMove : undefined}
       onPointerUpCapture={mode === '2d' && (clipTool || partTool) ? onAreaPointerUp : undefined}
@@ -790,8 +1039,111 @@ export default function Board() {
         </div>
       </div>
       {mode === '2d' && !isFullscreen && (
-        <div className="shrink-0 flex flex-wrap gap-1.5 items-center bg-white dark:bg-slate-800 border-b border-slate-200/60 dark:border-slate-700/60 px-3 py-1.5">
-          <button data-clipbtn onClick={() => { setClipTool(clipTool === 'axes' ? null : 'axes'); setAxesOpen(o => !o) }} title={t('bd2_axes')} className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium border ${clipTool === 'axes' ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-amber-50 dark:bg-slate-900 dark:hover:bg-slate-700 text-amber-700 dark:text-amber-300 border-amber-200'}`}>{t('bd2_axes')}</button>
+        <div className="shrink-0 flex flex-wrap gap-1.5 items-center bg-white dark:bg-slate-800 border-b border-slate-200/60 dark:border-slate-700/60 px-3 py-1.5" data-testid="bd2-toolbar">
+          {/* Выбор фона школьной доски */}
+          <div className="inline-flex rounded-lg border dark:border-slate-700 overflow-hidden text-xs font-bold">
+            {([
+              ['plain', '⬜ Белая'],
+              ['grid', '▦ Клетка'],
+              ['lines', '☰ Линейка'],
+              ['dots', '🎯 Точки'],
+              ['chalk', '🟩 Меловая'],
+            ] as Array<[BgStyle, string]>).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setBgStyle(k)}
+                className={`px-2.5 py-2 min-h-[38px] transition ${bgStyle === k ? 'bg-indigo-600 text-white' : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Штамп осей X/Y */}
+          <button data-clipbtn onClick={() => { setClipTool(clipTool === 'axes' ? null : 'axes'); setAxesOpen(o => !o); setGraphOpen(false); setShapesOpen(false); setFormulasOpen(false) }} title={t('bd2_axes')} className={`px-3 py-1.5 min-h-[38px] rounded-lg text-xs font-bold border ${clipTool === 'axes' ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-amber-50 dark:bg-slate-900 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-slate-700'}`}>📐 {t('bd2_axes')}</button>
+
+          {/* Построитель графиков функций y = f(x) */}
+          <button type="button" onClick={() => { setGraphOpen(o => !o); setAxesOpen(false); setShapesOpen(false); setFormulasOpen(false) }} className={`px-3 py-1.5 min-h-[38px] rounded-lg text-xs font-bold border ${graphOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-sky-50 dark:bg-slate-900 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-slate-700'}`}>📈 График y=f(x)</button>
+
+          {/* 2D Геометрия + Транспортир */}
+          <button data-clipbtn type="button" onClick={() => { setShapesOpen(o => !o); setAxesOpen(false); setGraphOpen(false); setFormulasOpen(false) }} className={`px-3 py-1.5 min-h-[38px] rounded-lg text-xs font-bold border ${shapesOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-emerald-50 dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-slate-700'}`}>🧊 2D-Фигуры & Транспортир</button>
+
+          {/* Формулы-стикеры */}
+          <button type="button" onClick={() => { setFormulasOpen(o => !o); setAxesOpen(false); setGraphOpen(false); setShapesOpen(false) }} className={`px-3 py-1.5 min-h-[38px] rounded-lg text-xs font-bold border ${formulasOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-yellow-50 dark:bg-slate-900 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-slate-700'}`}>∑ Формулы</button>
+
+          {/* Вставка картинки */}
+          <input ref={imgInputRef} type="file" accept="image/*" className="hidden" onChange={e => { onInsertImageFile(e.target.files?.[0] || null); (e.target as HTMLInputElement).value = '' }} />
+          <button type="button" onClick={() => imgInputRef.current?.click()} className="px-3 py-1.5 min-h-[38px] rounded-lg text-xs font-bold border bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-700 hover:border-indigo-400">🖼️ Картинка</button>
+
+          {/* Лазерная указка + Undo/Redo + По размеру */}
+          <button type="button" onClick={toggleLaserTool} className={`px-3 py-1.5 min-h-[38px] rounded-lg text-xs font-bold border ${laserOn ? 'bg-rose-600 text-white border-rose-500 shadow' : 'bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-700'}`}>🔴 Указка</button>
+          <div className="ml-auto flex items-center gap-1">
+            <button type="button" onClick={() => { try { editorRef.current?.undo() } catch {} }} title="Отменить (Ctrl+Z)" className="px-2.5 py-1.5 min-h-[38px] rounded-lg border dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white text-xs font-bold">↩</button>
+            <button type="button" onClick={() => { try { editorRef.current?.redo() } catch {} }} title="Повторить (Ctrl+Y)" className="px-2.5 py-1.5 min-h-[38px] rounded-lg border dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white text-xs font-bold">↪</button>
+            <button type="button" onClick={() => { try { editorRef.current?.zoomToFit() } catch {} }} title="Вместить всё" className="px-2.5 py-1.5 min-h-[38px] rounded-lg border dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white text-xs font-bold">🔍 100%</button>
+          </div>
+        </div>
+      )}
+
+      {/* Построитель графиков функций */}
+      {mode === '2d' && graphOpen && !isFullscreen && (
+        <div className="shrink-0 bg-sky-50/80 dark:bg-slate-800 border-b dark:border-slate-700 px-3 py-2 flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-bold dark:text-white">y =</span>
+          <input
+            value={graphExpr}
+            onChange={e => setGraphExpr(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && placeFunctionGraph()}
+            placeholder="x^2 - 3, sin(x)*4, 2*x + 1…"
+            className="w-48 px-3 py-1.5 rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-900 dark:text-white font-mono font-bold"
+          />
+          {['x^2 - 3', '2*x + 1', 'sin(x)*4', 'cos(x)*4', '1/x', 'sqrt(x)*2'].map(preset => (
+            <button key={preset} type="button" onClick={() => setGraphExpr(preset)} className="px-2 py-1 rounded-md bg-white dark:bg-slate-900 border dark:border-slate-700 dark:text-slate-200 font-mono">
+              {preset}
+            </button>
+          ))}
+          <button type="button" onClick={placeFunctionGraph} className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold">
+            📈 Построить на доске
+          </button>
+        </div>
+      )}
+
+      {/* Панель 2D-штампов фигур и транспортира */}
+      {mode === '2d' && shapesOpen && !isFullscreen && (
+        <div data-clipbtn className="shrink-0 bg-emerald-50/70 dark:bg-slate-800 border-b dark:border-slate-700 px-3 py-2 flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-bold text-slate-600 dark:text-slate-300">Выбери фигуру и кликни на доске:</span>
+          {([
+            ['cube', '🧊 Куб'],
+            ['sphere', '🌐 Сфера'],
+            ['cylinder', '🛢️ Цилиндр'],
+            ['cone', '🔺 Конус'],
+            ['pyramid', '⛺ Пирамида'],
+            ['prism', '🔷 Призма'],
+            ['protractor', '📐 Транспортир 180°'],
+          ] as Array<[ClipKind, string]>).map(([k, label]) => (
+            <button
+              key={k}
+              data-clipbtn
+              type="button"
+              onClick={() => { setClipTool(clipTool === k ? null : k); setPartTool(false); setLaserOn(false) }}
+              className={`px-3 py-1.5 rounded-lg font-bold border ${clipTool === k ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-900 dark:text-white dark:border-slate-700'}`}
+            >
+              {label}
+            </button>
+          ))}
+          <input type="color" value={clipColor} onChange={e => setClipColor(e.target.value)} title="Цвет фигуры" className="w-8 h-8 rounded border cursor-pointer" />
+        </div>
+      )}
+
+      {/* Панель быстрых школьных формул */}
+      {mode === '2d' && formulasOpen && !isFullscreen && (
+        <div className="shrink-0 bg-amber-50/80 dark:bg-slate-800 border-b dark:border-slate-700 px-3 py-2 flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="font-bold text-slate-600 dark:text-slate-300">Кликни формулу — вставится стикером:</span>
+          {QUICK_FORMULAS.map(f => (
+            <button key={f} type="button" onClick={() => placeFormulaCard(f)} className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-amber-300 dark:border-slate-700 dark:text-amber-200 font-serif font-bold hover:bg-amber-100">
+              {f}
+            </button>
+          ))}
         </div>
       )}
 

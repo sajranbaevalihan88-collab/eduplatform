@@ -68,12 +68,12 @@ export default function Dashboard(){
   ].filter(c=> !adminLimited || ['/subjects','/lessons','/tests','/classes'].includes(c.to))
   return (
     <div className="space-y-6 page-enter">
-      <div className="rounded-[24px] bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 p-8 text-white relative overflow-hidden">
+      <div className="rounded-2xl sm:rounded-[24px] bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 p-5 sm:p-8 text-white relative overflow-hidden">
         <div className="relative">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-medium mb-3">{t('dash_new_board')}</div>
-          <h1 className="text-3xl md:text-4xl font-display font-extrabold animate-fadeIn dark:text-white" style={{animationDelay:'0.1s'}}>{me ? `${t('dash_hello')} ${me.username}` : t('welcome')}</h1>
-          <p className="text-white/80 mt-2 max-w-2xl animate-fadeIn" style={{animationDelay:'0.2s'}}>{me ? `${t('dash_role_prefix')} ${me.role} ${t('dash_role_suffix')}` : t('dash_guest')}</p>
-          <div className="flex flex-wrap gap-3 mt-6 animate-fadeIn" style={{animationDelay:'0.3s'}}>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-display font-extrabold animate-fadeIn dark:text-white break-words" style={{animationDelay:'0.1s'}}>{me ? `${t('dash_hello')} ${me.username}` : t('welcome')}</h1>
+          <p className="text-white/80 text-sm sm:text-base mt-2 max-w-2xl animate-fadeIn" style={{animationDelay:'0.2s'}}>{me ? `${t('dash_role_prefix')} ${me.role} ${t('dash_role_suffix')}` : t('dash_guest')}</p>
+          <div className="flex flex-wrap gap-2.5 sm:gap-3 mt-5 sm:mt-6 animate-fadeIn" style={{animationDelay:'0.3s'}}>
             {!student && me?.role !== 'parent' ? (
               <>
                 <Link to="/lessons/new" className="px-6 py-3 rounded-xl bg-orange-500 text-white font-semibold flex items-center gap-2 btn-hover shadow-lg hover:bg-orange-400">{t('create_lesson')} <ArrowRight size={18} className="transition-transform group-hover:translate-x-1"/></Link>

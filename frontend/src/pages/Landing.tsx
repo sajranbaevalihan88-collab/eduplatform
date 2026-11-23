@@ -70,10 +70,10 @@ export default function Landing() {
     { n: '4', title: t('land_s4_t'), desc: t('land_s4_d') },
   ]
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-950 -m-4 lg:-m-8">
+    <div className="min-h-screen bg-white dark:bg-slate-950 -m-4 lg:-m-8 overflow-x-clip pb-12 lg:pb-0">
       {/* Hero */}
       <section className="relative">
-        <div className="max-w-7xl mx-auto px-5 sm:px-6 pt-14 pb-10 sm:pt-20 relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-8 sm:pt-20 sm:pb-10 relative">
           <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-10 items-center">
             <div>
               <Reveal>
@@ -91,11 +91,11 @@ export default function Landing() {
                 <p className="mt-5 text-base sm:text-lg text-slate-600 dark:text-slate-300 max-w-xl leading-relaxed" dangerouslySetInnerHTML={{ __html: t('hero_sub') }} />
               </Reveal>
               <Reveal delay={260}>
-                <div className="mt-8 flex flex-wrap gap-3">
-                  <Link to="/lessons" className="px-6 py-3.5 min-h-[48px] rounded-xl bg-indigo-600 dark:bg-white dark:text-slate-900 text-white font-bold flex items-center gap-2 hover:bg-indigo-700 dark:hover:bg-slate-100 transition-colors">
+                <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row flex-wrap gap-3">
+                  <Link to="/lessons" className="w-full sm:w-auto justify-center px-6 py-3.5 min-h-[48px] rounded-xl bg-indigo-600 dark:bg-white dark:text-slate-900 text-white font-bold flex items-center gap-2 hover:bg-indigo-700 dark:hover:bg-slate-100 transition-colors">
                     {t('view_lessons')} <ArrowRight size={18} />
                   </Link>
-                  <Link to="/lessons/new" className="px-6 py-3.5 min-h-[48px] rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white font-semibold flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                  <Link to="/lessons/new" className="w-full sm:w-auto justify-center px-6 py-3.5 min-h-[48px] rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white font-semibold flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
                     <Plus size={18} className="text-indigo-700 dark:text-cyan-400" /> {t('create_lesson')}
                   </Link>
                 </div>

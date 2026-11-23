@@ -96,17 +96,91 @@ def login_view(request):
     _register_login_failure(username)
     return Response({'error': 'Неверные данные'}, status=status.HTTP_401_UNAUTHORIZED)
 
+def _validate_profile_image(uploaded, max_mb: int, label: str):
+    """Безопасная проверка загруженного изображения (аватар или баннер): размер + Pillow."""
+    import os, uuid
+    from PIL import Image
+    if uploaded.size > max_mb * 1024 * 1024:
+        return None, f'{label}: файл слишком большой (максимум {max_mb} МБ)'
+    allowed_formats = {'JPEG': '.jpg', 'PNG': '.png', 'WEBP': '.webp', 'GIF': '.gif'}
+    try:
+        uploaded.seek(0)
+        with Image.open(uploaded) as img:
+            fmt = (img.format or '').upper()
+            img.verify()
+        if fmt not in allowed_formats:
+            return None, f'{label}: поддерживаются только JPG, PNG, WEBP и GIF'
+        uploaded.seek(0)
+        uploaded.name = f'{uuid.uuid4().hex}{allowed_formats[fmt]}'
+        return uploaded, None
+    except Exception:
+        return None, f'{label}: не удалось прочитать изображение — выберите корректный файл JPG/PNG/WEBP/GIF'
+
+
 @api_view(['GET','PATCH'])
 @permission_classes([permissions.IsAuthenticated])
 def me_view(request):
+    user = request.user
     if request.method == 'GET':
-        return Response(UserSerializer(request.user).data)
-    # PATCH — только без role
-    serializer = MeUpdateSerializer(request.user, data=request.data, partial=True)
-    if serializer.is_valid():
+        return Response(UserSerializer(user).data)
+
+    # 1. Обработка загрузки / удаления фото профиля (avatar) и баннера (banner)
+    media_changed = False
+    if request.data.get('remove_avatar') in (True, 'true', '1', 1):
+        if user.avatar:
+            try:
+                user.avatar.delete(save=False)
+            except Exception:
+                user.avatar = None
+        user.avatar = None
+        media_changed = True
+    elif 'avatar' in request.FILES:
+        clean_file, err = _validate_profile_image(request.FILES['avatar'], 6, 'Фото профиля')
+        if err:
+            return Response({'error': err, 'detail': err}, status=status.HTTP_400_BAD_REQUEST)
+        if user.avatar:
+            try:
+                user.avatar.delete(save=False)
+            except Exception:
+                pass
+        user.avatar = clean_file
+        media_changed = True
+
+    if request.data.get('remove_banner') in (True, 'true', '1', 1):
+        if user.banner:
+            try:
+                user.banner.delete(save=False)
+            except Exception:
+                user.banner = None
+        user.banner = None
+        media_changed = True
+    elif 'banner' in request.FILES:
+        clean_file, err = _validate_profile_image(request.FILES['banner'], 10, 'Баннер')
+        if err:
+            return Response({'error': err, 'detail': err}, status=status.HTTP_400_BAD_REQUEST)
+        if user.banner:
+            try:
+                user.banner.delete(save=False)
+            except Exception:
+                pass
+        user.banner = clean_file
+        media_changed = True
+
+    # 2. Обновление текстовых полей и пресета/позиции баннера (если переданы)
+    text_fields = {'username', 'email', 'first_name', 'last_name', 'bio', 'banner_preset', 'banner_position'}
+    text_payload = {k: request.data.get(k) for k in text_fields if k in request.data}
+    if text_payload:
+        serializer = MeUpdateSerializer(user, data=text_payload, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
         serializer.save()
-        return Response(UserSerializer(request.user).data)
-    return Response(serializer.errors, status=400)
+        if media_changed:
+            user.save(update_fields=['avatar', 'banner'])
+    elif media_changed:
+        user.save(update_fields=['avatar', 'banner'])
+
+    user.refresh_from_db()
+    return Response(UserSerializer(user).data)
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])

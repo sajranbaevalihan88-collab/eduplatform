@@ -10,6 +10,9 @@ class User(AbstractUser):
     ]
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='student')
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    banner = models.ImageField(upload_to='banners/', null=True, blank=True)
+    banner_preset = models.CharField(max_length=40, blank=True, default='aurora')
+    banner_position = models.IntegerField(default=50)
     bio = models.TextField(blank=True)
     # момент последней смены пароля: JWT, выпущенный РАНЬШЕ, считается недействительным
     # (украденный access умирает при первой же проверке, а не через 30 минут)

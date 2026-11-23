@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import client, { mediaUrl } from '../api/client'
+import client from '../api/client'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
-import { Plus, Trash2, Save, GripVertical, Type, FileText, Presentation, FlaskConical, Code2, PenTool, Video, Eye, BookOpen, Sparkles } from 'lucide-react'
+import { Trash2, Save, GripVertical, Type, FileText, Presentation, FlaskConical, Code2, PenTool, Video, Eye, BookOpen, Sparkles, Upload, Copy, Loader2 } from 'lucide-react'
 import { AI_FEATURES } from '../utils/features'
+import InlineFileReader from '../components/InlineFileReader'
 
 type Block={id:string,type:string,data:any}
 
@@ -144,6 +145,7 @@ export default function LessonBuilder(){
 
   const [quickPresTitle,setQuickPresTitle]=useState('')
   const [uploadingPres,setUploadingPres]=useState<string|null>(null)
+  const [uploadingFile,setUploadingFile]=useState<string|null>(null)
   const [errors,setErrors]=useState<{title?:string,subject?:string,blocks?:Record<string,string>}>({})
   const titleInputRef = useRef<HTMLInputElement>(null)
   const subjectRefEl = useRef<HTMLDivElement>(null)
@@ -162,12 +164,22 @@ export default function LessonBuilder(){
   const [ltAiSrc,setLtAiSrc]=useState<string|null>(null)
   const getPresTab=(id:string)=> presTabs[id] || (options.presentations.length ? 'select' : 'upload')
   const getInlineTest=(id:string)=> inlineTests[id] || {title:'',desc:'',pass:60,questions:[{text:'Сколько будет 2+2?',type:'single',points:1,options:[{text:'3',is_correct:false},{text:'4',is_correct:true},{text:'5',is_correct:false}]}]}
+  const parsePromptCount=(s:string,fallback:number)=>{
+    const m=s.toLowerCase().match(/\b(\d{1,2})\s*(?:вопрос\S*|вопр\.?|суроо\S*|question\S*|задани\S*|шт\.?|штук\S*)/i)
+    if(m){ const n=parseInt(m[1],10); if(n>=1&&n<=40) return n }
+    const cleaned=s.toLowerCase().replace(/\b\d{1,2}\s*[-–]?\s*(?:класс\S*|кл\.?|grade\S*)/gi,'').replace(/python\s*3/gi,'')
+    const nums=(cleaned.match(/\b(\d{1,2})\b/g)||[]).map(Number).filter(n=>n>=1&&n<=40)
+    if(nums.length>0) return nums[nums.length-1]
+    return Math.max(1,Math.min(40,fallback||5))
+  }
   const ltAiGenerate=async(bid:string)=>{
     if(ltAiBusy) return
-    if(ltAiPrompt.trim().length<10){ toast('Напиши указание для генератора (от 10 символов)','error'); return }
+    if(ltAiPrompt.trim().length<2){ toast('Напиши тему или запрос для генератора (например: «вопросы по пайтону 10 вопросов»)','error'); return }
+    const targetCount=parsePromptCount(ltAiPrompt, ltAiCount)
+    setLtAiCount(targetCount)
     setLtAiBusy(true)
     try{
-      const r=await client.post('/tests/generate/',{count:ltAiCount,prompt:ltAiPrompt.trim().slice(0,2000)})
+      const r=await client.post('/tests/generate/',{count:targetCount,prompt:ltAiPrompt.trim().slice(0,2000)})
       const got=(r.data.questions||[]).map((q:any)=>({text:String(q.text||''),type:String(q.type||'single'),points:q.points||1,exp:String(q.explanation||''),options:(q.options||[]).map((o:any)=>({text:String(o.text||''),is_correct:!!o.is_correct}))})).filter((q:any)=>q.text)
       if(!got.length) throw new Error('empty')
       const cur=getInlineTest(bid)
@@ -226,6 +238,40 @@ export default function LessonBuilder(){
     // не блокируем — создаем пустой блок, пусть создаст внутри
     setBlocks(b=>[...b,{id:nid,type,data:dataMap[type]||{}}])
     setTimeout(()=>window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'}),100)
+  }
+
+  const handleFileBlockUpload=async(blockId:string, file:File)=>{
+    if(!file) return
+    const allowed=['.pdf','.docx','.doc','.txt','.md','.csv','.png','.jpg','.jpeg','.webp','.gif','.ppt','.pptx']
+    const ext='.'+(file.name.split('.').pop()?.toLowerCase()||'')
+    if(!allowed.includes(ext)){ toast(`Формат ${ext} не поддерживается. Можно: PDF, Word (.docx), TXT, фото, PPTX`,'error'); return }
+    if(file.size>100*1024*1024){ toast('Файл больше 100 MB','error'); return }
+    setUploadingFile(blockId)
+    try{
+      const fd=new FormData()
+      fd.append('file', file)
+      fd.append('title', file.name)
+      fd.append('is_public', 'true')
+      if(subject) fd.append('subject', String(subject))
+      const r=await client.post('/files/', fd, {headers:{'Content-Type':'multipart/form-data'}})
+      const uploaded=r.data
+      setOptions((o:any)=>({...o, files:[uploaded, ...(o.files||[]).filter((x:any)=>x.id!==uploaded.id)]}))
+      updateBlock(blockId, {file_id: uploaded.id})
+      if(errors.blocks?.[blockId]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [blockId]:''}}))
+      toast(`Файл «${uploaded.title}» загружен и готов к чтению ✓`,'success')
+    }catch(e:any){
+      const msg=e?.response?.data?.detail || e?.response?.data?.[0] || (typeof e?.response?.data==='string' ? e.response.data : '') || 'Не удалось загрузить файл'
+      toast(msg,'error')
+    } finally{
+      setUploadingFile(null)
+    }
+  }
+
+  const duplicateBlock=(idx:number)=>{
+    const src=blocks[idx]
+    if(!src) return
+    const copy:Block={id:String(Date.now()+Math.random()), type:src.type, data:JSON.parse(JSON.stringify(src.data||{}))}
+    setBlocks(b=>[...b.slice(0,idx+1), copy, ...b.slice(idx+1)])
   }
 
   const handlePresUpload=async(blockId:string, file:File)=>{
@@ -315,10 +361,9 @@ export default function LessonBuilder(){
     }
     if(b.type==='file'){
       const f=options.files.find((x:any)=>String(x.id)===String(b.data.file_id))
-      if(!b.data.file_id) return <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 mt-1">{t('lb_file_not_picked')}</div>
-      if(!f) return <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-3 mt-1">{t('lb_file_missing_a')}{String(b.data.file_id)}{t('lb_file_missing_b')}</div>
-      const url=mediaUrl(f.file||f.url)
-      return <div className="flex items-center gap-3 p-4 rounded-xl bg-white border mt-1"><FileText/><div><div className="font-semibold">{f.title}</div>{url ? <a href={url} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-600">{t('lv_open_file')} ↗</a> : <div className="text-xs text-slate-400">{t('lb_link_na')}</div>}</div></div>
+      if(!b.data.file_id) return <div className="text-sm text-amber-700 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3 mt-1">{t('lb_file_not_picked')}</div>
+      if(!f) return <div className="text-sm text-red-700 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl p-3 mt-1">{t('lb_file_missing_a')}{String(b.data.file_id)}{t('lb_file_missing_b')}</div>
+      return <div className="mt-2"><InlineFileReader file={f} defaultOpen={true} /></div>
     }
     if(b.type==='code'){
       const c=options.codes.find((x:any)=>String(x.id)===String(b.data.code_id))
@@ -457,118 +502,153 @@ export default function LessonBuilder(){
 
       {!preview ? (
         <>
-          <div className="bg-white rounded-2xl border p-6 space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 p-5 sm:p-6 space-y-4 shadow-sm">
             <div id="lesson-title-field">
-              <label className="text-sm font-semibold text-slate-700">Название урока *</label>
-              <input ref={titleInputRef} value={title} onChange={e=>{setTitle(e.target.value); if(errors.title) setErrors(prev=>({...prev, title:undefined}))}} placeholder="Например: Квадратные уравнения — 8 класс" className={`w-full mt-1 px-4 py-3 rounded-xl border font-bold text-lg focus:outline-none focus:ring-2 ${errors.title ? 'bg-red-50 border-red-300 focus:border-red-400 focus:ring-red-200' : 'bg-slate-50 dark:bg-slate-800 dark:text-white focus:border-indigo-400 focus:ring-indigo-200'}`}/>
-              {errors.title ? <div className="mt-1 text-xs font-medium text-red-600 flex items-center gap-1">⚠ {errors.title}</div> : <div className="text-xs text-slate-400 mt-1">{title.length}/100 {title.length===0 && <span className="text-slate-500">— это поле обязательно, не путай с заголовком блока «Введение» ниже</span>}</div>}
+              <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Название урока *</label>
+              <input ref={titleInputRef} value={title} onChange={e=>{setTitle(e.target.value); if(errors.title) setErrors(prev=>({...prev, title:undefined}))}} placeholder="Например: Квадратные уравнения — 8 класс" className={`w-full mt-1 px-4 py-3 rounded-xl border font-bold text-lg focus:outline-none focus:ring-2 ${errors.title ? 'bg-red-50 dark:bg-red-950/40 border-red-300 dark:border-red-700 text-slate-900 dark:text-white focus:ring-red-200' : 'bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:border-indigo-400 focus:ring-indigo-200'}`}/>
+              {errors.title ? <div className="mt-1 text-xs font-medium text-red-500 flex items-center gap-1">⚠ {errors.title}</div> : <div className="text-xs text-slate-400 mt-1">{title.length}/100</div>}
             </div>
             <div>
-              <label className="text-sm font-semibold text-slate-700">О чём урок?</label>
-              <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Коротко: цели, для кого, что узнают. Это покажется в списке уроков." rows={3} className="w-full mt-1 px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200"/>
+              <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">О чём урок?</label>
+              <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Коротко: цели, для кого, что узнают. Это покажется в списке уроков." rows={2} className="w-full mt-1 px-4 py-3 rounded-xl border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200"/>
             </div>
             <div>
-              <label className="text-sm font-semibold text-slate-700">Кому доступен урок</label>
+              <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Кому доступен урок</label>
               <div className="mt-1 grid grid-cols-2 gap-2">
                 <button type="button" onClick={()=>setIsPublic(false)} data-testid="lb-private"
-                  className={`px-3 py-2.5 rounded-xl border text-sm text-left ${!isPublic?'border-indigo-600 bg-indigo-50 font-semibold':'bg-slate-50 hover:bg-slate-100'}`}>
+                  className={`px-3 py-2.5 rounded-xl border text-sm text-left transition ${!isPublic?'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 dark:text-white font-semibold':'bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
                   <span className="block">🔒 Приватный</span>
-                  <span className={`block text-xs mt-0.5 ${!isPublic?'text-indigo-700':'text-slate-400'}`}>Только на платформе: класс, где урок назначен</span>
+                  <span className={`block text-xs mt-0.5 ${!isPublic?'text-indigo-700 dark:text-indigo-300':'text-slate-400'}`}>Только на платформе: класс, где урок назначен</span>
                 </button>
                 <button type="button" onClick={()=>setIsPublic(true)} data-testid="lb-public"
-                  className={`px-3 py-2.5 rounded-xl border text-sm text-left ${isPublic?'border-indigo-600 bg-indigo-50 font-semibold':'bg-slate-50 hover:bg-slate-100'}`}>
+                  className={`px-3 py-2.5 rounded-xl border text-sm text-left transition ${isPublic?'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 dark:text-white font-semibold':'bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
                   <span className="block">🌐 Публичный</span>
-                  <span className={`block text-xs mt-0.5 ${isPublic?'text-indigo-700':'text-slate-400'}`}>Всем по ссылке, даже без входа</span>
+                  <span className={`block text-xs mt-0.5 ${isPublic?'text-indigo-700 dark:text-indigo-300':'text-slate-400'}`}>Всем по ссылке, даже без входа</span>
                 </button>
               </div>
             </div>
             <div ref={subjectRefEl} id="lesson-subject-field">
-              <label className="text-sm font-semibold text-slate-700">Предмет *</label>
-              {errors.subject && <div className="mt-1 text-xs font-medium text-red-600">⚠ {errors.subject}</div>}
+              <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Предмет *</label>
+              {errors.subject && <div className="mt-1 text-xs font-medium text-red-500">⚠ {errors.subject}</div>}
               {subjectsLoading ? (
                 <div className="mt-2 flex items-center gap-2 text-sm text-slate-500"><span className="w-4 h-4 border-2 border-indigo-300 border-t-blue-600 rounded-full animate-spin"/> Загрузка предметов...</div>
               ) : subjectsError ? (
-                <div className="mt-2 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-center justify-between gap-2">
+                <div className="mt-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 flex items-center justify-between gap-2">
                   <span>{subjectsError}</span>
-                  <button onClick={loadSubjects} className="px-3 py-1 rounded-full bg-white border text-xs font-semibold hover:bg-red-50">Повторить</button>
+                  <button onClick={loadSubjects} className="px-3 py-1 rounded-full bg-white dark:bg-slate-800 border text-xs font-semibold">Повторить</button>
                 </div>
               ) : !subjects.length ? (
-                <div className="mt-2 p-4 rounded-xl bg-amber-50 border border-amber-200">
-                  <div className="text-sm font-semibold text-amber-800">Предметов пока нет — создай первый прямо здесь</div>
-                  <p className="text-xs text-amber-700 mt-1">Без предмета урок не опубликуется. Введи название и нажми «Создать».</p>
+                <div className="mt-2 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <div className="text-sm font-semibold text-amber-800 dark:text-amber-200">Предметов пока нет — создай первый прямо здесь</div>
+                  <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">Без предмета урок не опубликуется. Введи название и нажми «Создать».</p>
                   <div className="flex gap-2 mt-3">
-                    <input value={inlineSubjectName} onChange={e=>setInlineSubjectName(e.target.value)} onKeyDown={e=>e.key==='Enter' && createInlineSubject()} placeholder="Например: Математика" className="flex-1 px-3 py-2 rounded-xl border bg-white text-sm"/>
+                    <input value={inlineSubjectName} onChange={e=>setInlineSubjectName(e.target.value)} onKeyDown={e=>e.key==='Enter' && createInlineSubject()} placeholder="Например: Математика" className="flex-1 px-3 py-2 rounded-xl border bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white text-sm"/>
                     <button onClick={createInlineSubject} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Создать</button>
-                    <Link to="/subjects" className="px-4 py-2 rounded-xl bg-white border text-sm">Все предметы →</Link>
+                    <Link to="/subjects" className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 dark:text-white border dark:border-slate-700 text-sm">Все предметы →</Link>
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
                   {subjects.map(s=>(
-                    <button key={s.id} onClick={()=>setSubject(s.id)} className={`p-3 rounded-xl border text-left flex items-center gap-2 ${String(subject)===String(s.id)?'bg-indigo-50 border-indigo-300 ring-2 ring-blue-200':'bg-slate-50 hover:bg-white'}`}>
+                    <button key={s.id} type="button" onClick={()=>setSubject(s.id)} className={`p-3 rounded-xl border text-left flex items-center gap-2 transition ${String(subject)===String(s.id)?'bg-indigo-50 dark:bg-indigo-900/40 border-indigo-400 ring-2 ring-indigo-300/60 dark:text-white font-bold':'bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700'}`}>
                       <span className="text-lg">{s.icon}</span>
-                      <span className="font-medium text-sm">{s.name}</span>
+                      <span className="font-medium text-sm truncate">{s.name}</span>
                     </button>
                   ))}
                 </div>
               )}
-              {selectedSubject && <div className="mt-2 text-sm text-indigo-700">Выбран: {selectedSubject.icon} {selectedSubject.name}</div>}
+              {selectedSubject && <div className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 font-semibold">Выбран: {selectedSubject.icon} {selectedSubject.name}</div>}
               {!!subjects.length && !selectedSubject && subject && <div className="mt-2 text-xs text-amber-600">Предмет с id={String(subject)} не найден — выбери из списка выше</div>}
-              {errors.subject && !selectedSubject && <div className="mt-2 p-2 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">Без предмета урок не сохранится — кликни на карточку предмета выше или создай новый.</div>}
+              {errors.subject && !selectedSubject && <div className="mt-2 p-2 rounded-xl bg-red-50 dark:bg-red-900/30 border border-red-200 text-xs text-red-700 dark:text-red-300">Без предмета урок не сохранится — кликни на карточку предмета выше или создай новый.</div>}
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 p-4 sm:p-5 shadow-sm">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold">Конструктор — добавь блоки</h3>
-              <span className="text-xs text-slate-500">{blocks.length} блоков</span>
+              <h3 className="font-bold text-base dark:text-white">Конструктор — добавь блоки</h3>
+              <span className="text-xs px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold">{blocks.length} блоков</span>
             </div>
-            <p className="text-sm text-slate-500 mt-1">Каждый блок — часть урока. Меняй порядок стрелками. Презентации/тесты можно создать тут же.</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
-              <button onClick={()=>addBlock('text')} className="p-3 rounded-xl bg-indigo-600 text-white flex flex-col items-center gap-1 text-sm font-medium"><Type size={20}/> Текст</button>
-              <button onClick={()=>addBlock('presentation')} className="p-3 rounded-xl bg-orange-50 border border-orange-200 text-orange-700 flex flex-col items-center gap-1 text-sm font-medium"><Presentation size={20}/> Презентация { !options.presentations.length && <span className="text-[10px]">(создать)</span>}</button>
-              <button onClick={()=>addBlock('test')} className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex flex-col items-center gap-1 text-sm font-medium"><FlaskConical size={20}/> Тест { !options.tests.length && <span className="text-[10px]">(создать)</span>}</button>
-              <button onClick={()=>addBlock('board')} className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex flex-col items-center gap-1 text-sm font-medium"><PenTool size={20}/> Доска 2D/3D</button>
-              <button onClick={()=>addBlock('file')} className="p-3 rounded-xl bg-slate-50 border flex flex-col items-center gap-1 text-sm"><FileText size={18}/> Файл</button>
-              <button onClick={()=>addBlock('video')} className="p-3 rounded-xl bg-slate-50 border flex flex-col items-center gap-1 text-sm"><Video size={18}/> Видео</button>
-              <button onClick={()=>addBlock('code')} className="p-3 rounded-xl bg-slate-50 border flex flex-col items-center gap-1 text-sm"><Code2 size={18}/> Код</button>
-              <Link to={subject ? `/presentations/new?subject=${selectedSubject?.slug||subject}` : "/presentations/new"} className="p-3 rounded-xl bg-indigo-50 border border-indigo-200 flex flex-col items-center gap-1 text-sm text-indigo-700 font-medium"><Plus size={18}/> Создать презент.</Link>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Каждый блок — часть урока. Файлы, презентации и тесты можно загрузить и создать прямо здесь.</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-4">
+              <button type="button" onClick={()=>addBlock('text')} className="p-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white flex flex-col items-center gap-1 text-sm font-bold shadow-sm transition"><Type size={20}/> Текст</button>
+              <button type="button" onClick={()=>addBlock('file')} className="p-3.5 rounded-xl bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-900/50 flex flex-col items-center gap-1 text-sm font-bold transition"><FileText size={20}/> Файл / PDF / Word</button>
+              <button type="button" onClick={()=>addBlock('presentation')} className="p-3.5 rounded-xl bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-200 hover:bg-orange-100 dark:hover:bg-orange-900/50 flex flex-col items-center gap-1 text-sm font-bold transition"><Presentation size={20}/> Презентация</button>
+              <button type="button" onClick={()=>addBlock('test')} className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200 hover:bg-rose-100 dark:hover:bg-rose-900/50 flex flex-col items-center gap-1 text-sm font-bold transition"><FlaskConical size={20}/> Тест</button>
+              <button type="button" onClick={()=>addBlock('video')} className="p-3.5 rounded-xl bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-200 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex flex-col items-center gap-1 text-sm font-bold transition"><Video size={20}/> Видео (YouTube)</button>
+              <button type="button" onClick={()=>addBlock('board')} className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 flex flex-col items-center gap-1 text-sm font-bold transition"><PenTool size={20}/> Доска 2D/3D</button>
             </div>
           </div>
 
           <div ref={blocksRefEl} id="lesson-blocks" className="space-y-3">
             {blocks.map((b,idx)=>(
-              <div key={b.id} className={`bg-white rounded-2xl border p-4 shadow-sm ${errors.blocks?.[b.id] ? 'border-red-300 bg-red-50/30 ring-1 ring-red-200' : ''}`}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <GripVertical size={14} className="text-slate-400"/>
-                    <span className="text-xs font-bold tracking-widest text-slate-500">{b.type.toUpperCase()} • БЛОК {idx+1}</span>
-                    {b.type==='text' && <span className={`text-xs px-2 py-1 rounded-full ${!b.data.title?.trim() && !b.data.content?.trim() ? 'bg-amber-100 text-amber-700' : 'bg-slate-100'}`}>{b.data.title||'без заголовка'}</span>}
-                    {errors.blocks?.[b.id] && <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">⚠ ошибка</span>}
+              <div key={b.id} className={`bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 p-4 sm:p-5 shadow-sm ${errors.blocks?.[b.id] ? 'border-red-400 dark:border-red-600 ring-1 ring-red-300' : ''}`}>
+                <div className="flex items-center justify-between mb-3 gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <GripVertical size={14} className="text-slate-400 shrink-0"/>
+                    <span className="text-xs font-extrabold tracking-widest text-indigo-600 dark:text-indigo-400 uppercase">{b.type} • БЛОК {idx+1}</span>
+                    {b.type==='text' && <span className={`text-xs px-2 py-0.5 rounded-full truncate ${!b.data.title?.trim() && !b.data.content?.trim() ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'bg-slate-100 dark:bg-slate-800 dark:text-slate-300'}`}>{b.data.title||'без заголовка'}</span>}
+                    {errors.blocks?.[b.id] && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300">⚠ ошибка</span>}
                   </div>
-                  <div className="flex gap-1.5">
-                    <button onClick={()=>move(idx,-1)} aria-label="Блок выше" title="Блок выше" className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center text-lg active:bg-slate-200">↑</button>
-                    <button onClick={()=>move(idx,1)} aria-label="Блок ниже" title="Блок ниже" className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center text-lg active:bg-slate-200">↓</button>
-                    <button onClick={()=>setBlocks(bl=>bl.filter(x=>x.id!==b.id))} aria-label="Удалить блок" title="Удалить блок" className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center active:bg-red-100"><Trash2 size={18}/></button>
+                  <div className="flex gap-1.5 shrink-0">
+                    <button type="button" onClick={()=>move(idx,-1)} aria-label="Блок выше" title="Блок выше" className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-slate-200 flex items-center justify-center text-base hover:bg-slate-200 dark:hover:bg-slate-700">↑</button>
+                    <button type="button" onClick={()=>move(idx,1)} aria-label="Блок ниже" title="Блок ниже" className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-slate-200 flex items-center justify-center text-base hover:bg-slate-200 dark:hover:bg-slate-700">↓</button>
+                    <button type="button" onClick={()=>duplicateBlock(idx)} aria-label="Дублировать блок" title="Дублировать блок" className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-slate-200 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700"><Copy size={15}/></button>
+                    <button type="button" onClick={()=>setBlocks(bl=>bl.filter(x=>x.id!==b.id))} aria-label="Удалить блок" title="Удалить блок" className="w-9 h-9 rounded-xl bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center justify-center hover:bg-red-100"><Trash2 size={16}/></button>
                   </div>
                 </div>
                 {b.type==='text' && (
                   <div className="space-y-2">
-                    <input value={b.data.title} onChange={e=>{updateBlock(b.id,{title:e.target.value}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} placeholder="Заголовок блока, например ‘Теория’ (это НЕ название урока — урок выше)" className="w-full px-3 py-2.5 rounded-xl border bg-indigo-50/50 font-semibold focus:outline-none focus:border-indigo-300"/>
-                    <textarea value={b.data.content} onChange={e=>{updateBlock(b.id,{content:e.target.value}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} placeholder="Содержание блока — теория, пример, задание..." rows={4} className="w-full px-3 py-2.5 rounded-xl border bg-slate-50 focus:outline-none focus:border-indigo-300"/>
-                    {errors.blocks?.[b.id] && <div className="text-xs text-red-600">⚠ {errors.blocks?.[b.id]}</div>}
+                    <input value={b.data.title} onChange={e=>{updateBlock(b.id,{title:e.target.value}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} placeholder="Заголовок блока, например «Теория» или «Главное правило»" className="w-full px-3.5 py-2.5 rounded-xl border dark:border-slate-700 bg-indigo-50/50 dark:bg-slate-800 dark:text-white font-semibold focus:outline-none focus:border-indigo-400"/>
+                    <textarea value={b.data.content} onChange={e=>{updateBlock(b.id,{content:e.target.value}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} placeholder="Содержание блока — теория, пример, задание..." rows={4} className="w-full px-3.5 py-2.5 rounded-xl border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-indigo-400"/>
+                    {errors.blocks?.[b.id] && <div className="text-xs text-red-500">⚠ {errors.blocks?.[b.id]}</div>}
                   </div>
                 )}
-                {b.type==='file' && (
-                  <div className="space-y-2">
-                    <select value={b.data.file_id||''} onChange={e=>{updateBlock(b.id,{file_id:e.target.value?Number(e.target.value):null}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} className={`w-full px-3 py-2.5 rounded-xl border bg-slate-50 ${errors.blocks?.[b.id] ? 'border-red-300 bg-red-50' : ''}`}>
-                      <option value="">Выбери файл</option>
-                      {options.files.map((f:any)=><option key={f.id} value={f.id}>{f.title}</option>)}
-                    </select>
-                    {errors.blocks?.[b.id] && <div className="text-xs text-red-600">⚠ {errors.blocks?.[b.id]}</div>}
-                    {options.files.length===0 && <div className="text-xs text-amber-600">Нет файлов — загрузи в файлы или оставь блок пустым</div>}
-                  </div>
-                )}
+                {b.type==='file' && (() => {
+                  const pickedFile = options.files.find((x:any)=>String(x.id)===String(b.data.file_id))
+                  return (
+                    <div className="space-y-3" data-testid={`lb-file-block-${b.id}`}>
+                      {/* Прямая загрузка файла с компьютера прямо здесь */}
+                      <label className={`block p-4 rounded-2xl border-2 border-dashed text-center cursor-pointer transition ${uploadingFile===b.id ? 'bg-sky-50 dark:bg-sky-900/30 border-sky-400' : 'bg-sky-50/50 dark:bg-slate-800/70 border-sky-300 dark:border-slate-600 hover:border-indigo-500 hover:bg-sky-50 dark:hover:bg-slate-800'}`}>
+                        <div className="flex items-center justify-center gap-2 text-sm font-bold text-indigo-700 dark:text-sky-300">
+                          {uploadingFile===b.id ? <><Loader2 size={18} className="animate-spin"/> Загружаю файл…</> : <><Upload size={18}/> Нажми, чтобы загрузить файл с компьютера (PDF, Word .docx, TXT, Фото)</>}
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Файл загрузится сразу сюда, привяжется к уроку и его можно будет читать прямо на странице урока!
+                        </div>
+                        <input
+                          type="file"
+                          className="hidden"
+                          data-testid={`lb-file-upload-${b.id}`}
+                          accept=".pdf,.docx,.doc,.txt,.md,.csv,.png,.jpg,.jpeg,.webp,.gif,.ppt,.pptx"
+                          disabled={uploadingFile===b.id}
+                          onChange={e=>{ const f=e.target.files?.[0]; if(f) handleFileBlockUpload(b.id, f); (e.target as HTMLInputElement).value='' }}
+                        />
+                      </label>
+
+                      {/* Или выбрать из ранее загруженных файлов */}
+                      {options.files.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 shrink-0">Или выбери из загруженных:</span>
+                          <select
+                            value={b.data.file_id||''}
+                            onChange={e=>{updateBlock(b.id,{file_id:e.target.value?Number(e.target.value):null}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}}
+                            className={`flex-1 px-3 py-2 rounded-xl border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 dark:text-white text-sm ${errors.blocks?.[b.id] ? 'border-red-400' : ''}`}
+                          >
+                            <option value="">— не выбран —</option>
+                            {options.files.map((f:any)=><option key={f.id} value={f.id}>{f.title}</option>)}
+                          </select>
+                        </div>
+                      )}
+
+                      {errors.blocks?.[b.id] && <div className="text-xs text-red-500">⚠ {errors.blocks?.[b.id]}</div>}
+
+                      {/* Сразу встроенная читалка выбранного/загруженного файла прямо в конструкторе! */}
+                      {pickedFile && (
+                        <InlineFileReader file={pickedFile} defaultOpen={true} />
+                      )}
+                    </div>
+                  )
+                })()}
                 {b.type==='presentation' && (
                   <div className="space-y-3">
                     {/* Выбранная */}
@@ -793,49 +873,48 @@ export default function LessonBuilder(){
                     {errors.blocks?.[b.id] && <div className="text-xs text-red-600">⚠ {errors.blocks?.[b.id]}</div>}
                   </div>
                 )}
-                {b.type==='board' && <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-sm flex items-center gap-2"><PenTool size={16}/> Личная доска 2D/3D — ученик откроет твою доску с фигурами (куб, сфера, орбита).</div>}
+                {b.type==='board' && <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/25 border border-emerald-200 dark:border-emerald-800 text-sm dark:text-emerald-200 flex items-center gap-2"><PenTool size={16}/> Личная доска 2D/3D — ученик откроет интерактивную доску с графиками, геометрией и 3D-фигурами.</div>}
                 {b.type==='video' && (
                   <div className="space-y-2">
                     <input value={b.data.url||''} onChange={e=>{
                       const raw=e.target.value
                       const emb=toEmbedUrl(raw)
-                      // авто-конверт youtube watch → embed, иначе оставляем как есть
                       updateBlock(b.id,{url: raw.includes('youtu') ? emb : raw})
                       if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))
-                    }} placeholder="Вставь YouTube: https://www.youtube.com/watch?v=... или https://youtu.be/... — станет embed автоматом" className="w-full px-3 py-2.5 rounded-xl border bg-slate-50"/>
+                    }} placeholder="Вставь любую ссылку YouTube / Shorts (автоматически станет плеером)" className="w-full px-3.5 py-2.5 rounded-xl border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 dark:text-white text-sm"/>
                     {b.data.url && toEmbedUrl(b.data.url).startsWith('https://www.youtube.com/embed/') && (
-                      <div className="aspect-video rounded-xl overflow-hidden border">
+                      <div className="aspect-video rounded-xl overflow-hidden border dark:border-slate-700">
                         <iframe src={toEmbedUrl(b.data.url)} className="w-full h-full" allowFullScreen sandbox="allow-scripts allow-same-origin allow-presentation" title="preview"/>
                       </div>
                     )}
                     {b.data.url && !toEmbedUrl(b.data.url).startsWith('https://www.youtube.com/embed/') && !b.data.url.startsWith('https://player.vimeo.com/') && (
-                      <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded-xl">Скопируй ссылку из браузера YouTube — она автоматически конвертируется в embed.</div>
+                      <div className="text-xs text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 p-2 rounded-xl">Скопируй ссылку из браузера YouTube — она автоматически конвертируется в embed.</div>
                     )}
                   </div>
                 )}
               </div>
             ))}
-            {blocks.length===0 && <div className="text-center py-8 bg-white rounded-2xl border text-slate-400">Добавь первый блок ↑</div>}
+            {blocks.length===0 && <div className="text-center py-8 bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 text-slate-400">Добавь первый блок ↑</div>}
           </div>
 
           <div className="flex gap-3">
-            <button onClick={handleCancel} type="button" className="flex-1 py-4 rounded-2xl bg-white border border-slate-300 text-slate-700 font-bold text-lg hover:bg-slate-50">Отмена</button>
+            <button onClick={handleCancel} type="button" className="flex-1 py-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-lg hover:bg-slate-50 dark:hover:bg-slate-700">Отмена</button>
             <button onClick={save} disabled={saving} className="flex-[2] py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-lg flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"><Save size={20}/>{saving?'Сохранение...':(isNew?'Опубликовать урок':'Сохранить изменения')}</button>
           </div>
           <div className="text-center">
-            <Link to="/lessons" className="text-sm text-slate-500 hover:text-indigo-600">← К списку уроков</Link>
+            <Link to="/lessons" className="text-sm text-slate-500 dark:text-slate-400 hover:text-indigo-600">← К списку уроков</Link>
           </div>
         </>
       ) : (
-        <div className="bg-white rounded-2xl border p-6 space-y-4">
-          <div className="flex items-center gap-2 text-sm text-slate-500"><BookOpen size={16}/> Предпросмотр как увидит ученик</div>
-          <h1 className="text-2xl font-bold">{title||'Без названия'}</h1>
-          <p className="text-slate-600">{desc||'Без описания'}</p>
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 p-6 space-y-4">
+          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><BookOpen size={16}/> Предпросмотр как увидит ученик</div>
+          <h1 className="text-2xl font-bold dark:text-white">{title||'Без названия'}</h1>
+          <p className="text-slate-600 dark:text-slate-300">{desc||'Без описания'}</p>
           {selectedSubject && <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-white text-sm" style={{background:selectedSubject.color}}>{selectedSubject.icon} {selectedSubject.name}</span>}
           <div className="space-y-3 mt-6">
             {blocks.map((b,i)=>(
-              <div key={b.id} className="p-4 rounded-xl border bg-slate-50">
-                <div className="text-xs font-bold text-slate-400">БЛОК {i+1} • {b.type}</div>
+              <div key={b.id} className="p-4 rounded-xl border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 dark:text-slate-100">
+                <div className="text-xs font-bold text-slate-400">БЛОК {i+1} • {b.type.toUpperCase()}</div>
                 {renderPreviewBlock(b)}
               </div>
             ))}

@@ -13,6 +13,12 @@ export default defineConfig({
       'monaco-editor/basic-languages/monaco.contribution',
       'sql.js',
     ],
+    exclude: [
+      '@electric-sql/pglite',
+    ],
+  },
+  worker: {
+    format: 'es',
   },
   css: {
     postcss: {
@@ -50,7 +56,8 @@ export default defineConfig({
           if (id.includes('monaco')) return 'vendor-monaco'
           if (id.includes('tldraw')) return 'vendor-tldraw'
           if (id.includes('mammoth') || id.includes('jszip') || id.includes('/pako/') || id.includes('pptx') || id.includes('/xlsx/') || id.includes('file-saver')) return 'vendor-docs'
-          // SQLite WASM — лениво, только страница /sql (практика баз данных)
+          // SQLite и PostgreSQL (PGlite) WASM — лениво, только страница /sql (практика баз данных)
+          if (id.includes('@electric-sql/pglite') || id.includes('pglite')) return 'vendor-pglite'
           if (id.includes('sql.js') || id.includes('sql-wasm')) return 'vendor-sql'
           return 'vendor'
         },

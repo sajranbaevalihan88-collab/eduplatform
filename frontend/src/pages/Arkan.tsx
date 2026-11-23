@@ -79,7 +79,15 @@ const DEMO_QS: Q[] = [
   },
 ]
 
-// ── Полноценная 2D-сцена «Аркан Тартыш» на джайлоо Ала-Тоо ──
+type ArenaTheme = 'day' | 'sunset' | 'night'
+
+const ARENA_THEMES: Array<{ id: ArenaTheme; label: string; emoji: string }> = [
+  { id: 'day', label: 'Джайлоо', emoji: '☀️' },
+  { id: 'sunset', label: 'Иссык-Куль', emoji: '🌅' },
+  { id: 'night', label: 'Ночной турнир', emoji: '🌙' },
+]
+
+// ── Полноценная анимированная 2D-сцена «Аркан Тартыш» (3 арены + живая физика и анимация) ──
 function Arkan2DScene({
   rope,
   teamA,
@@ -92,6 +100,8 @@ function Arkan2DScene({
   pullAnim,
   lastGain,
   combo,
+  theme,
+  onChangeTheme,
 }: {
   rope: number // -100 (Team B wins on right) .. +100 (Team A wins on left)
   teamA: string
@@ -104,216 +114,474 @@ function Arkan2DScene({
   pullAnim: 'none' | 'A' | 'B'
   lastGain: string | null
   combo: number
+  theme: ArenaTheme
+  onChangeTheme: (t: ArenaTheme) => void
 }) {
-  // В нашей механике: rope > 0 означает перетягивание в пользу Команды А (влево),
-  // rope < 0 — в пользу Команды Б (вправо).
-  // Центр поля в SVG: X = 450 (из 900). Смещение каната: до ±170px.
+  // Живой 30fps таймер для плавных 2D-анимаций (рывки, орёл, облака, дым юрт, факелы, вибрация каната)
+  const [animT, setAnimT] = useState(0)
+  useEffect(() => {
+    let raf = 0
+    let lastTs = 0
+    const start = performance.now()
+    const loop = (now: number) => {
+      if (now - lastTs >= 33) {
+        lastTs = now
+        setAnimT((now - start) / 1000)
+      }
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  // Центр поля в SVG: X = 450 (из 900). Смещение каната: до ±165px.
   const shiftPx = -(rope / 100) * 165
   const knotX = 450 + shiftPx
   const tension = Math.min(1, Math.abs(rope) / 75)
   const isPullA = pullAnim === 'A'
   const isPullB = pullAnim === 'B'
+  const nearWinA = rope >= 65
+  const nearWinB = rope <= -65
 
-  // Угол наклона батыров: когда тянут — отклоняются назад (-22° / +22°), когда их тянут — клонятся вперёд
-  const leanA = isPullA ? -24 : isPullB ? 12 : -11
-  const leanB = isPullB ? 24 : isPullA ? -12 : 11
+  // Динамическое колебание каната и ритм дыхания/тяги батыров
+  const heaveA = Math.sin(animT * (isPullA ? 14 : 4.2)) * (isPullA ? 3.5 : 1.6)
+  const heaveB = Math.sin(animT * (isPullB ? 14 : 4.2) + 1.2) * (isPullB ? 3.5 : 1.6)
+  const leanA = (isPullA ? -26 : isPullB ? 15 : -11) + heaveA
+  const leanB = (isPullB ? 26 : isPullA ? -15 : 11) + heaveB
+
+  // Живая вибрация каната + провисание при низком напряжении
+  const vibAmp = isPullA || isPullB ? 4.2 : 0.7 + tension * 2.2
+  const ropeMidY = 230 + (1 - tension) * 5 + Math.sin(animT * 32) * vibAmp
+  const ribbonSway = Math.sin(animT * 8) * (isPullA || isPullB ? 10 : 4)
+
+  // Полёт золотого беркута и дрейф облаков
+  const eagleX = ((animT * 38) % 1020) - 60
+  const eagleY = 58 + Math.sin(animT * 2.1) * 11
+  const wingFlap = Math.sin(animT * 8.5) * 7
+  const cloudShift1 = ((animT * 9) % 1040) - 70
+  const cloudShift2 = ((animT * 6 + 520) % 1040) - 70
+  const flagWave = Math.sin(animT * 6.5) * 4
+  const flameFlicker = Math.sin(animT * 18) * 2.4
+
+  // Палитра 3 арен
+  const pal =
+    theme === 'night'
+      ? {
+          skyTop: '#020617',
+          skyMid: '#1e1b4b',
+          skyBot: '#312e81',
+          mtBack: '#1e293b',
+          mtFront: '#0f172a',
+          snow: '#cbd5e1',
+          hill: '#064e3b',
+          grassTop: '#166534',
+          grassMid: '#14532d',
+          grassBot: '#052e16',
+          track: '#78350f',
+          yurtBody: '#e2e8f0',
+        }
+      : theme === 'sunset'
+        ? {
+            skyTop: '#3b0764',
+            skyMid: '#ea580c',
+            skyBot: '#fde047',
+            mtBack: '#581c87',
+            mtFront: '#3b0764',
+            snow: '#fed7aa',
+            hill: '#365314',
+            grassTop: '#65a30d',
+            grassMid: '#3f6212',
+            grassBot: '#1a2e05',
+            track: '#9a3412',
+            yurtBody: '#ffedd5',
+          }
+        : {
+            skyTop: '#1d4ed8',
+            skyMid: '#38bdf8',
+            skyBot: '#fef08a',
+            mtBack: '#475569',
+            mtFront: '#334155',
+            snow: '#ffffff',
+            hill: '#15803d',
+            grassTop: '#4ade80',
+            grassMid: '#16a34a',
+            grassBot: '#14532d',
+            track: '#b45309',
+            yurtBody: '#f8fafc',
+          }
 
   return (
-    <div className="relative w-full rounded-3xl overflow-hidden border-2 border-amber-500/50 shadow-2xl bg-slate-900 select-none" data-testid="arkan-2d-arena">
+    <div
+      className={`relative w-full rounded-3xl overflow-hidden border-2 border-amber-500/60 shadow-2xl bg-slate-950 select-none ${
+        isPullA || isPullB ? 'arkan-arena-shake' : ''
+      }`}
+      data-testid="arkan-2d-arena"
+    >
+      <style>{`
+        @keyframes arkanShake {
+          0%, 100% { transform: translate(0, 0); }
+          20% { transform: translate(-3px, 1px); }
+          40% { transform: translate(3px, -1px); }
+          60% { transform: translate(-2px, 1px); }
+          80% { transform: translate(2px, 0); }
+        }
+        .arkan-arena-shake { animation: arkanShake 0.32s ease-out; }
+      `}</style>
+
       {/* Верхний HUD поверх 2D-сцены */}
       <div className="absolute top-2.5 inset-x-3 z-20 flex items-center justify-between gap-2 pointer-events-none">
-        <div className={`px-3.5 py-1.5 rounded-2xl backdrop-blur-md border-2 transition-all flex items-center gap-2 shadow-lg ${
-          turn === 'A'
-            ? 'bg-blue-600/90 border-amber-300 text-white scale-105'
-            : 'bg-slate-900/75 border-blue-400/40 text-blue-100'
-        }`}>
-          <span className="text-2xl">{mascA}</span>
+        <div
+          className={`px-3 sm:px-3.5 py-1.5 rounded-2xl backdrop-blur-md border-2 transition-all flex items-center gap-2 shadow-lg ${
+            turn === 'A'
+              ? 'bg-blue-600/90 border-amber-300 text-white scale-105 shadow-blue-500/40'
+              : 'bg-slate-950/75 border-blue-400/40 text-blue-100'
+          }`}
+        >
+          <span className="text-xl sm:text-2xl">{mascA}</span>
           <div>
-            <div className="text-xs font-extrabold uppercase tracking-wider opacity-85">{teamA}</div>
-            <div className="text-lg font-black leading-none">{scoreA} очк.</div>
+            <div className="text-[10px] sm:text-xs font-extrabold uppercase tracking-wider opacity-90">{teamA}</div>
+            <div className="text-base sm:text-lg font-black leading-none">{scoreA} очк.</div>
           </div>
         </div>
 
-        {/* Индикатор перевеса каната в центре */}
-        <div className="px-4 py-1.5 rounded-2xl bg-slate-950/80 backdrop-blur-md border border-amber-400/40 text-center shadow-lg">
-          <div className="text-[10px] uppercase tracking-widest text-amber-300 font-bold">Перевес каната</div>
-          <div className="font-mono font-black text-sm text-white flex items-center justify-center gap-2">
-            <span className="text-blue-400">{Math.max(0, Math.round(rope))}%</span>
-            <span className="text-amber-400">🪢</span>
-            <span className="text-rose-400">{Math.max(0, Math.round(-rope))}%</span>
+        {/* Индикатор перевеса каната + переключение 3 арен */}
+        <div className="flex flex-col items-center gap-1">
+          <div className="px-3.5 py-1 rounded-2xl bg-slate-950/85 backdrop-blur-md border border-amber-400/50 text-center shadow-lg">
+            <div className="text-[9px] uppercase tracking-widest text-amber-300 font-bold">
+              {nearWinA ? `⚡ ${teamA} ПОЧТИ ПОБЕДИЛА!` : nearWinB ? `⚡ ${teamB} ПОЧТИ ПОБЕДИЛА!` : 'Перевес каната'}
+            </div>
+            <div className="font-mono font-black text-sm text-white flex items-center justify-center gap-2">
+              <span className="text-blue-400">{Math.max(0, Math.round(rope))}%</span>
+              <span className="text-amber-400">🪢</span>
+              <span className="text-rose-400">{Math.max(0, Math.round(-rope))}%</span>
+            </div>
+          </div>
+          <div className="pointer-events-auto flex items-center gap-1 bg-slate-950/75 backdrop-blur-md p-0.5 rounded-full border border-white/15">
+            {ARENA_THEMES.map(th => (
+              <button
+                key={th.id}
+                type="button"
+                onClick={() => { onChangeTheme(th.id); sfx('ui.click') }}
+                title={`Арена: ${th.label}`}
+                data-testid={`arkan-theme-${th.id}`}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition ${
+                  theme === th.id ? 'bg-amber-400 text-slate-950 shadow' : 'text-white/75 hover:text-white'
+                }`}
+              >
+                {th.emoji} <span className="hidden sm:inline">{th.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className={`px-3.5 py-1.5 rounded-2xl backdrop-blur-md border-2 transition-all flex items-center gap-2 shadow-lg ${
-          turn === 'B'
-            ? 'bg-rose-600/90 border-amber-300 text-white scale-105'
-            : 'bg-slate-900/75 border-rose-400/40 text-rose-100'
-        }`}>
+        <div
+          className={`px-3 sm:px-3.5 py-1.5 rounded-2xl backdrop-blur-md border-2 transition-all flex items-center gap-2 shadow-lg ${
+            turn === 'B'
+              ? 'bg-rose-600/90 border-amber-300 text-white scale-105 shadow-rose-500/40'
+              : 'bg-slate-950/75 border-rose-400/40 text-rose-100'
+          }`}
+        >
           <div className="text-right">
-            <div className="text-xs font-extrabold uppercase tracking-wider opacity-85">{teamB}</div>
-            <div className="text-lg font-black leading-none">{scoreB} очк.</div>
+            <div className="text-[10px] sm:text-xs font-extrabold uppercase tracking-wider opacity-90">{teamB}</div>
+            <div className="text-base sm:text-lg font-black leading-none">{scoreB} очк.</div>
           </div>
-          <span className="text-2xl">{mascB}</span>
+          <span className="text-xl sm:text-2xl">{mascB}</span>
         </div>
       </div>
 
       {/* Всплывающий бонус удара / рывка */}
       {lastGain && (
         <div
-          className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-4 py-1.5 rounded-full bg-amber-400 text-slate-950 font-display font-black text-base sm:text-lg shadow-xl animate-bounce"
+          className="absolute top-[74px] left-1/2 -translate-x-1/2 z-30 px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-300 to-orange-400 text-slate-950 font-display font-black text-sm sm:text-lg shadow-2xl border-2 border-white animate-bounce"
           aria-live="polite"
         >
           💪 Рывок {lastGain}!
         </div>
       )}
 
-      {/* 2D SVG-Арена Джайлоо */}
+      {/* 2D SVG-Арена Джайлоо / Иссык-Куль / Ночной Турнир */}
       <svg
-        viewBox="0 0 900 310"
-        className="w-full h-[220px] sm:h-[285px] block"
+        viewBox="0 0 900 325"
+        className="w-full h-[245px] sm:h-[310px] block"
         role="img"
         aria-label="2D Арена Аркан Тартыш"
       >
         <defs>
-          {/* Небо джайлоо */}
-          <linearGradient id="jailooSky" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#1e3a8a" />
-            <stop offset="48%" stopColor="#38bdf8" />
-            <stop offset="100%" stopColor="#fde68a" />
+          <linearGradient id="arkanSkyGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={pal.skyTop} />
+            <stop offset="52%" stopColor={pal.skyMid} />
+            <stop offset="100%" stopColor={pal.skyBot} />
           </linearGradient>
-          {/* Трава */}
-          <linearGradient id="jailooGrass" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#4ade80" />
-            <stop offset="35%" stopColor="#16a34a" />
-            <stop offset="100%" stopColor="#14532d" />
+          <linearGradient id="arkanGrassGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={pal.grassTop} />
+            <stop offset="40%" stopColor={pal.grassMid} />
+            <stop offset="100%" stopColor={pal.grassBot} />
           </linearGradient>
-          {/* Текстура витого каната */}
-          <pattern id="ropeBraid" width="14" height="10" patternUnits="userSpaceOnUse">
-            <rect width="14" height="10" fill="#d97706" />
-            <path d="M0 10 L7 0 L14 0 L7 10 Z" fill="#f59e0b" />
-            <path d="M0 0 L3 0 L0 4 Z M11 10 L14 6 L14 10 Z" fill="#92400e" />
-          </pattern>
-          {/* Грязевая ров-ловушка по центру */}
-          <linearGradient id="mudPit" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="issykLake" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#1d4ed8" />
+            <stop offset="50%" stopColor="#f97316" />
+            <stop offset="100%" stopColor="#1e3a8a" />
+          </linearGradient>
+          <linearGradient id="mudPitGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#451a03" />
             <stop offset="100%" stopColor="#78350f" />
           </linearGradient>
+          <radialGradient id="spotGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#fef08a" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#fef08a" stopOpacity="0" />
+          </radialGradient>
         </defs>
 
-        {/* 1. Небо и золотое солнце Түндүк */}
-        <rect x="0" y="0" width="900" height="190" fill="url(#jailooSky)" />
-        <g transform="translate(450, 58)">
-          <circle r="38" fill="#fef08a" opacity="0.25" />
-          <circle r="25" fill="#facc15" />
-          <circle r="19" fill="none" stroke="#dc2626" strokeWidth="2" opacity="0.55" />
-          <path d="M-12 -5 L12 5 M-12 5 L12 -5 M-5 -12 L5 12 M-5 12 L5 -12" stroke="#dc2626" strokeWidth="1.6" opacity="0.55" />
+        {/* 1. НЕБО */}
+        <rect x="0" y="0" width="900" height="196" fill="url(#arkanSkyGrad)" />
+
+        {/* Ночные звёзды и полумесяц */}
+        {theme === 'night' && (
+          <g>
+            {[
+              [70, 32], [140, 58], [210, 26], [300, 46], [380, 22], [530, 34],
+              [620, 50], [700, 24], [785, 44], [855, 28], [260, 74], [660, 76],
+            ].map(([sx, sy], i) => (
+              <circle
+                key={i}
+                cx={sx}
+                cy={sy}
+                r={i % 3 === 0 ? 2.1 : 1.3}
+                fill="#fef9c3"
+                opacity={0.45 + 0.5 * Math.abs(Math.sin(animT * 2.2 + i))}
+              />
+            ))}
+            <g transform="translate(450, 58)">
+              <circle r="28" fill="#fef08a" opacity="0.16" />
+              <path d="M-4,-20 A20,20 0 1,0 18,12 A15,15 0 1,1 -4,-20 Z" fill="#fef08a" />
+            </g>
+          </g>
+        )}
+
+        {/* Золотое солнце Түндүк (День / Закат) */}
+        {theme !== 'night' && (
+          <g transform={`translate(450, ${theme === 'sunset' ? 112 : 60})`}>
+            <circle r="48" fill="#fef08a" opacity="0.22" />
+            <g transform={`rotate(${animT * 12})`} opacity="0.45">
+              {[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map(ang => (
+                <line key={ang} x1="0" y1="-30" x2="0" y2="-44" stroke="#fef08a" strokeWidth="2.4" strokeLinecap="round" transform={`rotate(${ang})`} />
+              ))}
+            </g>
+            <circle r="26" fill={theme === 'sunset' ? '#fb923c' : '#facc15'} />
+            <circle r="20" fill="none" stroke="#dc2626" strokeWidth="2" opacity="0.6" />
+            <path d="M-12 -5 L12 5 M-12 5 L12 -5 M-5 -12 L5 12 M-5 12 L5 -12" stroke="#dc2626" strokeWidth="1.6" opacity="0.6" />
+          </g>
+        )}
+
+        {/* Плывущие облака */}
+        <g fill={theme === 'night' ? '#334155' : theme === 'sunset' ? '#fed7aa' : '#ffffff'} opacity={theme === 'night' ? 0.35 : 0.72}>
+          <g transform={`translate(${cloudShift1}, 46)`}>
+            <ellipse cx="0" cy="0" rx="40" ry="12" />
+            <ellipse cx="22" cy="-7" rx="25" ry="11" />
+            <ellipse cx="-22" cy="-4" rx="20" ry="9" />
+          </g>
+          <g transform={`translate(${cloudShift2}, 62)`}>
+            <ellipse cx="0" cy="0" rx="46" ry="12" />
+            <ellipse cx="-20" cy="-7" rx="26" ry="10" />
+          </g>
         </g>
 
-        {/* Облака */}
-        <g fill="#ffffff" opacity="0.75">
-          <ellipse cx="145" cy="48" rx="38" ry="12" />
-          <ellipse cx="165" cy="42" rx="24" ry="11" />
-          <ellipse cx="735" cy="52" rx="42" ry="12" />
-          <ellipse cx="715" cy="45" rx="25" ry="10" />
+        {/* Парящий Золотой Беркут */}
+        <g transform={`translate(${eagleX}, ${eagleY})`} opacity={theme === 'night' ? 0.55 : 0.9}>
+          <path
+            d={`M-16,${-wingFlap} Q-7,-8 0,-1 Q7,-8 16,${-wingFlap} Q8,1 0,3 Q-8,1 -16,${-wingFlap}`}
+            fill={theme === 'night' ? '#94a3b8' : '#451a03'}
+          />
+          <circle cx="2" cy="-1" r="2.2" fill="#facc15" />
         </g>
 
-        {/* 2. Снежные хребты Ала-Тоо */}
-        <polygon points="0,190 95,88 195,190" fill="#475569" />
-        <polygon points="95,88 68,117 95,110 122,118" fill="#f8fafc" />
+        {/* 2. СНЕЖНЫЕ ХРЕБТЫ АЛА-ТОО */}
+        <polygon points="0,192 95,84 195,192" fill={pal.mtBack} />
+        <polygon points="95,84 67,114 95,107 123,115" fill={pal.snow} opacity="0.92" />
 
-        <polygon points="130,190 265,68 400,190" fill="#334155" />
-        <polygon points="265,68 228,108 252,99 265,112 282,98 302,108" fill="#ffffff" />
+        <polygon points="125,192 265,62 405,192" fill={pal.mtFront} />
+        <polygon points="265,62 228,104 252,95 265,108 282,94 303,104" fill={pal.snow} />
 
-        <polygon points="335,190 450,82 565,190" fill="#475569" />
-        <polygon points="450,82 420,114 450,105 480,114" fill="#f1f5f9" />
+        <polygon points="335,192 450,80 565,192" fill={pal.mtBack} />
+        <polygon points="450,80 420,113 450,104 480,113" fill={pal.snow} opacity="0.92" />
 
-        <polygon points="500,190 645,64 785,190" fill="#334155" />
-        <polygon points="645,64 606,106 632,96 645,110 664,97 684,106" fill="#ffffff" />
+        <polygon points="495,192 645,58 790,192" fill={pal.mtFront} />
+        <polygon points="645,58 606,102 632,92 645,106 664,93 685,102" fill={pal.snow} />
 
-        <polygon points="710,190 815,92 900,190" fill="#475569" />
-        <polygon points="815,92 790,118 815,111 840,118" fill="#f8fafc" />
+        <polygon points="710,192 820,88 900,192" fill={pal.mtBack} />
+        <polygon points="820,88 794,116 820,108 846,116" fill={pal.snow} opacity="0.92" />
 
-        {/* Зелёные предгорья и юрты (Боз үй) на заднем плане */}
-        <path d="M0 190 Q220 156 450 182 Q680 156 900 190 Z" fill="#15803d" opacity="0.7" />
-        {/* Левая юрта */}
-        <g transform="translate(105, 152)">
-          <path d="M0 32 L0 16 Q24 -6 48 16 L48 32 Z" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="1.5" />
-          <path d="M16 5 Q24 0 32 5" fill="none" stroke="#dc2626" strokeWidth="2.5" />
-          <rect x="20" y="18" width="8" height="14" rx="2" fill="#b45309" />
+        {/* Блестящая полоса озера Иссык-Куль в теме Закат */}
+        {theme === 'sunset' && (
+          <g>
+            <rect x="0" y="172" width="900" height="18" fill="url(#issykLake)" opacity="0.85" />
+            <ellipse cx="450" cy="181" rx={75 + Math.sin(animT * 3) * 8} ry="3.5" fill="#fde047" opacity="0.65" />
+          </g>
+        )}
+
+        {/* Предгорья и две кыргызские юрты (Боз үй) с поднимающимся дымком */}
+        <path d="M0 192 Q220 156 450 184 Q680 156 900 192 Z" fill={pal.hill} opacity="0.88" />
+        {[102, 748].map((yx, yi) => (
+          <g key={yi} transform={`translate(${yx}, 152)`}>
+            {/* Поднимающийся дымок из түндүка */}
+            {[0, 1, 2].map(si => {
+              const p = (animT * 0.55 + si * 0.33 + yi * 0.5) % 1
+              return (
+                <circle
+                  key={si}
+                  cx={24 + Math.sin(p * 6 + yi) * 5}
+                  cy={-2 - p * 26}
+                  r={3 + p * 5}
+                  fill="#f8fafc"
+                  opacity={(1 - p) * 0.45}
+                />
+              )
+            })}
+            <path d="M0 34 L0 16 Q24 -6 48 16 L48 34 Z" fill={pal.yurtBody} stroke="#94a3b8" strokeWidth="1.5" />
+            <path d="M0 24 Q24 20 48 24" fill="none" stroke="#dc2626" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.7" />
+            <path d="M16 5 Q24 0 32 5" fill="none" stroke="#dc2626" strokeWidth="2.6" />
+            <rect x="20" y="18" width="8" height="16" rx="2" fill={theme === 'night' ? '#fbbf24' : '#92400e'} />
+          </g>
+        ))}
+
+        {/* 3. ПОЛЕ БОЯ + КОЛЫШУЩАЯСЯ ТРАВА */}
+        <rect x="0" y="186" width="900" height="139" fill="url(#arkanGrassGrad)" />
+        {/* Боевая грунтовая дорожка */}
+        <rect x="22" y="232" width="856" height="58" rx="29" fill={pal.track} opacity="0.45" />
+        <rect x="34" y="240" width="832" height="42" rx="21" fill="#fef3c7" opacity={theme === 'night' ? 0.1 : 0.22} />
+
+        {/* Прожекторный свет в центре ночью */}
+        {theme === 'night' && <ellipse cx={knotX} cy="245" rx="150" ry="62" fill="url(#spotGlow)" />}
+
+        {/* Декоративные пучки травы */}
+        {[60, 175, 340, 560, 725, 845].map((gx, gi) => {
+          const sway = Math.sin(animT * 3 + gi) * 3
+          return (
+            <path
+              key={gi}
+              d={`M${gx},216 Q${gx - 4 + sway},206 ${gx - 7 + sway},203 M${gx},216 Q${gx + 4 + sway},205 ${gx + 7 + sway},202`}
+              stroke={theme === 'night' ? '#22c55e' : '#86efac'}
+              strokeWidth="2"
+              fill="none"
+              opacity="0.55"
+            />
+          )
+        })}
+
+        {/* 4. ПОБЕДНЫЕ РУБЕЖИ, РАЗВЕВАЮЩИЕСЯ ФЛАГИ И ФАКЕЛЫ */}
+        {/* Левый рубеж победы (Команда А) */}
+        <g transform="translate(285, 176)">
+          {nearWinA && <rect x="-12" y="0" width="24" height="118" rx="8" fill="#3b82f6" opacity={0.2 + 0.15 * Math.sin(animT * 10)} />}
+          <line x1="0" y1="0" x2="0" y2="116" stroke="#60a5fa" strokeWidth="3.5" strokeDasharray="6 4" />
+          <path d={`M0,0 Q-14,${4 + flagWave * 0.5} -30,${9 + flagWave} Q-14,${14 + flagWave * 0.5} 0,20 Z`} fill="#2563eb" stroke="#93c5fd" strokeWidth="1" />
+          <text x="-6" y="110" fill="#bfdbfe" fontSize="10" fontWeight="bold" textAnchor="end">РУБЕЖ {teamA.toUpperCase()}</text>
+          {theme === 'night' && (
+            <g transform="translate(-8, 12)">
+              <rect x="-2" y="8" width="4" height="16" fill="#78350f" />
+              <ellipse cx="0" cy="4" rx="5" ry={7 + flameFlicker * 0.4} fill="#f97316" />
+              <ellipse cx="0" cy="5" rx="2.5" ry={4 + flameFlicker * 0.3} fill="#fef08a" />
+            </g>
+          )}
         </g>
-        {/* Правая юрта */}
-        <g transform="translate(745, 152)">
-          <path d="M0 32 L0 16 Q24 -6 48 16 L48 32 Z" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="1.5" />
-          <path d="M16 5 Q24 0 32 5" fill="none" stroke="#dc2626" strokeWidth="2.5" />
-          <rect x="20" y="18" width="8" height="14" rx="2" fill="#b45309" />
+
+        {/* Правый рубеж победы (Команда Б) */}
+        <g transform="translate(615, 176)">
+          {nearWinB && <rect x="-12" y="0" width="24" height="118" rx="8" fill="#ef4444" opacity={0.2 + 0.15 * Math.sin(animT * 10)} />}
+          <line x1="0" y1="0" x2="0" y2="116" stroke="#f87171" strokeWidth="3.5" strokeDasharray="6 4" />
+          <path d={`M0,0 Q14,${4 - flagWave * 0.5} 30,${9 - flagWave} Q14,${14 - flagWave * 0.5} 0,20 Z`} fill="#dc2626" stroke="#fca5a5" strokeWidth="1" />
+          <text x="6" y="110" fill="#fecaca" fontSize="10" fontWeight="bold" textAnchor="start">РУБЕЖ {teamB.toUpperCase()}</text>
+          {theme === 'night' && (
+            <g transform="translate(8, 12)">
+              <rect x="-2" y="8" width="4" height="16" fill="#78350f" />
+              <ellipse cx="0" cy="4" rx="5" ry={7 - flameFlicker * 0.4} fill="#f97316" />
+              <ellipse cx="0" cy="5" rx="2.5" ry={4 - flameFlicker * 0.3} fill="#fef08a" />
+            </g>
+          )}
         </g>
 
-        {/* 3. Основное зелёное поле боя */}
-        <rect x="0" y="184" width="900" height="126" fill="url(#jailooGrass)" />
-        {/* Беговая/боевая грунтовая дорожка */}
-        <rect x="25" y="232" width="850" height="52" rx="26" fill="#b45309" opacity="0.38" />
-        <rect x="35" y="238" width="830" height="40" rx="20" fill="#fef3c7" opacity="0.22" />
-
-        {/* 4. Центральный ров и победные рубежи */}
-        {/* Левый рубеж победы (Команда А побеждает, когда узел доходит до X=285) */}
-        <g transform="translate(285, 178)">
-          <line x1="0" y1="0" x2="0" y2="108" stroke="#3b82f6" strokeWidth="3.5" strokeDasharray="6 4" />
-          <polygon points="0,0 -26,9 0,18" fill="#2563eb" />
-          <text x="-4" y="102" fill="#bfdbfe" fontSize="10" fontWeight="bold" textAnchor="end">РУБЕЖ {teamA.toUpperCase()}</text>
-        </g>
-
-        {/* Правый рубеж победы (Команда Б побеждает, когда узел доходит до X=615) */}
-        <g transform="translate(615, 178)">
-          <line x1="0" y1="0" x2="0" y2="108" stroke="#ef4444" strokeWidth="3.5" strokeDasharray="6 4" />
-          <polygon points="0,0 26,9 0,18" fill="#dc2626" />
-          <text x="4" y="102" fill="#fecaca" fontSize="10" fontWeight="bold" textAnchor="start">РУБЕЖ {teamB.toUpperCase()}</text>
-        </g>
-
-        {/* Центральная яма и линия центра */}
-        <ellipse cx="450" cy="264" rx="46" ry="14" fill="url(#mudPit)" stroke="#fde68a" strokeWidth="2" opacity="0.85" />
-        <line x1="450" y1="184" x2="450" y2="294" stroke="#ffffff" strokeWidth="2.5" strokeDasharray="5 5" opacity="0.75" />
+        {/* Центральный ров с брызгами грязи при опасном перевесе */}
+        <ellipse cx="450" cy="270" rx="50" ry="15" fill="url(#mudPitGrad)" stroke="#fde68a" strokeWidth="2" opacity="0.88" />
+        <ellipse cx="450" cy="270" rx="34" ry="7" fill="#92400e" opacity="0.55" />
+        {(Math.abs(rope) >= 50 || isPullA || isPullB) && (
+          <g fill="#78350f" opacity="0.85">
+            <circle cx={435 + Math.sin(animT * 12) * 8} cy={258 - Math.abs(Math.sin(animT * 10)) * 14} r="3.5" />
+            <circle cx={464 + Math.cos(animT * 11) * 8} cy={256 - Math.abs(Math.cos(animT * 9)) * 16} r="3" />
+            <circle cx={450 + Math.sin(animT * 15) * 6} cy={254 - Math.abs(Math.sin(animT * 13)) * 18} r="2.8" />
+          </g>
+        )}
+        <line x1="450" y1="186" x2="450" y2="300" stroke="#ffffff" strokeWidth="2.2" strokeDasharray="5 5" opacity="0.65" />
 
         {/* 5. БАТЫРЫ КОМАНДЫ А (СЛЕВА — Синие) */}
         {[0, 1, 2].map((idx) => {
-          const baseX = knotX - 85 - idx * 64
-          const baseY = 248
+          const baseX = knotX - 88 - idx * 65
+          const baseY = 252
+          const scale = idx === 0 ? 1.08 : idx === 2 ? 1.04 : 0.98
+          const dragged = isPullB || rope < -35
           return (
             <g
               key={`teamA-${idx}`}
-              transform={`translate(${baseX}, ${baseY})`}
-              style={{ transition: 'transform 420ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+              transform={`translate(${baseX}, ${baseY}) scale(${scale})`}
+              style={{ transition: 'transform 380ms cubic-bezier(0.22, 1, 0.36, 1)' }}
             >
-              {/* Тень под ногами */}
-              <ellipse cx="0" cy="18" rx="18" ry="5" fill="rgba(0,0,0,0.28)" />
-              {/* Пыль из-под сапог при рывке */}
+              {/* Силовая аура при серии комбо */}
+              {combo >= 2 && turn === 'A' && (
+                <ellipse cx="0" cy="-22" rx="24" ry="38" fill="#60a5fa" opacity={0.18 + 0.1 * Math.sin(animT * 10)} />
+              )}
+              <ellipse cx="0" cy="20" rx="20" ry="5.5" fill="rgba(0,0,0,0.34)" />
+
+              {/* Клубы пыли из-под сапог при рывке */}
               {isPullA && (
-                <g fill="#fef3c7" opacity="0.8">
-                  <circle cx="18" cy="14" r="5" />
-                  <circle cx="26" cy="9" r="3.5" />
-                  <circle cx="14" cy="7" r="3" />
+                <g fill="#fef3c7" opacity="0.85">
+                  <circle cx={19 + Math.sin(animT * 16) * 4} cy="15" r="6" />
+                  <circle cx={29 + Math.cos(animT * 14) * 3} cy="9" r="4.2" />
+                  <circle cx={15} cy="6" r="3.4" />
                 </g>
               )}
-              <g transform={`rotate(${leanA})`} style={{ transition: 'transform 300ms ease-out' }}>
-                {/* Задняя и передняя ноги (упираются в землю вперёд) */}
-                <line x1="-4" y1="-2" x2="-15" y2="16" stroke="#1e293b" strokeWidth="6" strokeLinecap="round" />
-                <line x1="4" y1="-2" x2="18" y2="16" stroke="#0f172a" strokeWidth="6" strokeLinecap="round" />
-                {/* Торс с национальным поясом кемер */}
-                <rect x="-11" y="-34" width="22" height="33" rx="8" fill="#2563eb" stroke="#1d4ed8" strokeWidth="2" />
-                <rect x="-11" y="-11" width="22" height="6" fill="#f59e0b" />
-                {/* Эмблема на груди */}
-                <text x="0" y="-16" fontSize="11" textAnchor="middle">{idx === 0 ? mascA : '★'}</text>
-                {/* Голова */}
-                <circle cx="0" cy="-46" r="10.5" fill="#fed7aa" stroke="#d97706" strokeWidth="1.5" />
-                {/* Лицо (смотрит вправо на соперника) */}
-                <circle cx="4" cy="-47" r="1.5" fill="#0f172a" />
-                <path d={isPullA ? 'M1 -42 Q5 -39 8 -42' : 'M2 -42 L7 -42'} stroke="#0f172a" strokeWidth="1.5" fill="none" />
+
+              <g transform={`rotate(${leanA + idx * 1.4})`}>
+                {/* Ноги в сапогах (өтук) */}
+                <line x1="-4" y1="-2" x2="-16" y2="17" stroke="#1e293b" strokeWidth="6.5" strokeLinecap="round" />
+                <line x1="4" y1="-2" x2="19" y2="17" stroke="#0f172a" strokeWidth="6.5" strokeLinecap="round" />
+                <ellipse cx="-17" cy="18" rx="5.5" ry="3" fill="#0f172a" />
+                <ellipse cx="20" cy="18" rx="5.5" ry="3" fill="#0f172a" />
+
+                {/* Традиционный чапан / камзол с золотым поясом кемер */}
+                <rect x="-12" y="-36" width="24" height="35" rx="9" fill="#2563eb" stroke="#1e3a8a" strokeWidth="2" />
+                <path d="M-12,-30 L12,-30" stroke="#93c5fd" strokeWidth="2" opacity="0.7" />
+                <rect x="-12" y="-12" width="24" height="6.5" fill="#f59e0b" />
+                <rect x="-3" y="-12.5" width="6" height="7.5" rx="1.5" fill="#fef08a" stroke="#92400e" strokeWidth="1" />
+                <text x="0" y="-17" fontSize="11.5" textAnchor="middle">{idx === 0 ? mascA : idx === 2 ? '🛡️' : '★'}</text>
+
+                {/* Голова и мимика */}
+                <circle cx="0" cy="-48" r="11" fill="#fed7aa" stroke="#d97706" strokeWidth="1.5" />
+                {/* Глаз + бровь */}
+                <circle cx="4.5" cy="-49" r="1.7" fill="#0f172a" />
+                <line x1="1.5" y1={isPullA ? '-53.5' : '-52.5'} x2="7.5" y2={isPullA ? '-51.5' : '-52.5'} stroke="#0f172a" strokeWidth="1.6" strokeLinecap="round" />
+                {/* Рот: боевой клич при рывке / напряжение */}
+                {isPullA ? (
+                  <ellipse cx="5" cy="-42.5" rx="3.5" ry="2.6" fill="#991b1b" />
+                ) : dragged ? (
+                  <path d="M1.5 -41 Q4.5 -44 7.5 -41" stroke="#0f172a" strokeWidth="1.5" fill="none" />
+                ) : (
+                  <path d="M2 -43 L7.5 -43" stroke="#0f172a" strokeWidth="1.5" fill="none" />
+                )}
+                {/* Капли пота, если команду перетягивают */}
+                {dragged && (
+                  <path
+                    d={`M-9,${-54 + (animT * 24) % 10} Q-12,${-49 + (animT * 24) % 10} -9,${-47 + (animT * 24) % 10} Q-6,${-49 + (animT * 24) % 10} -9,${-54 + (animT * 24) % 10}`}
+                    fill="#38bdf8"
+                  />
+                )}
+
                 {/* Белый кыргызский Ак-Калпак */}
-                <polygon points="-12,-52 12,-52 7,-71 -7,-71" fill="#ffffff" stroke="#334155" strokeWidth="1.5" />
-                <path d="M-13,-52 Q0,-49 13,-52" stroke="#1e293b" strokeWidth="3" fill="none" />
-                <line x1="0" y1="-69" x2="0" y2="-54" stroke="#1e293b" strokeWidth="1.3" />
-                <circle cx="0" cy="-72" r="2" fill="#1e293b" />
-                {/* Руки, сжимающие канат */}
-                <line x1="-4" y1="-25" x2="14" y2="-16" stroke="#fed7aa" strokeWidth="5.5" strokeLinecap="round" />
+                <polygon points="-13,-54 13,-54 7.5,-74 -7.5,-74" fill="#ffffff" stroke="#334155" strokeWidth="1.6" />
+                <path d="M-14,-54 Q0,-50.5 14,-54" stroke="#1e293b" strokeWidth="3.2" fill="none" />
+                <line x1="0" y1="-72" x2="0" y2="-56" stroke="#1e293b" strokeWidth="1.4" />
+                <circle cx="0" cy="-75" r="2.2" fill="#1e293b" />
+
+                {/* Обе руки крепко держат канат */}
+                <line x1="-4" y1="-26" x2="16" y2="-17" stroke="#fed7aa" strokeWidth="5.8" strokeLinecap="round" />
+                <circle cx="16" cy="-17" r="3.4" fill="#fdba74" stroke="#92400e" strokeWidth="1" />
               </g>
             </g>
           )
@@ -321,85 +589,154 @@ function Arkan2DScene({
 
         {/* 6. БАТЫРЫ КОМАНДЫ Б (СПРАВА — Красные) */}
         {[0, 1, 2].map((idx) => {
-          const baseX = knotX + 85 + idx * 64
-          const baseY = 248
+          const baseX = knotX + 88 + idx * 65
+          const baseY = 252
+          const scale = idx === 0 ? 1.08 : idx === 2 ? 1.04 : 0.98
+          const dragged = isPullA || rope > 35
           return (
             <g
               key={`teamB-${idx}`}
-              transform={`translate(${baseX}, ${baseY})`}
-              style={{ transition: 'transform 420ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+              transform={`translate(${baseX}, ${baseY}) scale(${scale})`}
+              style={{ transition: 'transform 380ms cubic-bezier(0.22, 1, 0.36, 1)' }}
             >
-              {/* Тень под ногами */}
-              <ellipse cx="0" cy="18" rx="18" ry="5" fill="rgba(0,0,0,0.28)" />
-              {/* Пыль из-под сапог при рывке */}
+              {combo >= 2 && turn === 'B' && (
+                <ellipse cx="0" cy="-22" rx="24" ry="38" fill="#fb7185" opacity={0.18 + 0.1 * Math.sin(animT * 10)} />
+              )}
+              <ellipse cx="0" cy="20" rx="20" ry="5.5" fill="rgba(0,0,0,0.34)" />
+
               {isPullB && (
-                <g fill="#fef3c7" opacity="0.8">
-                  <circle cx="-18" cy="14" r="5" />
-                  <circle cx="-26" cy="9" r="3.5" />
-                  <circle cx="-14" cy="7" r="3" />
+                <g fill="#fef3c7" opacity="0.85">
+                  <circle cx={-19 - Math.sin(animT * 16) * 4} cy="15" r="6" />
+                  <circle cx={-29 - Math.cos(animT * 14) * 3} cy="9" r="4.2" />
+                  <circle cx={-15} cy="6" r="3.4" />
                 </g>
               )}
-              <g transform={`rotate(${leanB})`} style={{ transition: 'transform 300ms ease-out' }}>
-                {/* Ноги (упираются влево) */}
-                <line x1="4" y1="-2" x2="15" y2="16" stroke="#1e293b" strokeWidth="6" strokeLinecap="round" />
-                <line x1="-4" y1="-2" x2="-18" y2="16" stroke="#0f172a" strokeWidth="6" strokeLinecap="round" />
-                {/* Торс с золотым поясом */}
-                <rect x="-11" y="-34" width="22" height="33" rx="8" fill="#dc2626" stroke="#991b1b" strokeWidth="2" />
-                <rect x="-11" y="-11" width="22" height="6" fill="#f59e0b" />
-                <text x="0" y="-16" fontSize="11" textAnchor="middle">{idx === 0 ? mascB : '★'}</text>
-                {/* Голова */}
-                <circle cx="0" cy="-46" r="10.5" fill="#fed7aa" stroke="#d97706" strokeWidth="1.5" />
-                {/* Лицо (смотрит влево) */}
-                <circle cx="-4" cy="-47" r="1.5" fill="#0f172a" />
-                <path d={isPullB ? 'M-8 -42 Q-5 -39 -1 -42' : 'M-7 -42 L-2 -42'} stroke="#0f172a" strokeWidth="1.5" fill="none" />
-                {/* Ак-Калпак */}
-                <polygon points="-12,-52 12,-52 7,-71 -7,-71" fill="#ffffff" stroke="#334155" strokeWidth="1.5" />
-                <path d="M-13,-52 Q0,-49 13,-52" stroke="#991b1b" strokeWidth="3" fill="none" />
-                <line x1="0" y1="-69" x2="0" y2="-54" stroke="#991b1b" strokeWidth="1.3" />
-                <circle cx="0" cy="-72" r="2" fill="#991b1b" />
-                {/* Руки, сжимающие канат */}
-                <line x1="4" y1="-25" x2="-14" y2="-16" stroke="#fed7aa" strokeWidth="5.5" strokeLinecap="round" />
+
+              <g transform={`rotate(${leanB - idx * 1.4})`}>
+                <line x1="4" y1="-2" x2="16" y2="17" stroke="#1e293b" strokeWidth="6.5" strokeLinecap="round" />
+                <line x1="-4" y1="-2" x2="-19" y2="17" stroke="#0f172a" strokeWidth="6.5" strokeLinecap="round" />
+                <ellipse cx="17" cy="18" rx="5.5" ry="3" fill="#0f172a" />
+                <ellipse cx="-20" cy="18" rx="5.5" ry="3" fill="#0f172a" />
+
+                <rect x="-12" y="-36" width="24" height="35" rx="9" fill="#dc2626" stroke="#7f1d1d" strokeWidth="2" />
+                <path d="M-12,-30 L12,-30" stroke="#fca5a5" strokeWidth="2" opacity="0.7" />
+                <rect x="-12" y="-12" width="24" height="6.5" fill="#f59e0b" />
+                <rect x="-3" y="-12.5" width="6" height="7.5" rx="1.5" fill="#fef08a" stroke="#92400e" strokeWidth="1" />
+                <text x="0" y="-17" fontSize="11.5" textAnchor="middle">{idx === 0 ? mascB : idx === 2 ? '🛡️' : '★'}</text>
+
+                <circle cx="0" cy="-48" r="11" fill="#fed7aa" stroke="#d97706" strokeWidth="1.5" />
+                <circle cx="-4.5" cy="-49" r="1.7" fill="#0f172a" />
+                <line x1="-1.5" y1={isPullB ? '-53.5' : '-52.5'} x2="-7.5" y2={isPullB ? '-51.5' : '-52.5'} stroke="#0f172a" strokeWidth="1.6" strokeLinecap="round" />
+                {isPullB ? (
+                  <ellipse cx="-5" cy="-42.5" rx="3.5" ry="2.6" fill="#991b1b" />
+                ) : dragged ? (
+                  <path d="M-7.5 -41 Q-4.5 -44 -1.5 -41" stroke="#0f172a" strokeWidth="1.5" fill="none" />
+                ) : (
+                  <path d="M-7.5 -43 L-2 -43" stroke="#0f172a" strokeWidth="1.5" fill="none" />
+                )}
+                {dragged && (
+                  <path
+                    d={`M9,${-54 + (animT * 24) % 10} Q12,${-49 + (animT * 24) % 10} 9,${-47 + (animT * 24) % 10} Q6,${-49 + (animT * 24) % 10} 9,${-54 + (animT * 24) % 10}`}
+                    fill="#38bdf8"
+                  />
+                )}
+
+                <polygon points="-13,-54 13,-54 7.5,-74 -7.5,-74" fill="#ffffff" stroke="#334155" strokeWidth="1.6" />
+                <path d="M-14,-54 Q0,-50.5 14,-54" stroke="#991b1b" strokeWidth="3.2" fill="none" />
+                <line x1="0" y1="-72" x2="0" y2="-56" stroke="#991b1b" strokeWidth="1.4" />
+                <circle cx="0" cy="-75" r="2.2" fill="#991b1b" />
+
+                <line x1="4" y1="-26" x2="-16" y2="-17" stroke="#fed7aa" strokeWidth="5.8" strokeLinecap="round" />
+                <circle cx="-16" cy="-17" r="3.4" fill="#fdba74" stroke="#92400e" strokeWidth="1" />
               </g>
             </g>
           )
         })}
 
-        {/* 7. ВИТОЙ КАНАТ (АРКАН) И ЦЕНТРАЛЬНАЯ КРАСНАЯ ЛЕНТА */}
-        <g
-          transform={`translate(${shiftPx}, 0)`}
-          style={{ transition: 'transform 420ms cubic-bezier(0.22, 1, 0.36, 1)' }}
-        >
+        {/* 7. ВИБРИРУЮЩИЙ ВИТОЙ КАНАТ (АРКАН), КРАСНАЯ ЛЕНТА И ИСКРЫ НАПРЯЖЕНИЯ */}
+        <g>
           {/* Тень каната */}
-          <line x1="175" y1="258" x2="725" y2="258" stroke="rgba(0,0,0,0.22)" strokeWidth="6" strokeLinecap="round" />
-          {/* Сам канат */}
-          <rect x="170" y="227" width="560" height="9" rx="4.5" fill="url(#ropeBraid)" stroke="#78350f" strokeWidth="1.4" />
-          {/* Искры напряжения при большом комбо */}
-          {(combo >= 2 || tension > 0.5) && (
-            <g>
-              <circle cx="450" cy="231" r="18" fill="#facc15" opacity="0.28" />
-              <circle cx="450" cy="231" r="11" fill="#fde047" opacity="0.45" />
+          <line x1={knotX - 285} y1="264" x2={knotX + 285} y2="264" stroke="rgba(0,0,0,0.24)" strokeWidth="6" strokeLinecap="round" />
+          {/* Основа витого каната (с живым прогибом/вибрацией) */}
+          <path
+            d={`M ${knotX - 290},233 Q ${knotX},${ropeMidY} ${knotX + 290},233`}
+            fill="none"
+            stroke="#78350f"
+            strokeWidth="12"
+            strokeLinecap="round"
+          />
+          <path
+            d={`M ${knotX - 290},233 Q ${knotX},${ropeMidY} ${knotX + 290},233`}
+            fill="none"
+            stroke="#d97706"
+            strokeWidth="8.5"
+            strokeLinecap="round"
+          />
+          <path
+            d={`M ${knotX - 290},233 Q ${knotX},${ropeMidY} ${knotX + 290},233`}
+            fill="none"
+            stroke="#fbbf24"
+            strokeWidth="5"
+            strokeDasharray="8 8"
+            strokeLinecap="round"
+          />
+
+          {/* Энергетические искры при рывке или высоком комбо */}
+          {(combo >= 2 || tension > 0.45 || isPullA || isPullB) && (
+            <g transform={`translate(${knotX}, ${ropeMidY})`}>
+              <circle r={18 + Math.sin(animT * 18) * 4} fill="#facc15" opacity="0.28" />
+              <circle r="10" fill="#fde047" opacity="0.55" />
+              {[0, 60, 120, 180, 240, 300].map(ang => (
+                <line
+                  key={ang}
+                  x1="0"
+                  y1="-12"
+                  x2="0"
+                  y2={-22 - (isPullA || isPullB ? 7 : 0)}
+                  stroke="#fef08a"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  transform={`rotate(${ang + animT * 90})`}
+                />
+              ))}
             </g>
           )}
-          {/* Центральный узел и красная шёлковая лента (Кызыл тасма) */}
-          <rect x="444" y="223" width="12" height="17" rx="3" fill="#fbbf24" stroke="#78350f" strokeWidth="1.5" />
-          <path d="M450 238 L442 262 L450 256 L458 262 Z" fill="#ef4444" stroke="#991b1b" strokeWidth="1" />
+
+          {/* Центральный золотой узел и развевающаяся красная лента Кызыл тасма */}
+          <g transform={`translate(${knotX}, ${ropeMidY})`}>
+            <rect x="-7" y="-9" width="14" height="18" rx="4" fill="#fbbf24" stroke="#78350f" strokeWidth="1.6" />
+            <path
+              d={`M0,7 Q${-5 + ribbonSway * 0.4},20 ${-9 + ribbonSway},32 L${ribbonSway * 0.6},26 L${9 + ribbonSway},32 Q${5 + ribbonSway * 0.4},20 0,7 Z`}
+              fill="#ef4444"
+              stroke="#991b1b"
+              strokeWidth="1.2"
+            />
+          </g>
         </g>
 
         {/* Нижняя шкала прогресса от -100 до +100 прямо на арене */}
-        <g transform="translate(285, 294)">
-          <rect x="0" y="0" width="330" height="8" rx="4" fill="rgba(15,23,42,0.65)" />
+        <g transform="translate(285, 306)">
+          <rect x="0" y="0" width="330" height="9" rx="4.5" fill="rgba(15,23,42,0.75)" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
           <rect
             x="0"
             y="0"
-            width={Math.max(6, Math.min(330, 165 - (rope / 100) * 165))}
-            height="8"
-            rx="4"
+            width={Math.max(8, Math.min(330, 165 - (rope / 100) * 165))}
+            height="9"
+            rx="4.5"
             fill="#3b82f6"
           />
+          <rect
+            x={Math.max(8, Math.min(330, 165 - (rope / 100) * 165))}
+            y="0"
+            width={Math.max(0, 330 - Math.max(8, Math.min(330, 165 - (rope / 100) * 165)))}
+            height="9"
+            rx="4.5"
+            fill="#ef4444"
+          />
           <circle
-            cx={Math.max(6, Math.min(324, 165 - (rope / 100) * 165))}
-            cy="4"
-            r="6"
+            cx={Math.max(7, Math.min(323, 165 - (rope / 100) * 165))}
+            cy="4.5"
+            r="6.5"
             fill="#fbbf24"
             stroke="#ffffff"
             strokeWidth="2"
@@ -428,6 +765,16 @@ export default function Arkan() {
   const [mascB, setMascB] = useState(() => loadMascot('edu-arkan-mascB', '🐺'))
   const [qtime, setQtime] = useState(15)
   const [battleMode, setBattleMode] = useState<BattleMode>('turns')
+  const [arenaTheme, setArenaTheme] = useState<ArenaTheme>(() => {
+    try {
+      const saved = localStorage.getItem('edu-arkan-theme')
+      return saved === 'sunset' || saved === 'night' ? saved : 'day'
+    } catch { return 'day' }
+  })
+  const changeTheme = (t: ArenaTheme) => {
+    setArenaTheme(t)
+    try { localStorage.setItem('edu-arkan-theme', t) } catch {}
+  }
 
   // Конструктор + ИИ прямо внутри Аркан Тартыш
   const [aiPrompt, setAiPrompt] = useState('')
@@ -825,14 +1172,16 @@ export default function Arkan() {
       setCountdown(3)
       playArkanSound('tick')
     }
+    const winSide: 'A' | 'B' | 'draw' = isDraw ? 'draw' : winner === teamA ? 'A' : 'B'
+    const ropePctA = Math.round(Math.max(5, Math.min(95, 50 + rope / 2)))
     return (
-      <div className="max-w-2xl mx-auto text-center space-y-5 py-8 relative">
+      <div className="max-w-3xl mx-auto text-center space-y-6 py-4 sm:py-8 px-2 relative">
         {!isDraw && (
-          <div className="pointer-events-none fixed inset-0 overflow-hidden z-50" aria-hidden="true">
+          <div className="pointer-events-none fixed inset-0 overflow-hidden z-10" aria-hidden="true">
             {confetti.map((c, i) => (
               <span
                 key={i}
-                className="confetti-piece"
+                className="confetti-piece opacity-85"
                 style={{
                   left: `${c.left}%`,
                   width: c.size,
@@ -846,27 +1195,116 @@ export default function Arkan() {
             ))}
           </div>
         )}
-        <Link to="/games" className="inline-flex items-center gap-1 text-sm font-bold text-indigo-600 dark:text-indigo-400">
-          {tr('arkan_to_games')}
-        </Link>
-        <div className="arkan-arena p-8 space-y-4">
-          <div className="oimo-strip" />
-          <div className="text-8xl animate-enter">{wMasc}</div>
-          <h1 className="font-display font-bold text-4xl text-slate-900">
-            {isDraw ? tr('arkan_draw') : `${tr('arkan_winner_a')}${winner}!`}
-          </h1>
-          <div className="text-2xl text-slate-800 font-bold">{mascA} {teamA} {scoreA} : {scoreB} {teamB} {mascB}</div>
-          {!isDraw && <div className="font-bold text-amber-700">{tr('arkan_congrats')}</div>}
-          <div className="oimo-strip" />
+
+        <div className="relative z-20 flex items-center justify-between">
+          <Link to="/games" className="inline-flex items-center gap-1.5 text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
+            {tr('arkan_to_games')}
+          </Link>
+          <span className="text-xs font-extrabold uppercase tracking-wider px-3 py-1 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-400/30">
+            🪢 Аркан Тартыш • Итоги
+          </span>
         </div>
-        <div className="flex gap-3 justify-center">
-          <button onClick={rematch}
-            className="px-6 py-3 min-h-[56px] rounded-2xl bg-indigo-600 text-white font-bold flex items-center gap-2">
-            <RotateCcw size={18} /> {tr('arkan_rematch')}
-          </button>
-          <button onClick={() => setPhase('lobby')} className="px-6 py-3 min-h-[56px] rounded-2xl bg-white border dark:bg-slate-800 dark:text-white dark:border-slate-700 font-bold">
-            {tr('arkan_to_topics')}
-          </button>
+
+        {/* Чемпионская карточка победы */}
+        <div className="relative z-20 rounded-3xl overflow-hidden bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-950 border-2 border-amber-400/50 shadow-[0_24px_80px_rgba(15,23,42,0.55)] text-white p-6 sm:p-10 space-y-6">
+          {/* Мягкое золотое свечение за кубком */}
+          <div
+            className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-[380px] h-[240px] rounded-full blur-3xl opacity-35"
+            style={{ background: winSide === 'A' ? 'radial-gradient(circle,#38bdf8,#facc15)' : winSide === 'B' ? 'radial-gradient(circle,#fb7185,#facc15)' : 'radial-gradient(circle,#818cf8,#facc15)' }}
+          />
+          {/* Деликатная золотая орнаментальная полоса сверху */}
+          <div className="h-1.5 w-full rounded-full bg-gradient-to-r from-blue-500 via-amber-400 to-rose-500 opacity-90" />
+
+          {/* Значок чемпиона */}
+          <div className="relative flex flex-col items-center gap-3 pt-1">
+            {!isDraw && (
+              <div className="inline-flex items-center gap-1.5 px-4 py-1 rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-300 text-xs sm:text-sm font-black tracking-wide uppercase">
+                🏆 {tr('arkan_congrats')}
+              </div>
+            )}
+            <div className="relative">
+              {!isDraw && (
+                <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-4xl drop-shadow-lg animate-bounce">👑</span>
+              )}
+              <div className={`w-28 h-28 sm:w-32 sm:h-32 rounded-3xl flex items-center justify-center text-6xl sm:text-7xl shadow-2xl border-2 ${
+                winSide === 'A'
+                  ? 'bg-gradient-to-br from-blue-500/40 to-indigo-700/60 border-amber-300 shadow-blue-500/30'
+                  : winSide === 'B'
+                    ? 'bg-gradient-to-br from-rose-500/40 to-orange-700/60 border-amber-300 shadow-rose-500/30'
+                    : 'bg-gradient-to-br from-indigo-500/30 to-slate-700/60 border-indigo-300'
+              }`}>
+                {wMasc}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <div className="text-xs font-extrabold uppercase tracking-[0.22em] text-indigo-300">
+                {isDraw ? 'Равная схватка!' : 'Победитель турнира'}
+              </div>
+              <h1 className="font-display font-black text-3xl sm:text-5xl bg-gradient-to-r from-white via-amber-100 to-amber-300 bg-clip-text text-transparent leading-tight">
+                {isDraw ? tr('arkan_draw') : `${tr('arkan_winner_a')}${winner}!`}
+              </h1>
+            </div>
+          </div>
+
+          {/* Табло счёта двух команд */}
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4 max-w-xl mx-auto">
+            <div className={`rounded-2xl p-3.5 sm:p-4 border transition ${
+              winSide === 'A'
+                ? 'bg-blue-500/20 border-amber-400/70 ring-2 ring-amber-400/25 shadow-lg'
+                : 'bg-white/5 border-white/10 opacity-80'
+            }`}>
+              <div className="text-3xl mb-1">{mascA}</div>
+              <div className="font-extrabold text-sm sm:text-base truncate">{teamA}</div>
+              <div className="text-3xl sm:text-4xl font-mono font-black text-blue-300 mt-1">{scoreA}</div>
+              {winSide === 'A' && <div className="text-[11px] font-bold text-amber-300 mt-1">🥇 Чемпион</div>}
+            </div>
+
+            <div className="flex flex-col items-center gap-1 px-1">
+              <span className="text-xs font-black text-slate-400 uppercase">Счёт</span>
+              <span className="text-2xl sm:text-3xl font-black text-amber-400">:</span>
+            </div>
+
+            <div className={`rounded-2xl p-3.5 sm:p-4 border transition ${
+              winSide === 'B'
+                ? 'bg-rose-500/20 border-amber-400/70 ring-2 ring-amber-400/25 shadow-lg'
+                : 'bg-white/5 border-white/10 opacity-80'
+            }`}>
+              <div className="text-3xl mb-1">{mascB}</div>
+              <div className="font-extrabold text-sm sm:text-base truncate">{teamB}</div>
+              <div className="text-3xl sm:text-4xl font-mono font-black text-rose-300 mt-1">{scoreB}</div>
+              {winSide === 'B' && <div className="text-[11px] font-bold text-amber-300 mt-1">🥇 Чемпион</div>}
+            </div>
+          </div>
+
+          {/* Итоговый перевес каната */}
+          <div className="max-w-lg mx-auto space-y-1.5">
+            <div className="flex justify-between text-[11px] font-bold text-slate-300">
+              <span className="text-blue-300">{teamA}</span>
+              <span className="text-amber-300">Итог каната: {Math.abs(Math.round(rope))}%</span>
+              <span className="text-rose-300">{teamB}</span>
+            </div>
+            <div className="h-3 rounded-full bg-slate-800 overflow-hidden border border-white/10 flex">
+              <div className="h-full bg-gradient-to-r from-blue-600 to-sky-400 transition-all" style={{ width: `${ropePctA}%` }} />
+              <div className="h-full bg-gradient-to-r from-rose-400 to-rose-600 flex-1" />
+            </div>
+          </div>
+
+          {/* Кнопки действий */}
+          <div className="flex flex-wrap gap-3 justify-center pt-2">
+            <button
+              onClick={rematch}
+              className="px-7 py-3.5 min-h-[54px] rounded-2xl bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 hover:brightness-110 text-slate-950 font-black text-base flex items-center gap-2 shadow-xl shadow-amber-500/20 transition"
+            >
+              <RotateCcw size={18} /> {tr('arkan_rematch')}
+            </button>
+            <button
+              onClick={() => setPhase('lobby')}
+              className="px-6 py-3.5 min-h-[54px] rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold text-base transition"
+            >
+              {tr('arkan_to_topics')}
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -900,6 +1338,8 @@ export default function Arkan() {
           pullAnim={pullAnim}
           lastGain={lastGain}
           combo={combo}
+          theme={arenaTheme}
+          onChangeTheme={changeTheme}
         />
 
         <div className="arkan-arena p-4 sm:p-6 space-y-4 relative">
@@ -1061,6 +1501,8 @@ export default function Arkan() {
         pullAnim="none"
         lastGain={null}
         combo={0}
+        theme={arenaTheme}
+        onChangeTheme={changeTheme}
       />
 
       <div className="flex flex-wrap gap-3">

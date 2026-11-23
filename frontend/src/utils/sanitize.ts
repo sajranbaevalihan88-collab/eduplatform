@@ -16,7 +16,8 @@ const ALLOWED_TAGS = new Set([
 const ALLOWED_ATTRS = new Set([
   'style', 'class', 'href', 'target', 'rel', 'src', 'alt', 'title',
   'width', 'height', 'colspan', 'rowspan', 'border',
-  'color', 'size', 'face', 'align', 'valign'
+  'color', 'size', 'face', 'align', 'valign',
+  'data-free', 'data-fixed', 'data-word-meta', 'data-frame', 'data-zebra'
 ])
 
 const SAFE_URL_PATTERN = /^(?:https?:\/\/|mailto:|#|\/(?!\/))/i
@@ -102,8 +103,8 @@ export function sanitizeWordHtml(rawHtml: string): string {
 
     Array.from(tpl.content.childNodes).forEach(cleanNode)
 
-    // Разворачиваем обычные div (оставляя div.page-break)
-    tpl.content.querySelectorAll('div:not(.page-break)').forEach(d => {
+    // Разворачиваем обычные div (оставляя div.page-break, div.word-frame и div.word-meta)
+    tpl.content.querySelectorAll('div:not(.page-break):not(.word-frame):not(.word-meta)').forEach(d => {
       const parent = d.parentNode
       if (!parent) return
       while (d.firstChild) parent.insertBefore(d.firstChild, d)

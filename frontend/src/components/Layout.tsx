@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { BookOpen, LayoutDashboard, Layers, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info, Database, Volume2, VolumeX, FolderLock, BookOpenCheck, UsersRound, ListTree, TrendingUp, MessageSquare, Medal } from 'lucide-react'
 import A11yPanel from './A11yPanel'
 import { useState, useEffect, useRef } from 'react'
-import client from '../api/client'
+import client, { mediaSrc } from '../api/client'
 import { useTheme, useAccessibility } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
 import { isSfxMuted, setSfxMuted, sfx } from '../utils/sfx'
@@ -246,7 +246,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/60 space-y-2">
           {me ? (
             <Link to="/profile" className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium card-hover ${isActive('/profile') ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700' : 'bg-white dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-600 dark:text-white'}`}>
-              <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">{(me.username||'U')[0].toUpperCase()}</div>
+              {me.avatar ? (
+                <img src={mediaSrc(me.avatar)} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 ring-2 ring-indigo-500/30" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs shrink-0">{(me.username||'U')[0].toUpperCase()}</div>
+              )}
               <div className="flex-1 min-w-0"><div className="font-semibold line-clamp-1">{me.username}</div><div className="text-xs text-slate-500 dark:text-slate-400 truncate">{me.email||`ID ${me.id}`}</div></div>
             </Link>
           ) : (
@@ -280,7 +284,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <div className="p-3 pb-[calc(12px+env(safe-area-inset-bottom))] border-t dark:border-slate-700 shrink-0">
               {me ? (<>
                 <Link to="/profile" onClick={()=>setOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 dark:text-white">
-                  <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">{(me.username||'U')[0].toUpperCase()}</div>
+                  {me.avatar ? (
+                    <img src={mediaSrc(me.avatar)} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs shrink-0">{(me.username||'U')[0].toUpperCase()}</div>
+                  )}
                   <div className="flex-1 min-w-0"><div className="font-semibold text-sm line-clamp-1">{me.username}</div></div>
                 </Link>
                 <button onClick={()=>{ setOpen(false); logout() }} className="mt-2 w-full flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 px-3 py-2"><LogOut size={16}/> {t('logout')}</button>
@@ -294,22 +302,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       <div className={`flex-1 min-w-0 ${loc.pathname.startsWith('/board') ? 'flex flex-col h-screen' : ''}`}>
         {!loc.pathname.startsWith('/board') && !isGameFull && (
-        <header className="h-[calc(64px+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2 px-2.5 sm:px-4 lg:px-8 sticky top-0 z-40 shadow-sm">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <button className="lg:hidden shrink-0 p-2 rounded-xl bg-slate-100 hover:bg-white hover:shadow-md transition-all" onClick={()=>setOpen(true)} aria-label={t('open_menu')} aria-expanded={open} aria-controls="mobile-drawer"><Menu size={18}/></button>
+        <header className="min-h-[calc(64px+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-1.5 sm:gap-2 px-2 sm:px-4 lg:px-8 sticky top-0 z-40 shadow-sm">
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+            <button className="lg:hidden shrink-0 w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-white hover:bg-white dark:hover:bg-slate-700 hover:shadow-md transition-all flex items-center justify-center" onClick={()=>setOpen(true)} aria-label={t('open_menu')} aria-expanded={open} aria-controls="mobile-drawer"><Menu size={18}/></button>
             {/* Логотип в мобильной шапке: скрываем текст на узких экранах (< sm), оставляя узнаваемую иконку */}
-            <Link to="/" className="md:hidden flex items-center gap-1.5 min-w-0" aria-label="EduPlatform — на главную">
-              <img src="/logo.svg" alt="" aria-hidden="true" className="w-9 h-9 shrink-0 drop-shadow-md" />
+            <Link to="/" className="md:hidden flex items-center gap-1.5 min-w-0 shrink-0" aria-label="EduPlatform — на главную">
+              <img src="/logo.svg" alt="" aria-hidden="true" className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 drop-shadow-md" />
               <span className="font-display font-bold text-[15px] leading-none whitespace-nowrap text-slate-900 dark:text-white hidden sm:inline">EduPlatform</span>
             </Link>
             <p className="font-display font-bold text-lg hidden md:block truncate text-slate-900 dark:text-slate-100" aria-label={t('platform_title')}>{t('platform_title')}</p>
-            {hideSidebar && <button onClick={toggleSidebar} className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-white border border-slate-200 text-xs font-medium btn-hover" aria-label={t('show_tabs')}><PanelLeft size={14}/> {t('menu')}</button>}
+            {hideSidebar && <button onClick={toggleSidebar} className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-medium btn-hover" aria-label={t('show_tabs')}><PanelLeft size={14}/> {t('menu')}</button>}
           </div>
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            <button onClick={()=>{ const next=!sfxOff; setSfxOff(next); setSfxMuted(next); if(!next) sfx('ui.click') }} aria-label={sfxOff?t('sfx_enable_aria'):t('sfx_disable_aria')} title={sfxOff?t('sfx_off'):t('sfx_on')} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 hover:shadow-md transition-all flex items-center justify-center" data-testid="sfx-toggle">{sfxOff?<VolumeX size={16}/>:<Volume2 size={16}/>}</button>
-            <button onClick={toggleTheme} aria-label={theme==='dark' ? t('theme_light') : t('theme_dark')} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 hover:shadow-md transition-all flex items-center justify-center" title={theme==='dark'?t('light'):t('dark')}>{theme==='dark'?<Sun size={16}/>:<Moon size={16}/>}</button>
+            <button onClick={()=>{ const next=!sfxOff; setSfxOff(next); setSfxMuted(next); if(!next) sfx('ui.click') }} aria-label={sfxOff?t('sfx_enable_aria'):t('sfx_disable_aria')} title={sfxOff?t('sfx_off'):t('sfx_on')} className="p-2 min-w-[40px] min-h-[40px] sm:p-2.5 sm:min-w-[44px] sm:min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 hover:shadow-md transition-all flex items-center justify-center" data-testid="sfx-toggle">{sfxOff?<VolumeX size={16}/>:<Volume2 size={16}/>}</button>
+            <button onClick={toggleTheme} aria-label={theme==='dark' ? t('theme_light') : t('theme_dark')} className="p-2 min-w-[40px] min-h-[40px] sm:p-2.5 sm:min-w-[44px] sm:min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 hover:shadow-md transition-all flex items-center justify-center" title={theme==='dark'?t('light'):t('dark')}>{theme==='dark'?<Sun size={16}/>:<Moon size={16}/>}</button>
             <div className="relative" ref={langMenuRef}>
-              <button onClick={()=>setShowLang(v=>!v)} aria-label={t('change_lang')} aria-expanded={showLang} className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 flex items-center justify-center gap-1 text-xs font-bold">{lang.toUpperCase()} <Languages size={12}/></button>
+              <button onClick={()=>setShowLang(v=>!v)} aria-label={t('change_lang')} aria-expanded={showLang} className="px-2 min-w-[40px] min-h-[40px] sm:p-2.5 sm:min-w-[44px] sm:min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:border-slate-600 flex items-center justify-center gap-1 text-xs font-bold">{lang.toUpperCase()} <Languages size={12} className="hidden xs:inline sm:inline"/></button>
               {showLang && (
                 <div className="absolute right-0 top-full mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl p-1 z-50 min-w-[160px]">
                   {(['ru','en','kg'] as const).map(l=>(
@@ -318,14 +326,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               )}
             </div>
-            <button onClick={()=>setShowA11y(true)} aria-label={t('a11y_settings')} aria-expanded={showA11y} className={`p-2.5 min-w-[44px] min-h-[44px] rounded-xl border flex items-center justify-center gap-1 text-xs font-bold ${poor?'bg-amber-400 border-amber-500 text-slate-900':'bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border-transparent hover:border-slate-200 dark:border-slate-600'}`} title={t('a11y_settings')}><Accessibility size={16}/><span className="hidden lg:inline">{t('a11y')}{poor?' •':' '}</span></button>
-            <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"/>
+            <button onClick={()=>setShowA11y(true)} aria-label={t('a11y_settings')} aria-expanded={showA11y} className={`p-2 min-w-[40px] min-h-[40px] sm:p-2.5 sm:min-w-[44px] sm:min-h-[44px] rounded-xl border flex items-center justify-center gap-1 text-xs font-bold ${poor?'bg-amber-400 border-amber-500 text-slate-900':'bg-slate-100 dark:bg-slate-800 dark:text-white hover:bg-white dark:hover:bg-slate-700 border-transparent hover:border-slate-200 dark:border-slate-600'}`} title={t('a11y_settings')}><Accessibility size={16}/><span className="hidden lg:inline">{t('a11y')}{poor?' •':' '}</span></button>
+            <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1 hidden sm:block"/>
             {!student && !isParent && (
             <Link to="/lessons/new" className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors hidden sm:flex items-center gap-1.5">{t('create_lesson')}</Link>
             )}
             {me ? (
               <Link to="/profile" className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-600 dark:bg-white dark:text-slate-900 text-white text-sm font-semibold shadow-md btn-hover">
-                <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold">{(me.username||'U')[0].toUpperCase()}</div>
+                {me.avatar ? (
+                  <img src={mediaSrc(me.avatar)} alt="" className="w-6 h-6 rounded-full object-cover shrink-0 ring-1 ring-white/40" />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">{(me.username||'U')[0].toUpperCase()}</div>
+                )}
                 {me.username}
               </Link>
             ) : (
@@ -339,14 +351,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <span>📶 {t('offline_banner')}</span>
           </div>
         )}
-        <main id="main-content" tabIndex={-1} key={loc.pathname} className={loc.pathname.startsWith('/board') ? 'flex-1 min-h-0 w-full page-enter' : isGameFull ? 'w-full min-h-screen pb-24 lg:pb-0 page-enter relative' : 'p-4 pb-28 lg:p-8 max-w-[1400px] mx-auto page-enter'}>{children}</main>
+        <main id="main-content" tabIndex={-1} key={loc.pathname} className={loc.pathname.startsWith('/board') ? 'flex-1 min-h-0 w-full page-enter' : isGameFull ? 'w-full min-h-screen pb-24 lg:pb-0 page-enter relative' : 'p-4 pb-28 lg:p-8 max-w-[1400px] mx-auto page-enter overflow-x-clip'}>{children}</main>
         {!loc.pathname.startsWith('/board') && !isGameFull && (
           <nav id="bottom-navigation" aria-label={t('mobile_navigation')} className="lg:hidden fixed bottom-0 inset-x-0 z-30 flex items-stretch justify-around bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200/60 dark:border-slate-700/60 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(0,0,0,0.06)]">
             {bottomItems.map(it => (
               <Link key={it.to} to={it.to} aria-current={isActive(it.to) ? 'page' : undefined}
-                className={`flex-1 min-h-[56px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${isActive(it.to) ? 'text-indigo-600 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-800'}`}>
-                <it.icon size={22} />
-                {it.label}
+                className={`flex-1 min-w-0 min-h-[56px] px-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${isActive(it.to) ? 'text-indigo-600 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-800'}`}>
+                <it.icon size={21} className="shrink-0" />
+                <span className="truncate max-w-full leading-tight">{it.label}</span>
               </Link>
             ))}
           </nav>
@@ -360,7 +372,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </div>
       {/* Панель доступности — вне шапки: родитель с backdrop-blur создаёт containing block
           для position:fixed и overflow-hidden режет панель до 64px (казалось «не нажимается») */}
-      <A11yPanel open={showA11y} onClose={()=>setShowA11y(false)} items={items.map(({to,label})=>({to,label}))} />
+      <A11yPanel open={showA11y} onClose={()=>setShowA11y(false)} />
     </div>
   )
 }

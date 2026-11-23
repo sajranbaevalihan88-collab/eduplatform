@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import client, { mediaUrl } from '../api/client'
 import { Eye, Edit, Play, ChevronLeft, ChevronRight, Maximize2, Copy, Trash2 } from 'lucide-react'
+import { SlideShape, SlideTable, SlideChart } from '../components/SlideVisuals'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
 
@@ -348,8 +349,9 @@ export default function PresentationView(){
         <div key={b.id} className="w-full flex justify-center">
           {b.type==='text' && <div className="max-w-[90%] text-center w-full">{renderRichText(b,false,isSlideshow,slideBg)}</div>}
           {b.type==='image' && <img onError={imgMissing} src={resolveSrc(b.src)} className={`${isSlideshow?'max-h-[360px]':'max-h-[300px]'} max-w-[80%] object-contain rounded-xl mx-auto`} alt=""/>}
-          {b.type==='shape' && null}
-          {b.type==='table' && <div className="border rounded-lg overflow-hidden w-full max-w-[90%] mx-auto"><div className="grid gap-px bg-slate-200" style={{gridTemplateColumns:`repeat(${b.table?.cols||3},1fr)`}}>{(b.table?.cells||[]).flatMap((row:any)=>row.map((c:any,k:number)=><div key={k} className="bg-white p-2 text-sm" style={{gridColumn:`span ${c?.colspan||1}`, gridRow:`span ${c?.rowspan||1}`}}>{c?.text||'—'}</div>))}</div></div>}
+          {b.type==='shape' && <div className="w-[300px] h-[140px] mx-auto"><SlideShape block={b} gid={`pv-leg-sh-${b.id}`}/></div>}
+          {b.type==='table' && <div className="w-full max-w-[90%] mx-auto"><SlideTable block={b}/></div>}
+          {b.type==='chart' && <div className="w-full max-w-[85%] h-[260px] mx-auto"><SlideChart block={b} gid={`pv-leg-ch-${b.id}`}/></div>}
           {b.type==='video' && <div className="w-full max-w-[90%] mx-auto aspect-video rounded-lg overflow-hidden bg-black"><iframe src={videoEmbedUrl(b.content||'')} title="video" className="w-full h-full" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups"/></div>}
         </div>
       ))
@@ -404,42 +406,27 @@ export default function PresentationView(){
             // скрываем декоративные прямоугольники импорта (угловые #FF8C69/#7EDBD5) — новые фигуры показываем
             const isDecorative = s.fill && ['#FF8C69','#7EDBD5','#FFE66D','#FF6B35'].includes(s.fill.toUpperCase()) && s.x!==undefined && (s.x<15 || s.x>75) && s.y<20
             if(isDecorative) return null
-            // freeform из pptx: рисуем настоящий векторный контур, а не бокс
-            if(s.svgPath){
-              const rawFill = s.fill && s.fill!=='transparent' ? s.fill : 'none'
-              const grad = typeof rawFill==='string' ? parseCssGradient(rawFill) : null
-              const gid = grad ? `sg-${b.id}` : undefined
-              const fillOk = grad ? `url(#${gid})` : rawFill
-              return <div key={b.id} style={{...common, background:'transparent', border:'none', boxShadow:'none', padding:0, alignItems:'stretch', justifyContent:'stretch', overflow:'visible'}} className={animClass}>
-                <svg viewBox={`0 0 ${s.svgW||10000} ${s.svgH||10000}`} preserveAspectRatio={s.icon?"xMidYMid meet":"none"} style={{width:'100%', height:'100%', display:'block', overflow:'visible'}}>
-                  {grad && <defs><linearGradient id={gid} x1={grad.x1} y1={grad.y1} x2={grad.x2} y2={grad.y2}>{grad.stops.map((st:any,i:number)=><stop key={i} offset={`${st.offset}%`} stopColor={st.color} stopOpacity={st.opacity}/>)}</linearGradient></defs>}
-                  <path d={s.svgPath} fill={fillOk} stroke={s.stroke||'none'} strokeWidth={s.strokeWidth||0} strokeDasharray={s.dash==='dotted'?'2 3':s.dash==='dashed'?'7 4':undefined} strokeLinecap={s.dash&&s.dash!=='solid'?'round':undefined} vectorEffect="non-scaling-stroke" strokeLinejoin="round"/>
-                </svg>
-              </div>
-            }
-            const isEllipse = s.preset==='ellipse' || b.shape==='ellipse' || b.shape==='circle'
-            // радиус из оригинала (adj): 0 = острые углы; своё дефолтное не выдумываем поверх svg-контура
-            const radiusCss = s.svgPath ? 0 : (s.radiusPct!=null ? (s.radiusPct<=0 ? 0 : '12px') : 6)
-            const dashCss = s.dash && s.dash!=='solid' ? (s.dash==='dotted' ? 'dotted' : 'dashed') : 'solid'
-            return <div key={b.id} style={{...common, background: s.fill||'#f1f5f9', borderColor: s.stroke||'transparent', borderWidth: s.strokeWidth||0, borderStyle: dashCss, opacity: s.opacity||1, borderRadius: isEllipse ? '50%' : radiusCss, alignItems:'center', justifyContent:'center', boxShadow: s.shadow ? '0 2px 10px rgba(0,0,0,0.07)' : undefined, border: s.shadow ? '1px solid #f1f5f9' as any : undefined}} className={`flex ${animClass}`}></div>
-          }
-          if(b.type==='table'){
-            const cells = b.table?.cells
-            const rows = b.table?.rows||3, cols=b.table?.cols||3
-            const hasFill = (cells||[]).some((row:any)=>row.some((c:any)=>c?.style?.background))
             return (
-              <div key={b.id} style={{...common, overflow:'hidden', borderRadius:8, border:'1px solid #e2e8f0'}}>
-                <div className={`grid gap-px w-full h-full ${hasFill?'bg-slate-200':'bg-transparent'}`} style={{gridTemplateColumns:`repeat(${cols},1fr)`, gridTemplateRows:`repeat(${rows},1fr)`}}>
-                  {(cells||[]).flatMap((rrow:any)=>rrow.filter((cell:any)=>!cell?.merged).map((cell:any,k:number)=>{
-                    const txt = cell?.text ?? '—'
-                    const cstyle:any = cell?.style||{}
-                    return <div key={k} className="p-1.5 flex items-center text-xs leading-tight overflow-hidden" style={{gridColumn:`span ${cell?.colspan||1}`, gridRow:`span ${cell?.rowspan||1}`, background: cstyle.background||'transparent', color: cstyle.color||'#1e293b', fontWeight: cstyle.bold?'700':'400', justifyContent:'flex-start'}}>{txt}</div>
-                  }))}
-                </div>
+              <div key={b.id} style={{...common, background:'transparent', border:'none', boxShadow:'none', padding:0, overflow:'visible'}} className={animClass}>
+                <SlideShape block={b} gid={`pv-sh-${b.id}`} />
               </div>
             )
           }
-          {b.type==='video' && <div style={{...common}}><iframe src={videoEmbedUrl(b.content||'')} title="video" className="w-full h-full rounded" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups"/></div>}
+          if(b.type==='table'){
+            return (
+              <div key={b.id} style={{...common, padding:0, background:'transparent', overflow:'hidden'}} className={animClass}>
+                <SlideTable block={b} />
+              </div>
+            )
+          }
+          if(b.type==='chart'){
+            return (
+              <div key={b.id} style={{...common, padding:0, background:'transparent', overflow:'hidden'}} className={animClass}>
+                <SlideChart block={b} gid={`pv-ch-${b.id}`} />
+              </div>
+            )
+          }
+          if(b.type==='video') return <div key={b.id} style={{...common, padding:0}} className={animClass}><iframe src={videoEmbedUrl(b.content||'')} title="video" className="w-full h-full rounded" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups"/></div>
           return <div key={b.id} style={common}>{b.content||''}</div>
         })}
       </div>

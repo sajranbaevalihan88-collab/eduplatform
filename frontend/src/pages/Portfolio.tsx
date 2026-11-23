@@ -292,7 +292,7 @@ export default function Portfolio() {
           <div className="text-lg font-bold dark:text-white" data-testid="pf-name">{data.first_name || data.username}</div>
           <div className="text-xs text-slate-400">{data.username}</div>
         </div>
-        <div className="grid grid-cols-3 gap-3 text-center">
+        <div className="w-full sm:w-auto grid grid-cols-3 gap-2 sm:gap-3 text-center pt-2 sm:pt-0 border-t sm:border-t-0 dark:border-slate-800">
           <div>
             <div className="text-xl font-bold text-emerald-600" data-testid="pf-count-mastered">{mastered.length || 0}</div>
             <div className="text-[11px] text-slate-400">{t('pf_topics_mastered')}</div>

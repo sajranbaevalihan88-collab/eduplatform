@@ -1,6 +1,7 @@
-"""Билим-Квиз Live — собственный real-time аналог Kahoot на Django Channels.
+"""Билим-Квиз Live — собственный real-time аналог Blooket и Kahoot на Django Channels.
 
-Поддерживает 3 режима на одном движке:
+Поддерживает 4 режима на одном движке:
+- gold:    Золотая лихорадка (Blooket Gold Quest — за верный ответ открой 1 из 3 сундуков: ×2, кража 25%, обмен золотом!)
 - classic: классический Kahoot (PIN/QR + 4 кнопки + гистограмма + лидерборд + пьедестал)
 - race:    Гонка на вершину Ала-Тоо (живая трасса на проекторе)
 - boss:    Босс-рейд (весь класс вместе побеждает Босса Пробелов)
@@ -23,13 +24,42 @@ from rest_framework.views import APIView
 ROOM_TTL_SECONDS = 3 * 3600  # 3 часа
 
 BOT_PRESETS = [
-    ('Айдана', '🦊'),
-    ('Адилет', '🦅'),
-    ('Бермет', '🐆'),
-    ('Тимур', '🐺'),
-    ('Нурай', '🐴'),
-    ('Данияр', '🦁'),
+    ('Айдана', 'av:fox:none:blook'),
+    ('Адилет', 'av:dragon:none:blook'),
+    ('Бермет', 'av:leopard:none:blook'),
+    ('Тимур', 'av:shark:none:blook'),
+    ('Нурай', 'av:panda:none:blook'),
+    ('Данияр', 'av:king:none:blook'),
 ]
+
+# Пул сундуков для режима «Золотая лихорадка» (Blooket Gold Quest)
+GOLD_CHEST_POSITIVE = [
+    {'kind': 'gold', 'amount': 250, 'label': '+250 🪙', 'emoji': '🪙', 'tone': 'good'},
+    {'kind': 'gold', 'amount': 500, 'label': '+500 🪙', 'emoji': '💰', 'tone': 'great'},
+    {'kind': 'gold', 'amount': 1000, 'label': 'Джекпот +1000 🪙!', 'emoji': '💎', 'tone': 'epic'},
+    {'kind': 'double', 'label': '×2 Золота!', 'emoji': '✨', 'tone': 'epic'},
+    {'kind': 'triple', 'label': '×3 Золота!', 'emoji': '🌟', 'tone': 'legend'},
+    {'kind': 'steal', 'pct': 25, 'label': 'Украсть 25% у лидера!', 'emoji': '🏴‍☠️', 'tone': 'steal'},
+    {'kind': 'swap', 'label': 'Обмен золотом с лидером!', 'emoji': '🔄', 'tone': 'swap'},
+]
+
+GOLD_CHEST_RISKY = [
+    {'kind': 'trap', 'pct': 15, 'label': 'Ловушка −15% 💣', 'emoji': '💣', 'tone': 'bad'},
+    {'kind': 'nothing', 'label': 'Пустой сундук 💨', 'emoji': '💨', 'tone': 'neutral'},
+]
+
+
+def _roll_gold_chests() -> list[dict[str, Any]]:
+    """Генерирует 3 уникальных сундука (как в Blooket Gold Quest: всегда минимум 2 приятных и шанс на ловушку/кражу)."""
+    positives = random.sample(GOLD_CHEST_POSITIVE, 2)
+    if random.random() < 0.55:
+        third = random.choice(GOLD_CHEST_RISKY)
+    else:
+        remaining = [c for c in GOLD_CHEST_POSITIVE if c not in positives]
+        third = random.choice(remaining)
+    chests = [dict(positives[0]), dict(positives[1]), dict(third)]
+    random.shuffle(chests)
+    return chests
 
 
 @dataclass
@@ -46,6 +76,18 @@ class LivePlayer:
     connected: bool = True
     last_points: int = 0
     last_correct: bool | None = None
+    prev_rank: int = 0
+    # Бустеры (по 1 разу за игру)
+    pu_5050: bool = True
+    pu_double: bool = True
+    pu_shield: bool = True
+    active_double: bool = False
+    active_shield: bool = False
+    shield_saved: bool = False
+    # Blooket Gold Quest — ожидание выбора 1 из 3 сундуков
+    pending_chest: bool = False
+    pending_chest_q: int = -1
+    last_chest_text: str = ''
 
 
 @dataclass
@@ -53,7 +95,7 @@ class LiveRoom:
     pin: str
     host_secret: str
     title: str
-    mode: str  # classic | race | boss
+    mode: str  # gold | classic | race | boss
     time_per_question: int
     double_last: bool
     questions: list[dict[str, Any]]
@@ -74,6 +116,7 @@ class LiveRoom:
     last_boss_event: dict[str, Any] = field(default_factory=dict)
     timer_task: Any = None
     bot_task: Any = None
+    chest_reveal_task: Any = None
 
     def leaderboard(self, limit: int = 50):
         rows = sorted(
@@ -104,7 +147,7 @@ class LiveRoom:
         ]
 
     def cancel_tasks(self):
-        for attr in ('timer_task', 'bot_task'):
+        for attr in ('timer_task', 'bot_task', 'chest_reveal_task'):
             t = getattr(self, attr, None)
             if t and not t.done():
                 t.cancel()
@@ -182,9 +225,9 @@ class LiveQuizCreateView(APIView):
 
         test_id = request.data.get('test_id')
         title = str(request.data.get('title') or '').strip()
-        mode = str(request.data.get('mode') or 'classic').lower()
-        if mode not in ('classic', 'race', 'boss'):
-            mode = 'classic'
+        mode = str(request.data.get('mode') or 'gold').lower()
+        if mode not in ('gold', 'classic', 'race', 'boss'):
+            mode = 'gold'
         try:
             tpq = max(8, min(60, int(request.data.get('time_per_question') or 20)))
         except (TypeError, ValueError):
@@ -318,13 +361,19 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
                 p = room.players[self.player_id]
                 lb = room.leaderboard()
                 rank = next((r['rank'] for r in lb if r['id'] == self.player_id), len(lb))
+                rank_delta = (p.prev_rank - rank) if p.prev_rank > 0 else 0
                 payload['me'] = {
                     'correct': p.last_correct,
                     'points_gained': p.last_points,
                     'total_score': p.score,
                     'streak': p.streak,
                     'rank': rank,
+                    'rank_delta': rank_delta,
+                    'shield_saved': p.shield_saved,
                     'answered': self.player_id in room.answers,
+                    'chest_text': p.last_chest_text,
+                    'pending_chest': p.pending_chest,
+                    'powerups': {'5050': p.pu_5050, 'double': p.pu_double, 'shield': p.pu_shield},
                 }
         await self.send_json(payload)
 
@@ -367,7 +416,7 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
             if not name:
                 await self.send_json({'type': 'error', 'message': 'Введи имя'})
                 return
-            avatar = str(msg.get('avatar') or '🦅')[:4]
+            avatar = str(msg.get('avatar') or 'av:fox:none:blook')[:48]
             if room.state == 'finished':
                 await self.send_json({'type': 'error', 'message': 'Игра уже завершена'})
                 return
@@ -384,6 +433,7 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
                 'mode': room.mode,
                 'state': room.state,
                 'questions_count': len(room.questions),
+                'powerups': {'5050': True, 'double': True, 'shield': True},
             })
             # Если подключился во время вопроса — сразу шлём текущий вопрос
             if room.state == 'question' and 0 <= room.q_index < len(room.questions):
@@ -402,6 +452,52 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
             await self._broadcast({'type': 'players_update', 'players': room.player_list()})
             return
 
+        # --- ЖИВЫЕ РЕАКЦИИ (летят на проектор учителя) ---
+        if mtype == 'reaction' and self.role == 'player' and self.player_id:
+            p = room.players.get(self.player_id)
+            em = str(msg.get('emoji') or '🔥')[:4]
+            if p and em in ('🔥', '👏', '😂', '🚀', '❤️', '⚡', '🤯', '🎉'):
+                await self._broadcast({'type': 'reaction', 'emoji': em, 'name': p.name, 'avatar': p.avatar})
+            return
+
+        # --- БУСТЕРЫ ИГРОКА (50/50, ×2 Ставка, Щит серии) ---
+        if mtype == 'use_powerup' and self.role == 'player' and self.player_id:
+            if room.state != 'question' or self.player_id in room.answers:
+                return
+            p = room.players.get(self.player_id)
+            if not p:
+                return
+            kind = str(msg.get('kind') or '')
+            if kind == '5050' and p.pu_5050:
+                q = room.questions[room.q_index]
+                wrongs = [i for i in range(len(q['options'])) if i not in q['correct']]
+                if len(wrongs) >= 2:
+                    p.pu_5050 = False
+                    hide = random.sample(wrongs, min(2, len(wrongs)))
+                    await self.send_json({
+                        'type': 'powerup_ok',
+                        'kind': '5050',
+                        'hide': hide,
+                        'powerups': {'5050': p.pu_5050, 'double': p.pu_double, 'shield': p.pu_shield},
+                    })
+            elif kind == 'double' and p.pu_double and not p.active_double:
+                p.pu_double = False
+                p.active_double = True
+                await self.send_json({
+                    'type': 'powerup_ok',
+                    'kind': 'double',
+                    'powerups': {'5050': p.pu_5050, 'double': p.pu_double, 'shield': p.pu_shield},
+                })
+            elif kind == 'shield' and p.pu_shield and not p.active_shield:
+                p.pu_shield = False
+                p.active_shield = True
+                await self.send_json({
+                    'type': 'powerup_ok',
+                    'kind': 'shield',
+                    'powerups': {'5050': p.pu_5050, 'double': p.pu_double, 'shield': p.pu_shield},
+                })
+            return
+
         # --- ОТВЕТ ИГРОКА ---
         if mtype == 'answer' and self.role == 'player' and self.player_id:
             if room.state != 'question' or self.player_id in room.answers:
@@ -411,7 +507,76 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
             except (TypeError, ValueError):
                 return
             await self._record_answer(room, self.player_id, opt)
-            await self.send_json({'type': 'answer_ack', 'option': opt})
+            p = room.players.get(self.player_id)
+            if room.state == 'question' or (room.mode == 'gold' and p and p.pending_chest):
+                ack_payload: dict[str, Any] = {
+                    'type': 'answer_ack',
+                    'option': opt,
+                    'chest_ready': bool(p and p.pending_chest),
+                }
+                if room.mode == 'gold' and p:
+                    ack_payload['correct'] = p.last_correct
+                    ack_payload['total_score'] = p.score
+                await self.send_json(ack_payload)
+            return
+
+        # --- ВЫБОР СУНДУКА В РЕЖИМЕ «ЗОЛОТАЯ ЛИХОРАДКА» (Blooket Gold Quest) ---
+        if mtype == 'open_chest' and self.role == 'player' and self.player_id:
+            if room.mode != 'gold' or room.state not in ('question', 'reveal'):
+                return
+            p = room.players.get(self.player_id)
+            if not p or not p.pending_chest or p.pending_chest_q != room.q_index:
+                return
+            try:
+                choice = int(msg.get('choice'))
+            except (TypeError, ValueError):
+                choice = 0
+            choice = max(0, min(2, choice))
+            p.pending_chest = False
+
+            chests = _roll_gold_chests()
+            picked = chests[choice]
+            delta, event_text = self._apply_gold_chest(room, p, picked)
+            p.last_points += delta
+            p.last_chest_text = event_text
+
+            await self.send_json({
+                'type': 'chest_result',
+                'choice': choice,
+                'chests': chests,
+                'picked': picked,
+                'delta': delta,
+                'total_score': p.score,
+                'event_text': event_text,
+            })
+            await self._broadcast({
+                'type': 'gold_event',
+                'text': event_text,
+                'emoji': picked.get('emoji', '🪙'),
+                'tone': picked.get('tone', 'good'),
+                'player_name': p.name,
+                'player_avatar': p.avatar,
+                'leaderboard': room.leaderboard(20),
+            })
+
+            # Если все уже ответили и никто больше не выбирает сундук — ждём 2.3 сек (чтобы увидеть 3 сундука) и раскрываем итоги!
+            if room.state == 'question':
+                active_count = sum(1 for pl in room.players.values() if pl.connected or pl.is_bot)
+                pending_chests = sum(1 for pl in room.players.values() if pl.connected and not pl.is_bot and pl.pending_chest)
+                if active_count > 0 and len(room.answers) >= active_count and pending_chests == 0:
+                    expected_idx = room.q_index
+                    if room.chest_reveal_task and not room.chest_reveal_task.done():
+                        room.chest_reveal_task.cancel()
+
+                    async def _delayed_reveal(q_idx: int):
+                        try:
+                            await asyncio.sleep(2.3)
+                            if room.state == 'question' and room.q_index == q_idx:
+                                await self._reveal_question(room)
+                        except asyncio.CancelledError:
+                            pass
+
+                    room.chest_reveal_task = asyncio.create_task(_delayed_reveal(expected_idx))
             return
 
         # --- КОМАНДЫ ВЕДУЩЕГО ---
@@ -453,6 +618,56 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
             await self._finish_game(room)
             return
 
+    def _apply_gold_chest(self, room: LiveRoom, p: LivePlayer, picked: dict[str, Any]) -> tuple[int, str]:
+        """Применяет эффект открытого сундука (Blooket Gold Quest) и возвращает (delta, event_text)."""
+        kind = picked.get('kind', 'gold')
+        others = [pl for pl in room.players.values() if pl.id != p.id and (pl.connected or pl.is_bot)]
+        top_other = max(others, key=lambda pl: pl.score) if others else None
+
+        if kind == 'gold':
+            amt = int(picked.get('amount') or 250)
+            p.score += amt
+            return amt, f'{p.name} нашёл сундук: +{amt} 🪙!'
+
+        if kind == 'double':
+            gain = max(200, p.score)
+            p.score += gain
+            return gain, f'{p.name} открыл ×2 Золота (+{gain} 🪙)!'
+
+        if kind == 'triple':
+            gain = max(400, p.score * 2)
+            p.score += gain
+            return gain, f'{p.name} выбил ЛЕГЕНДАРНЫЙ ×3 (+{gain} 🪙)!'
+
+        if kind == 'steal':
+            if top_other and top_other.score >= 100:
+                pct = int(picked.get('pct') or 25)
+                stolen = max(50, int(round(top_other.score * (pct / 100.0))))
+                stolen = min(stolen, top_other.score)
+                top_other.score -= stolen
+                p.score += stolen
+                return stolen, f'🏴‍☠️ {p.name} украл {stolen} 🪙 у {top_other.name}!'
+            p.score += 400
+            return 400, f'🎁 {p.name} нашёл тайный клад: +400 🪙!'
+
+        if kind == 'swap':
+            if top_other and top_other.score > p.score:
+                old_my = p.score
+                old_top = top_other.score
+                p.score = old_top
+                top_other.score = old_my
+                return (old_top - old_my), f'🔄 {p.name} обменялся золотом с {top_other.name} ({old_top} 🪙)!'
+            p.score += 500
+            return 500, f'👑 {p.name} и так лидер — бонус +500 🪙!'
+
+        if kind == 'trap':
+            pct = int(picked.get('pct') or 15)
+            loss = int(round(p.score * (pct / 100.0)))
+            p.score = max(0, p.score - loss)
+            return -loss, f'💣 {p.name} попал в ловушку (−{loss} 🪙)!'
+
+        return 0, f'💨 {p.name} открыл пустой сундук (+0 🪙)'
+
     async def _record_answer(self, room: LiveRoom, pid: str, opt: int):
         if room.state != 'question' or pid in room.answers:
             return
@@ -466,22 +681,70 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
         if not p:
             return
         pts = 0
+        bot_gold_event = None
         if correct:
-            speed_ratio = max(0.0, min(1.0, 1.0 - (elapsed_ms / limit_ms) * 0.55))
-            base_pts = int(round(500 + 500 * speed_ratio))
-            streak_bonus = min(300, p.streak * 60)
-            mult = 2 if (room.double_last and room.q_index == len(room.questions) - 1) else 1
-            pts = (base_pts + streak_bonus) * mult
-            p.score += pts
-            p.streak += 1
-            p.max_streak = max(p.max_streak, p.streak)
-            p.correct_count += 1
-            p.total_time_ms += elapsed_ms
+            if room.mode == 'gold':
+                mult = 2 if (room.double_last and room.q_index == len(room.questions) - 1) else 1
+                if p.active_double:
+                    mult *= 2
+                base_gold = (100 + min(150, p.streak * 30)) * mult
+                pts = base_gold
+                p.score += pts
+                p.streak += 1
+                p.max_streak = max(p.max_streak, p.streak)
+                p.correct_count += 1
+                p.total_time_ms += elapsed_ms
+                if not p.is_bot:
+                    p.pending_chest = True
+                    p.pending_chest_q = room.q_index
+                else:
+                    # Боты в Gold Quest тоже открывают сундук, чтобы таблица жила и менялась!
+                    bot_pool = [
+                        {'kind': 'gold', 'amount': 250, 'emoji': '🪙', 'tone': 'good'},
+                        {'kind': 'gold', 'amount': 500, 'emoji': '💰', 'tone': 'great'},
+                        {'kind': 'double', 'emoji': '✨', 'tone': 'epic'},
+                        {'kind': 'trap', 'pct': 15, 'emoji': '💣', 'tone': 'bad'},
+                        {'kind': 'nothing', 'emoji': '💨', 'tone': 'neutral'},
+                    ]
+                    bot_pick = random.choice(bot_pool)
+                    b_delta, b_text = self._apply_gold_chest(room, p, bot_pick)
+                    pts += b_delta
+                    p.last_chest_text = b_text
+                    bot_gold_event = {
+                        'type': 'gold_event',
+                        'text': b_text,
+                        'emoji': bot_pick['emoji'],
+                        'tone': bot_pick['tone'],
+                        'player_name': p.name,
+                        'player_avatar': p.avatar,
+                        'leaderboard': room.leaderboard(20),
+                    }
+            else:
+                speed_ratio = max(0.0, min(1.0, 1.0 - (elapsed_ms / limit_ms) * 0.55))
+                base_pts = int(round(500 + 500 * speed_ratio))
+                streak_bonus = min(300, p.streak * 60)
+                mult = 2 if (room.double_last and room.q_index == len(room.questions) - 1) else 1
+                if p.active_double:
+                    mult *= 2
+                pts = (base_pts + streak_bonus) * mult
+                p.score += pts
+                p.streak += 1
+                p.max_streak = max(p.max_streak, p.streak)
+                p.correct_count += 1
+                p.total_time_ms += elapsed_ms
         else:
-            p.streak = 0
+            if p.active_shield and p.streak > 0:
+                p.shield_saved = True
+            else:
+                p.streak = 0
+        p.active_double = False
+        p.active_shield = False
         p.last_points = pts
         p.last_correct = correct
         room.answers[pid] = {'option': opt, 'elapsed_ms': elapsed_ms, 'correct': correct, 'pts': pts}
+
+        if bot_gold_event:
+            await self._broadcast(bot_gold_event)
 
         active_count = sum(1 for pl in room.players.values() if pl.connected or pl.is_bot)
         await self._broadcast({
@@ -489,8 +752,9 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
             'answered': len(room.answers),
             'total_players': active_count,
         })
-        # Если все активные участники уже ответили — раскрываем ответ без ожидания конца таймера!
-        if active_count > 0 and len(room.answers) >= active_count:
+        # Если все активные участники уже ответили И никто не открывает сундук — раскрываем ответ!
+        pending_chests = sum(1 for pl in room.players.values() if pl.connected and not pl.is_bot and pl.pending_chest)
+        if active_count > 0 and len(room.answers) >= active_count and pending_chests == 0:
             await self._reveal_question(room)
 
     async def _start_next_question(self, room: LiveRoom):
@@ -504,9 +768,19 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
         room.state = 'question'
         room.q_started_at = time.time()
         room.answers = {}
+        # Запоминаем предыдущий рейтинг игроков для показа дельты («▲ +2 места!»)
+        prev_lb = room.leaderboard()
+        prev_rank_map = {r['id']: r['rank'] for r in prev_lb}
         for p in room.players.values():
+            p.prev_rank = prev_rank_map.get(p.id, 0)
             p.last_points = 0
             p.last_correct = None
+            p.active_double = False
+            p.active_shield = False
+            p.shield_saved = False
+            p.pending_chest = False
+            p.pending_chest_q = -1
+            p.last_chest_text = ''
 
         q = room.questions[next_idx]
         is_double = room.double_last and next_idx == len(room.questions) - 1
@@ -627,7 +901,10 @@ class LiveQuizConsumer(AsyncWebsocketConsumer):
         # MVP номинации
         mvps = []
         if lb:
-            mvps.append({'badge': '🏆 Чемпион', 'name': lb[0]['name'], 'avatar': lb[0]['avatar'], 'val': f"{lb[0]['score']} очков"})
+            if room.mode == 'gold':
+                mvps.append({'badge': '👑 Король Золота', 'name': lb[0]['name'], 'avatar': lb[0]['avatar'], 'val': f"{lb[0]['score']} 🪙 золота"})
+            else:
+                mvps.append({'badge': '🏆 Чемпион', 'name': lb[0]['name'], 'avatar': lb[0]['avatar'], 'val': f"{lb[0]['score']} очков"})
             best_streak = max(lb, key=lambda x: x['max_streak'])
             if best_streak['max_streak'] >= 2:
                 mvps.append({'badge': '🔥 Огненная серия', 'name': best_streak['name'], 'avatar': best_streak['avatar'], 'val': f"×{best_streak['max_streak']} подряд"})

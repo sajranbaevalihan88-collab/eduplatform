@@ -21,13 +21,13 @@ def _allowed_partners(user):
         return U.objects.filter(role__in=('teacher', 'parent', 'admin')).exclude(me).distinct()
     if role == 'teacher':
         from apps.classroom.models import Enrollment
-        # родители учеников моих классов + админы
+        # родители учеников моих классов + коллеги-учителя + админы
         stu_ids = (Enrollment.objects.filter(classroom__owner=user)
                    .exclude(access_granted=False).values('student_id'))
         parents = U.objects.filter(parent_links__student_id__in=models.Subquery(stu_ids))
-        return (parents | U.objects.filter(role='admin')).exclude(me).distinct()
+        colleagues = U.objects.filter(role__in=('teacher', 'admin'))
+        return (parents | colleagues).exclude(me).distinct()
     if role == 'parent':
-        from apps.classroom.models import Classroom
         # учителя классов моих детей + админы
         child_ids = user.parent_links.values('student_id')
         teachers = (U.objects.filter(owned_classrooms__enrollments__student_id__in=models.Subquery(child_ids))
@@ -46,8 +46,42 @@ def _check_peer(user, peer_id):
                            '(родитель ↔ учитель классов ребёнка / админ)')
 
 
+def _via_children_map(user, partner_objs):
+    """Для удобства в чате: к каким ученикам относится собеседник."""
+    from apps.classroom.models import Enrollment
+    role = getattr(user, 'role', '')
+    out = {}
+    if role == 'parent':
+        links = list(user.parent_links.select_related('student'))
+        for p in partner_objs:
+            if getattr(p, 'role', '') != 'teacher':
+                continue
+            kids = []
+            for ln in links:
+                if Enrollment.objects.filter(classroom__owner=p, student_id=ln.student_id).exclude(access_granted=False).exists():
+                    kids.append(ln.student.first_name or ln.student.username)
+            if kids:
+                out[p.id] = kids
+    elif role == 'teacher':
+        parent_ids = [p.id for p in partner_objs if getattr(p, 'role', '') == 'parent']
+        if parent_ids:
+            enr = (Enrollment.objects.filter(classroom__owner=user)
+                   .exclude(access_granted=False)
+                   .select_related('student', 'classroom'))
+            stu_map = {}
+            for e in enr:
+                stu_map.setdefault(e.student_id, []).append(
+                    f"{e.student.first_name or e.student.username} ({e.classroom.title})"
+                )
+            from apps.accounts.models import ParentLink
+            for pl in ParentLink.objects.filter(parent_id__in=parent_ids, student_id__in=stu_map.keys()):
+                out.setdefault(pl.parent_id, []).extend(stu_map.get(pl.student_id, []))
+    return out
+
+
 class MessageViewSet(viewsets.ReadOnlyModelViewSet):
     """GET /messages/?with_user=<id> — переписка; POST /messages/ — отправить;
+    PATCH /messages/<id>/ — редактировать своё сообщение; DELETE /messages/<id>/ — удалить;
     /messages/threads/ — список диалогов; /messages/contacts/ — кому можно писать."""
     serializer_class = MessageSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -56,7 +90,6 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         u = self.request.user
         qs = Message.objects.filter(models.Q(sender=u) | models.Q(recipient=u))
-        # не показываем сообщения, удалённые «у себя» текущим пользователем
         return (qs.exclude(models.Q(sender=u, del_for_sender=True) |
                            models.Q(recipient=u, del_for_recipient=True))
                 .select_related('sender', 'recipient').order_by('created_at'))
@@ -70,7 +103,6 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
         qs = self.get_queryset().filter(
             models.Q(sender_id=peer_id) | models.Q(recipient_id=peer_id))[:500]
         data = self.get_serializer(qs, many=True).data
-        # открыл чат — прочитано как в WhatsApp: доставлено + прочитано
         now = timezone.now()
         (Message.objects.filter(recipient=request.user, sender_id=peer_id, read_at__isnull=True)
          .update(read_at=now,
@@ -91,34 +123,57 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
         msg = Message.objects.create(sender=request.user, recipient=peer_user, text=text)
         return Response(self.get_serializer(msg).data, status=status.HTTP_201_CREATED)
 
+    def partial_update(self, request, pk=None):
+        """PATCH /messages/<pk>/ {text} — редактирование своего сообщения."""
+        u = request.user
+        msg = get_object_or_404(Message, sender=u, pk=pk)
+        if msg.is_deleted:
+            return Response({'error': 'Нельзя редактировать удалённое сообщение'}, status=status.HTTP_400_BAD_REQUEST)
+        new_text = (request.data.get('text') or '').strip()
+        if not new_text:
+            return Response({'text': 'Пустое сообщение'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(new_text) > 3000:
+            return Response({'text': 'Не длиннее 3000 символов'}, status=status.HTTP_400_BAD_REQUEST)
+        msg.text = new_text
+        msg.save(update_fields=['text'])
+        return Response(self.get_serializer(msg).data)
+
     @action(detail=False, methods=['get'])
     def threads(self, request):
-        """Диалоги текущего пользователя: партнёр, последнее сообщение, непрочитанные."""
+        """Диалоги текущего пользователя: партнёр, имя, последнее сообщение, статус, непрочитанные."""
         u = request.user
-        # получатель увидел список диалогов → «доставлено» (read_at не трогаем)
         Message.objects.filter(recipient=u, delivered_at__isnull=True).update(
             delivered_at=timezone.now())
-        msgs = list(self.get_queryset())  # объём сообщений учителя/родителя невелик — питон проще памяти БД
-        conv = {}  # partner_id -> {'last': msg, 'unread': int}
+        msgs = list(self.get_queryset())
+        conv = {}
         for m in msgs:
             partner_id = m.recipient_id if m.sender_id == u.id else m.sender_id
             rec = conv.setdefault(partner_id, {'last': m, 'unread': 0})
             if m.created_at > rec['last'].created_at:
                 rec['last'] = m
-            # удалённые у всех сообщения непрочитанными не считаем
             if m.recipient_id == u.id and m.read_at is None and not m.is_deleted:
                 rec['unread'] += 1
         partners = get_user_model().objects.in_bulk([cid for cid in conv])
+        via_map = _via_children_map(u, list(partners.values()))
         data = []
         for pid, rec in conv.items():
             p = partners.get(pid)
             if not p:
                 continue
             last = rec['last']
-            data.append({'user': p.id, 'username': p.username, 'role': getattr(p, 'role', ''),
-                         'last_text': '' if last.is_deleted else last.text[:200],
-                         'last_at': last.created_at,
-                         'unread': rec['unread']})
+            last_status = 'read' if last.read_at else 'delivered' if last.delivered_at else 'sent'
+            data.append({
+                'user': p.id,
+                'username': p.username,
+                'first_name': getattr(p, 'first_name', '') or '',
+                'role': getattr(p, 'role', ''),
+                'last_text': '' if last.is_deleted else last.text[:200],
+                'last_sender': last.sender_id,
+                'last_status': last_status,
+                'last_at': last.created_at,
+                'unread': rec['unread'],
+                'via_children': via_map.get(p.id, []),
+            })
         data.sort(key=lambda r: r['last_at'] or r['last_at'], reverse=True)
         total_unread = sum(r['unread'] for r in data)
         return Response({'threads': data, 'unread_total': total_unread})
@@ -126,7 +181,6 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
     def destroy(self, request, pk=None):
         """DELETE /messages/<pk>/[?for_all=1] — удалить у себя или у всех (только отправитель)."""
         u = request.user
-        # 404, если не участник переписки (get_queryset не вернёт чужое)
         msg = get_object_or_404(Message, models.Q(sender=u) | models.Q(recipient=u), pk=pk)
         for_all = (request.query_params.get('for_all') or '').lower() in ('1', 'true')
         if for_all:
@@ -135,7 +189,7 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
             msg.is_deleted = True
             msg.text = ''
             msg.save(update_fields=['is_deleted', 'text'])
-        else:  # «удалить у себя»
+        else:
             field = 'del_for_sender' if msg.sender_id == u.id else 'del_for_recipient'
             setattr(msg, field, True)
             msg.save(update_fields=[field])
@@ -144,18 +198,17 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'])
     def contacts(self, request):
         """Кому мне можно написать (для выбора получателя)."""
-        qs = _allowed_partners(request.user).order_by('role', 'username')
-        from apps.classroom.models import Enrollment
+        qs = list(_allowed_partners(request.user).order_by('role', 'first_name', 'username'))
+        via_map = _via_children_map(request.user, qs)
         data = []
         for p in qs:
-            item = {'id': p.id, 'username': p.username, 'role': p.role,
-                    'first_name': p.first_name or ''}
-            if request.user.role == 'parent' and p.role == 'teacher':
-                # какие из моих детей учатся у этого учителя
-                item['via_children'] = [link.student.username
-                                        for link in request.user.parent_links.select_related('student')
-                                        if Enrollment.objects.filter(classroom__owner=p,
-                                                                     student_id=link.student_id)
-                                        .exclude(access_granted=False).exists()]
+            item = {
+                'id': p.id,
+                'username': p.username,
+                'role': p.role,
+                'first_name': p.first_name or '',
+            }
+            if via_map.get(p.id):
+                item['via_children'] = via_map[p.id]
             data.append(item)
         return Response(data)

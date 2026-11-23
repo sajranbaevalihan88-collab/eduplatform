@@ -1,494 +1,802 @@
-import { useEffect, useRef, useState } from 'react'
-import Editor from '@monaco-editor/react'
-import { Play, Database, Table2, Loader2, Download, CircleCheck, RefreshCw } from 'lucide-react'
-import { useLang } from '../context/LangContext'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import Editor, { type OnMount } from '@monaco-editor/react'
+import {
+  Play, PlayCircle, Database, Table2, Loader2, CircleCheck, RefreshCw, Plus, Trash2,
+  Sparkles, BookOpen, Download, SearchCode, AlertTriangle, ChevronDown, ChevronRight,
+  GitFork, KeyRound, Link2, Eye, X,
+} from 'lucide-react'
+import { toast } from '../context/UIContext'
+import {
+  SqlLabSession,
+  type SqlExecOutcome, type TableSchemaInfo,
+} from '../components/sql/sqlEngine'
+import {
+  SQL_PRESETS, SQL_SNIPPETS, makeCellId,
+  type SqlPreset,
+} from '../components/sql/sqlPresets'
+import SqlResultTable from '../components/sql/SqlResultTable'
+import { ErDiagramSvg } from '../components/sql/SqlSchemaPanel'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Практика баз данных: настоящий SQLite (WASM sql.js) прямо в браузере.
-// Никакого бэкенда: «Выполнить» каждый раз пересобирает базу из поля «Схема
-// и данные», затем исполняет SQL-запрос — результат всегда детерминированный,
-// рассинхрона схемы и запроса не бывает.
-// sql.js грузится лениво (динамический импорт + отдельный чанк vendor-sql),
-// поэтому вес WASM не замедляет остальные страницы.
-// ─────────────────────────────────────────────────────────────────────────────
+const STORE_KEY = 'sqllab-pg-v3'
 
-type SqlRow = (string | number | Uint8Array | null)[]
-type SqlRes = { columns: string[]; values: SqlRow[] }
-interface SqlDbLike {
-  run(sql: string): void
-  exec(sql: string): SqlRes[]
-  getRowsModified(): number
-  close(): void
+interface SqlBlock {
+  id: string
+  title: string
+  sql: string
+  isSchema?: boolean
 }
-interface SqlEngineLike {
-  Database: new (data?: ArrayLike<number> | null) => SqlDbLike
+
+function presetToBlocks(preset: SqlPreset): SqlBlock[] {
+  return [
+    { id: makeCellId(), title: '1. Таблицы и данные (CREATE / INSERT)', sql: preset.schema, isSchema: true },
+    { id: makeCellId(), title: '2. SQL-запрос', sql: preset.query },
+  ]
 }
 
-const STORE_KEY = 'sqllab-state'
-const MAX_ROWS_SHOWN = 100
-
-const P_SCHOOL_SCHEMA = `-- Учебная база: ученики, предметы, оценки
-CREATE TABLE students (
-  id    INTEGER PRIMARY KEY,
-  name  TEXT    NOT NULL,
-  klass TEXT    NOT NULL
-);
-
-CREATE TABLE subjects (
-  id     INTEGER PRIMARY KEY,
-  title  TEXT    NOT NULL,
-  teacher TEXT   NOT NULL
-);
-
-CREATE TABLE grades (
-  student_id INTEGER NOT NULL REFERENCES students(id),
-  subject_id INTEGER NOT NULL REFERENCES subjects(id),
-  grade      INTEGER NOT NULL CHECK (grade BETWEEN 2 AND 5)
-);
-
-INSERT INTO students (name, klass) VALUES
-  ('Айдана', '7А'), ('Иван',   '7Б'),
-  ('Айбек',  '8А'), ('Мария',  '8А'),
-  ('Данияр', '7А'), ('Ольга',  '7Б');
-
-INSERT INTO subjects (title, teacher) VALUES
-  ('Математика',  'Токтогулова Г.'),
-  ('Информатика', 'Смирнова О.'),
-  ('Физика',      'Петров А.');
-
-INSERT INTO grades (student_id, subject_id, grade) VALUES
-  (1,1,5),(1,2,5),(1,3,4),
-  (2,1,4),(2,2,5),
-  (3,1,3),(3,3,4),
-  (4,2,5),(4,3,5),
-  (5,1,5),(5,3,3);`
-
-const P_SCHOOL_QUERY = `-- Средний балл каждого ученика по всем предметам
-SELECT s.name, s.klass,
-       ROUND(AVG(g.grade), 2) AS avg_grade,
-       COUNT(*)               AS n_subjects
-FROM grades g
-JOIN students s ON s.id = g.student_id
-GROUP BY s.id
-ORDER BY avg_grade DESC;`
-
-const P_LIB_SCHEMA = `-- Библиотека: книги и авторы
-CREATE TABLE authors (
-  id   INTEGER PRIMARY KEY,
-  name TEXT    NOT NULL
-);
-
-CREATE TABLE books (
-  id        INTEGER PRIMARY KEY,
-  title     TEXT    NOT NULL,
-  author_id INTEGER NOT NULL REFERENCES authors(id),
-  year      INTEGER NOT NULL,
-  price     REAL    NOT NULL
-);
-
-INSERT INTO authors (name) VALUES
-  ('Ч. Айтматов'), ('А. Пушкин'), ('Дж. Роулинг'), ('Л. Толстой');
-
-INSERT INTO books (title, author_id, year, price) VALUES
-  ('Белый пар',        1, 1970, 350),
-  ('Джамиля',          1, 1958, 280),
-  ('Евгений Онегин',   2, 1833, 420),
-  ('Гарри Поттер',     3, 1997, 950),
-  ('Война и мир',      4, 1869, 780);`
-
-const P_LIB_QUERY = `-- Книги с автором и ценой, дороже 300
-SELECT b.title        AS книга,
-       a.name         AS автор,
-       b.year         AS год,
-       b.price        AS цена
-FROM books b
-JOIN authors a ON a.id = b.author_id
-WHERE b.price > 300
-ORDER BY b.price DESC;`
-
-const P_SHOP_SCHEMA = `-- Магазин: товары и продажи
-CREATE TABLE products (
-  id     INTEGER PRIMARY KEY,
-  name   TEXT    NOT NULL,
-  price  REAL    NOT NULL,
-  stock  INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE sales (
-  id          INTEGER PRIMARY KEY,
-  product_id  INTEGER NOT NULL REFERENCES products(id),
-  qty         INTEGER NOT NULL CHECK (qty > 0),
-  sold_at     TEXT    NOT NULL
-);
-
-INSERT INTO products (name, price, stock) VALUES
-  ('Ноутбук', 55000, 8),
-  ('Мышь',     1200, 60),
-  ('Клавиатура', 3400, 25),
-  ('Монитор', 24000, 12);
-
-INSERT INTO sales (product_id, qty, sold_at) VALUES
-  (1, 2, '2026-10-01'), (1, 1, '2026-10-03'),
-  (2, 5, '2026-10-02'), (2, 3, '2026-10-05'),
-  (3, 2, '2026-10-04'),
-  (4, 1, '2026-10-05'), (4, 2, '2026-10-06');`
-
-const P_SHOP_QUERY = `-- Выручка по каждому товару (JOIN + GROUP BY)
-SELECT p.name                        AS товар,
-       SUM(s.qty)                    AS штук,
-       ROUND(SUM(s.qty * p.price),2) AS выручка
-FROM sales s
-JOIN products p ON p.id = s.product_id
-GROUP BY p.id
-ORDER BY выручка DESC;`
-
-const PRESETS = [
-  { id:'school', labelKey:'sql_ex_school', schema:P_SCHOOL_SCHEMA, query:P_SCHOOL_QUERY },
-  { id:'lib',    labelKey:'sql_ex_lib',    schema:P_LIB_SCHEMA,    query:P_LIB_QUERY },
-  { id:'shop',   labelKey:'sql_ex_shop',   schema:P_SHOP_SCHEMA,   query:P_SHOP_QUERY },
-] as const
-
-function loadState(): { schema: string; query: string } {
-  try{
+function loadSavedBlocks(): SqlBlock[] {
+  try {
     const raw = localStorage.getItem(STORE_KEY)
-    if(raw){
-      const p = JSON.parse(raw)
-      if(typeof p.schema==='string' && typeof p.query==='string') return p
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0]?.sql === 'string') {
+        return parsed
+      }
     }
-  }catch{ /* битый localStorage — берём пример по умолчанию */ }
-  return { schema: P_SCHOOL_SCHEMA, query: P_SCHOOL_QUERY }
+  } catch {}
+  return presetToBlocks(SQL_PRESETS[0])
 }
 
-function listTables(db: SqlDbLike): string[] {
-  try{
-    const r = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-    return r.length ? (r[0].values.map(v=>String(v[0]))) : []
-  }catch{ return [] }
+function calcEditorHeight(code: string, minH = 110, maxH = 340): number {
+  const lines = Math.max(4, code.split('\n').length)
+  return Math.min(maxH, Math.max(minH, lines * 19 + 20))
 }
 
-function toCsv(res: SqlRes): string {
-  const esc = (v: unknown) => {
-    const s = v == null ? '' : String(v)
-    return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
-  }
-  const rows = [res.columns.map(esc).join(',')].concat(res.values.map(r => r.map(esc).join(',')))
-  return '\ufeff' + rows.join('\n') // BOM: Excel открывает кириллицу без кракозябр
-}
+const PG_KEYWORDS = [
+  'SELECT', 'FROM', 'WHERE', 'JOIN', 'LEFT JOIN', 'INNER JOIN', 'ON',
+  'GROUP BY', 'HAVING', 'ORDER BY', 'LIMIT', 'DISTINCT', 'AS', 'WITH',
+  'INSERT INTO', 'VALUES', 'RETURNING', 'UPDATE', 'SET', 'DELETE FROM',
+  'CREATE TABLE', 'CREATE VIEW', 'DROP TABLE IF EXISTS', 'ALTER TABLE',
+  'SERIAL PRIMARY KEY', 'INTEGER', 'TEXT', 'NUMERIC', 'BOOLEAN', 'DATE', 'TIMESTAMPTZ', 'JSONB',
+  'NOT NULL', 'REFERENCES', 'CHECK', 'DEFAULT', 'UNIQUE',
+  'COUNT(*)', 'SUM()', 'AVG()', 'MIN()', 'MAX()', 'ROUND()', 'COALESCE()',
+  'RANK() OVER ()', 'ROW_NUMBER() OVER ()', 'STRING_AGG()', 'ILIKE', 'EXPLAIN ANALYZE',
+]
 
-function downloadCsv(name: string, res: SqlRes){
-  const blob = new Blob([toCsv(res)], { type:'text/csv;charset=utf-8' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = name
-  a.click()
-  URL.revokeObjectURL(a.href)
-}
+let monacoRegistered = false
+const completionTablesRef: { current: TableSchemaInfo[] } = { current: [] }
 
-function cellText(v: string | number | Uint8Array | null): string {
-  if(v == null) return 'NULL'
-  if(v instanceof Uint8Array) return `BLOB(${v.length}Б)`
-  return String(v)
-}
-
-export default function SqlLab(){
-  const { t } = useLang()
-  const [phase, setPhase] = useState<'loading'|'ready'|'fail'>('loading')
+export default function SqlLab() {
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'fail'>('loading')
   const [initErr, setInitErr] = useState('')
-  const [schema, setSchema] = useState(loadState().schema)
-  const [query, setQuery] = useState(loadState().query)
-  // Результаты НЕ храним в localStorage: они всегда пересчитываются на «Выполнить».
-  const [results, setResults] = useState<SqlRes[]>([])
-  const [runErr, setRunErr] = useState('')
-  const [rowsChanged, setRowsChanged] = useState<number | null>(null)
-  const [tables, setTables] = useState<string[]>([])
-  const [ms, setMs] = useState<number | null>(null)
-  const [running, setRunning] = useState(false)
-  // Мобильные табы: на телефоне стек «схема+запрос» не влезает — переключаемся
-  // между панелями; на десктопе (lg+) обе панели рядом, табы не рисуются.
-  const [mobTab, setMobTab] = useState<'schema'|'run'>('run')
-  const engineRef = useRef<SqlEngineLike | null>(null)
-  const runRef = useRef<(s?: string, q?: string) => void>(()=>{})
+  const [pgVersion, setPgVersion] = useState('PostgreSQL')
 
-  // Ленивая загрузка SQLite при заходе на страницу
-  useEffect(()=>{
-    let cancelled = false
-    ;(async()=>{
-      try{
-        const initmod = await import('sql.js') as unknown as { default?: (cfg?: object)=>Promise<SqlEngineLike> } & ((cfg?: object)=>Promise<SqlEngineLike>)
-        const wasmUrl = (await import('sql.js/dist/sql-wasm.wasm?url')).default
-        const engine = await (typeof initmod.default==='function' ? initmod.default : initmod)({ locateFile: () => wasmUrl })
-        if(cancelled) return
-        engineRef.current = engine
-        setPhase('ready')
-        // Первый прогон сразу: пользователь видит живые таблицы, а не пустоту
-        const st = loadState()
-        runRef.current(st.schema, st.query)
-      }catch(e){
-        if(cancelled) return
-        setInitErr(String((e as Error)?.message || e))
-        setPhase('fail')
+  const [blocks, setBlocks] = useState<SqlBlock[]>(() => loadSavedBlocks())
+  const [outcomes, setOutcomes] = useState<Record<string, SqlExecOutcome>>({})
+  const [runningId, setRunningId] = useState<string | null>(null)
+  const [runningAll, setRunningAll] = useState(false)
+  const [collapsedSchema, setCollapsedSchema] = useState(false)
+
+  const [tables, setTables] = useState<TableSchemaInfo[]>([])
+  const [inspectedTable, setInspectedTable] = useState<string | null>(null)
+  const [showErModal, setShowErModal] = useState(false)
+  const [selectedErTable, setSelectedErTable] = useState<string | null>(null)
+  const [openMenu, setOpenMenu] = useState<null | 'presets' | 'snippets'>(null)
+
+  const sessionRef = useRef<SqlLabSession | null>(null)
+  const blocksRef = useRef(blocks)
+  blocksRef.current = blocks
+  const dbInitializedRef = useRef(false)
+
+  useEffect(() => {
+    completionTablesRef.current = tables
+  }, [tables])
+
+  useEffect(() => {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(blocks)) } catch {}
+  }, [blocks])
+
+  useEffect(() => {
+    if (!openMenu) return
+    const close = () => setOpenMenu(null)
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [openMenu])
+
+  const refreshSchema = useCallback(async () => {
+    const s = sessionRef.current
+    if (!s) return
+    const list = await s.inspectSchema()
+    setTables(list)
+  }, [])
+
+  // Пересобрать чистую БД и выполнить все блоки сверху вниз
+  const runAllBlocks = useCallback(async (overrideBlocks?: SqlBlock[]) => {
+    const s = sessionRef.current
+    if (!s) return
+    const list = overrideBlocks ?? blocksRef.current
+    setRunningAll(true)
+    setOutcomes({})
+    try {
+      await s.reset()
+      setPgVersion(s.versionLabel)
+      dbInitializedRef.current = true
+      const next: Record<string, SqlExecOutcome> = {}
+      for (const blk of list) {
+        if (!blk.sql.trim()) continue
+        setRunningId(blk.id)
+        const out = await s.execute(blk.sql)
+        next[blk.id] = out
+        setOutcomes({ ...next })
+        if (out.error && blk.isSchema) break
       }
-    })()
-    return ()=>{ cancelled = true }
-  },[])
+      await refreshSchema()
+    } finally {
+      setRunningId(null)
+      setRunningAll(false)
+    }
+  }, [refreshSchema])
 
-  useEffect(()=>{
-    try{ localStorage.setItem(STORE_KEY, JSON.stringify({ schema, query })) }catch{ /* переполнение — не критично */ }
-  },[schema, query])
+  // Умный запуск одного блока:
+  // • Если это Блок 1 (схема) — сбрасываем БД и создаём таблицы заново (никаких "already exists"!)
+  // • Если это запрос (Блок 2+) и БД ещё пустая — сначала прогоняем Блок 1, затем этот запрос
+  const runOneBlock = useCallback(async (blockId: string, explain = false) => {
+    const s = sessionRef.current
+    if (!s) return
+    const list = blocksRef.current
+    const idx = list.findIndex(b => b.id === blockId)
+    if (idx < 0) return
+    const blk = list[idx]
+    if (!blk.sql.trim()) return
 
-  // Выполнить = пересобрать базу из схемы + исполнить запрос (без рассинхрона)
-  runRef.current = (schemaArg?: string, queryArg?: string)=>{
-    const engine = engineRef.current
-    if(!engine) return
-    const s = schemaArg ?? schema
-    const q = queryArg ?? query
-    setRunning(true); setRunErr(''); setRowsChanged(null); setResults([])
-    // На телефоне после выполнения сразу показать результат
-    try{ if(window.innerWidth < 1024) setMobTab('run') }catch{}
-    const t0 = performance.now()
-    const db = new engine.Database()
-    try{
-      if(s.trim()) db.run(s)
-      setTables(listTables(db))
-      if(q.trim()){
-        const res = db.exec(q)
-        setResults(Array.isArray(res) ? res : [])
-        try{ setRowsChanged(db.getRowsModified()) }catch{}
+    setRunningId(blockId)
+    try {
+      const isFirstSchema = idx === 0 && (blk.isSchema || /\bCREATE\s+TABLE\b/i.test(blk.sql))
+      if (isFirstSchema) {
+        await s.reset()
+        dbInitializedRef.current = true
+        const out = await s.execute(blk.sql)
+        setOutcomes(prev => ({ ...prev, [blk.id]: out }))
+        await refreshSchema()
+        return
       }
-      setMs(Math.round(performance.now() - t0))
-    }catch(e){
-      setResults([]); setRunErr(String((e as Error)?.message || e))
-      setMs(Math.round(performance.now() - t0))
-    }finally{
-      setRunning(false)
-      try{ db.close() }catch{}
+
+      if (!dbInitializedRef.current && list[0] && list[0].id !== blk.id && list[0].sql.trim()) {
+        await s.reset()
+        dbInitializedRef.current = true
+        const schemaOut = await s.execute(list[0].sql)
+        setOutcomes(prev => ({ ...prev, [list[0].id]: schemaOut }))
+        if (schemaOut.error) {
+          await refreshSchema()
+          return
+        }
+      }
+
+      const sqlToRun = explain ? `EXPLAIN ANALYZE\n${blk.sql}` : blk.sql
+      const out = await s.execute(sqlToRun)
+      setOutcomes(prev => ({ ...prev, [blk.id]: out }))
+      await refreshSchema()
+    } finally {
+      setRunningId(null)
+    }
+  }, [refreshSchema])
+
+  const runOneRef = useRef(runOneBlock)
+  runOneRef.current = runOneBlock
+
+  // Старт настоящего PostgreSQL (PGlite WASM) при открытии страницы
+  const bootPostgres = useCallback(async (initialBlocks?: SqlBlock[]) => {
+    setPhase('loading')
+    setInitErr('')
+    try {
+      if (!sessionRef.current) sessionRef.current = new SqlLabSession()
+      const ver = await sessionRef.current.init('postgres')
+      setPgVersion(ver)
+      setPhase('ready')
+      await runAllBlocks(initialBlocks ?? blocksRef.current)
+    } catch (e: any) {
+      setInitErr(String(e?.message || e))
+      setPhase('fail')
+    }
+  }, [runAllBlocks])
+
+  useEffect(() => {
+    bootPostgres()
+    return () => {
+      sessionRef.current?.destroy()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Загрузить готовый пример
+  const applyPreset = async (preset: SqlPreset) => {
+    setOpenMenu(null)
+    setInspectedTable(null)
+    setCollapsedSchema(false)
+    const nextBlocks = presetToBlocks(preset)
+    setBlocks(nextBlocks)
+    blocksRef.current = nextBlocks
+    await runAllBlocks(nextBlocks)
+    toast(`Загружен пример «${preset.name}»`, 'success')
+  }
+
+  // Пустая база для самостоятельной работы с нуля
+  const startEmpty = async () => {
+    setOpenMenu(null)
+    setInspectedTable(null)
+    setCollapsedSchema(false)
+    const emptyBlocks: SqlBlock[] = [
+      {
+        id: makeCellId(),
+        title: '1. Создание таблиц (CREATE TABLE / INSERT)',
+        isSchema: true,
+        sql: `-- Создайте свою таблицу в PostgreSQL\nCREATE TABLE users (\n  id   SERIAL PRIMARY KEY,\n  name TEXT NOT NULL,\n  age  INTEGER\n);\n\nINSERT INTO users (name, age) VALUES ('Алихан', 18), ('Айдана', 19);`,
+      },
+      {
+        id: makeCellId(),
+        title: '2. SQL-запрос',
+        sql: `SELECT * FROM users ORDER BY id;`,
+      },
+    ]
+    setBlocks(emptyBlocks)
+    blocksRef.current = emptyBlocks
+    await runAllBlocks(emptyBlocks)
+    toast('Открыта чистая база PostgreSQL', 'info')
+  }
+
+  const resetToDefault = async () => {
+    await applyPreset(SQL_PRESETS[0])
+  }
+
+  const addQueryBlock = (sql = 'SELECT * FROM students LIMIT 10;', title?: string) => {
+    const num = blocks.length + 1
+    const nb: SqlBlock = {
+      id: makeCellId(),
+      title: title || `${num}. SQL-запрос`,
+      sql,
+    }
+    setBlocks(prev => [...prev, nb])
+    return nb.id
+  }
+
+  const updateBlock = (id: string, patch: Partial<SqlBlock>) => {
+    setBlocks(prev => prev.map(b => (b.id === id ? { ...b, ...patch } : b)))
+  }
+
+  const removeBlock = (id: string) => {
+    if (blocks.length <= 1) return
+    setBlocks(prev => prev.filter(b => b.id !== id))
+    setOutcomes(prev => {
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+  }
+
+  // Быстрый SELECT * по таблице из панели таблиц
+  const previewTableRows = async (tableName: string) => {
+    const safe = tableName.replace(/"/g, '""')
+    const sql = `SELECT * FROM "${safe}" LIMIT 50;`
+    setInspectedTable(null)
+    // Ищем существующий блок просмотра или обновляем последний запрос
+    const existing = blocks.find(b => b.title.startsWith('Просмотр:'))
+    if (existing) {
+      const next = blocks.map(b => (b.id === existing.id ? { ...b, title: `Просмотр: ${tableName}`, sql } : b))
+      setBlocks(next)
+      blocksRef.current = next
+      await runOneBlock(existing.id)
+    } else {
+      const nid = addQueryBlock(sql, `Просмотр: ${tableName}`)
+      setTimeout(() => runOneRef.current(nid), 60)
     }
   }
 
-  // Ctrl+Enter — выполнить, работает и когда фокус в Monaco
-  useEffect(()=>{
-    const onKey = (e: KeyboardEvent)=>{
-      if((e.ctrlKey||e.metaKey) && e.key==='Enter'){ e.preventDefault(); runRef.current() }
-    }
-    window.addEventListener('keydown', onKey)
-    return ()=>{ window.removeEventListener('keydown', onKey) }
-  },[])
+  const downloadSql = () => {
+    const text = blocks.map(b => `-- ${b.title}\n${b.sql.trim()}`).join('\n\n') + '\n'
+    const blob = new Blob([text], { type: 'text/sql;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'postgres-queries.sql'
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
 
-  const loadPreset = (p: typeof PRESETS[number]) => {
-    // Важно: не только выполнить, но и обновить поля схемы/запроса у редакторов,
-    // иначе последующие чипы/Ctrl+Enter запустятся со СТАРОЙ схемой из state.
-    setSchema(p.schema); setQuery(p.query)
-    runRef.current(p.schema, p.query)
-  }
-  const resetAll = ()=>{
-    try{ localStorage.setItem(STORE_KEY, JSON.stringify({schema:P_SCHOOL_SCHEMA, query:P_SCHOOL_QUERY})) }catch{}
-    // Сброс = вернуться к базовому примеру, а не к пустым полям
-    setSchema(P_SCHOOL_SCHEMA); setQuery(P_SCHOOL_QUERY)
-    setResults([]); setRunErr(''); setRowsChanged(null); setMs(null)
-    runRef.current(P_SCHOOL_SCHEMA, P_SCHOOL_QUERY)
-  }
-  const clickTable = (name: string)=>{
-    const q = `SELECT * FROM "${name}" LIMIT 50;`
-    setQuery(q)
-    runRef.current(undefined, q)
+  // Автодополнение таблиц, колонок и PostgreSQL-команд в Monaco
+  const mountEditor = (blockId: string): OnMount => (editor, monaco) => {
+    if (!monacoRegistered) {
+      monacoRegistered = true
+      monaco.languages.registerCompletionItemProvider('sql', {
+        provideCompletionItems(model: any, position: any) {
+          const word = model.getWordUntilPosition(position)
+          const range = {
+            startLineNumber: position.lineNumber,
+            endLineNumber: position.lineNumber,
+            startColumn: word.startColumn,
+            endColumn: word.endColumn,
+          }
+          const suggestions: any[] = []
+          for (const tbl of completionTablesRef.current) {
+            suggestions.push({
+              label: tbl.name,
+              kind: monaco.languages.CompletionItemKind.Class,
+              detail: `таблица (${tbl.rowCount} строк)`,
+              insertText: tbl.name,
+              range,
+            })
+            for (const col of tbl.columns) {
+              suggestions.push({
+                label: col.name,
+                kind: monaco.languages.CompletionItemKind.Field,
+                detail: `${tbl.name}.${col.name} (${col.type})`,
+                insertText: col.name,
+                range,
+              })
+            }
+          }
+          for (const kw of PG_KEYWORDS) {
+            suggestions.push({
+              label: kw,
+              kind: monaco.languages.CompletionItemKind.Keyword,
+              detail: 'PostgreSQL',
+              insertText: kw,
+              range,
+            })
+          }
+          return { suggestions }
+        },
+      })
+    }
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+      runOneRef.current(blockId)
+    })
   }
 
   const editorOpts = {
-    minimap:{ enabled:false },
-    fontSize:13,
-    lineHeight:19,
-    fontFamily:"'Cascadia Code','JetBrains Mono','Consolas',monospace",
-    scrollBeyondLastLine:false,
-    automaticLayout:true,
-    wordWrap:'on' as const,
-    padding:{ top:8, bottom:8 },
-    tabSize:2,
-    lineNumbers:'on' as const,
-    renderLineHighlight:'line' as const,
-    folding:true,
+    minimap: { enabled: false },
+    fontSize: 13.5,
+    lineHeight: 20,
+    fontFamily: "'Cascadia Code','JetBrains Mono','Consolas',monospace",
+    scrollBeyondLastLine: false,
+    automaticLayout: true,
+    wordWrap: 'on' as const,
+    padding: { top: 8, bottom: 8 },
+    tabSize: 2,
+    lineNumbers: 'on' as const,
+    renderLineHighlight: 'line' as const,
+    folding: true,
+    scrollbar: { alwaysConsumeMouseWheel: false },
   }
 
+  const activeInspected = inspectedTable ? tables.find(t => t.name === inspectedTable) : null
+
   return (
-    <div className="-m-4 lg:-m-8 mb-[-96px] lg:mb-0 flex flex-col h-[calc(100vh-64px)] pb-14 lg:pb-0 bg-[#1e1e1e] border border-[#2d2d2d] overflow-hidden text-sm">
-      {/* Заголовок-бар */}
-      <div className="h-9 bg-[#181818] border-b border-[#2d2d2d] flex items-center gap-2 px-3 shrink-0 overflow-x-auto">
-        <Database size={14} className="text-emerald-400 shrink-0"/>
-        <span className="text-slate-200 font-semibold whitespace-nowrap">{t('sql_title')}</span>
-        {phase==='ready' && (
-          <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#10331f] text-emerald-300 text-[11px] shrink-0">
-            <CircleCheck size={11}/> {t('sql_ready')}
-          </span>
-        )}
-        {phase==='loading' && (
-          <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded bg-[#2d2d2d] text-slate-300 text-[11px] shrink-0">
-            <Loader2 size={11} className="animate-spin"/> {t('sql_loading')}
-          </span>
-        )}
-        <span className="hidden md:inline text-slate-500 text-[11px] truncate">{t('sql_sub')}</span>
-        <button onClick={resetAll} className="ml-auto flex items-center gap-1 h-8 px-2.5 rounded bg-[#3c3c3c] hover:bg-[#4a4a4a] text-slate-300 text-xs shrink-0" title="localStorage: sqllab-state">
-          <RefreshCw size={11}/> {t('sql_reset')}
-        </button>
-      </div>
-
-      {phase==='fail' ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
-          <div className="text-5xl">🗄️</div>
-          <p className="text-slate-300 font-semibold">{t('sql_fail')}</p>
-          {initErr && <p className="text-red-400 text-xs font-mono max-w-xl break-all">{initErr}</p>}
-          <button onClick={()=>{ /* перезагрузка движка без полной перезагрузки страницы */ (async()=>{
-            setPhase('loading')
-            try{
-              const initmod = await import('sql.js') as unknown as { default?: (cfg?: object)=>Promise<SqlEngineLike> } & ((cfg?: object)=>Promise<SqlEngineLike>)
-              const wasmUrl = (await import('sql.js/dist/sql-wasm.wasm?url')).default
-              engineRef.current = await (typeof initmod.default==='function' ? initmod.default : initmod)({ locateFile: () => wasmUrl })
-              setPhase('ready')
-              const st = loadState()
-              runRef.current(st.schema, st.query)
-            }catch(e){ setInitErr(String((e as Error)?.message || e)); setPhase('fail') }
-          })() }} className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm">
-            {t('sql_retry')}
-          </button>
-        </div>
-      ) : (
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row relative">
-          {/* Мобильные табы: на телефоне панели переключаются, Run всегда виден */}
-          <div className="lg:hidden h-11 bg-[#252526] border-b border-[#2d2d2d] flex items-center gap-1 px-1.5 py-1 shrink-0">
-            <button onClick={()=>setMobTab('schema')} aria-pressed={mobTab==='schema'}
-              className={`h-9 min-h-[36px] px-3 rounded text-xs font-bold flex items-center gap-1.5 ${mobTab==='schema'?'bg-[#007acc] text-white':'text-slate-400 active:bg-white/10'}`}>
-              <Table2 size={13}/> {t('sql_schema')}
-            </button>
-            <button onClick={()=>setMobTab('run')} aria-pressed={mobTab==='run'}
-              className={`h-9 min-h-[36px] px-3 rounded text-xs font-bold flex items-center gap-1.5 ${mobTab==='run'?'bg-[#007acc] text-white':'text-slate-400 active:bg-white/10'}`}>
-              <Play size={13}/> {t('sql_query')}
-            </button>
-            <button onClick={()=>runRef.current()} disabled={running || phase!=='ready'}
-              className="ml-auto h-9 min-h-[36px] px-4 rounded bg-[#16825d] active:bg-[#1a9c6e] disabled:opacity-60 text-white text-xs font-bold flex items-center gap-1 shadow">
-              {running ? <Loader2 size={12} className="animate-spin"/> : <Play size={12}/>} {t('sql_run')}
-            </button>
+    <div className="-m-4 mb-[-7rem] lg:-m-8 flex flex-col h-[calc(100dvh-64px-env(safe-area-inset-top))] pb-[calc(57px+env(safe-area-inset-bottom))] lg:pb-0 bg-[#0d1117] text-slate-200 overflow-hidden text-sm">
+      {/* ==================== 1. ШАПКА SQL-ЛАБОРАТОРИИ ==================== */}
+      <div className="min-h-[3rem] bg-[#161b22] border-b border-[#262d38] px-2.5 sm:px-3 py-1.5 flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0 relative z-30">
+        {/* Бейдж PostgreSQL */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 pr-0.5 sm:pr-1">
+          <div className="w-7 h-7 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0">
+            <Database size={15} />
           </div>
+          <div className="flex items-center gap-1.5">
+            <span className="font-extrabold text-white text-xs sm:text-sm whitespace-nowrap hidden sm:inline">{pgVersion}</span>
+            <span className="font-extrabold text-white text-xs whitespace-nowrap sm:hidden">PostgreSQL</span>
+            {phase === 'ready' && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" title="PostgreSQL готов к работе" />
+            )}
+            {phase === 'loading' && (
+              <Loader2 size={13} className="animate-spin text-sky-400 shrink-0" />
+            )}
+          </div>
+        </div>
 
-          {/* Схема */}
-          <div className={`${mobTab==='schema'?'flex':'hidden'} lg:flex flex-1 min-h-0 lg:flex-none lg:h-auto lg:w-[min(42%,560px)] lg:shrink-0 flex-col border-b lg:border-b-0 lg:border-r border-[#2d2d2d] lg:min-w-0`}>
-            <div className="min-h-[36px] bg-[#252526] border-b border-[#2d2d2d] flex items-center gap-1.5 px-2 py-0.5 shrink-0 overflow-x-auto">
-              <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase whitespace-nowrap">{t('sql_schema')}</span>
-              <span className="ml-auto text-[11px] text-slate-500 whitespace-nowrap">{t('sql_examples')}</span>
-              {PRESETS.map(p=>(
-                <button key={p.id} onClick={()=>loadPreset(p)} className="min-h-[30px] px-2.5 py-0.5 rounded bg-[#3c3c3c] hover:bg-emerald-700 text-slate-200 hover:text-white text-[11px] whitespace-nowrap">
-                  {t(p.labelKey)}
+        {/* Главная кнопка запуска */}
+        <button
+          type="button"
+          disabled={phase !== 'ready' || runningAll}
+          onClick={() => runAllBlocks()}
+          className="h-8 px-2.5 sm:px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 shadow shrink-0 whitespace-nowrap"
+          title="Создать базу заново и выполнить все SQL-блоки"
+        >
+          {runningAll ? <Loader2 size={13} className="animate-spin" /> : <PlayCircle size={14} />}
+          <span className="hidden sm:inline">Запустить всё</span>
+          <span className="sm:hidden">Пуск</span>
+        </button>
+
+        {/* Примеры */}
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onMouseDown={e => e.stopPropagation()}
+            onClick={() => setOpenMenu(m => (m === 'presets' ? null : 'presets'))}
+            className="h-8 px-2 sm:px-2.5 rounded-lg bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-slate-200 text-xs font-semibold flex items-center gap-1 whitespace-nowrap"
+          >
+            <Sparkles size={12} className="text-amber-400" />
+            <span>Примеры</span>
+            <ChevronDown size={12} />
+          </button>
+          {openMenu === 'presets' && (
+            <div
+              onMouseDown={e => e.stopPropagation()}
+              className="absolute left-0 top-full mt-1.5 z-50 w-72 max-w-[calc(100vw-24px)] rounded-xl bg-[#161b22] border border-[#30363d] shadow-2xl p-2 space-y-1"
+            >
+              {SQL_PRESETS.map(pr => (
+                <button
+                  key={pr.id}
+                  type="button"
+                  onClick={() => applyPreset(pr)}
+                  className="w-full text-left p-2 rounded-lg hover:bg-[#21262d] transition"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-white">{pr.name}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-sky-950 text-sky-300 text-[9.5px] font-mono">{pr.badge}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">{pr.desc}</div>
+                </button>
+              ))}
+              <div className="border-t border-[#262d38] pt-1">
+                <button
+                  type="button"
+                  onClick={startEmpty}
+                  className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-[#21262d] text-xs font-semibold text-sky-300"
+                >
+                  + Пустая база (написать с нуля)
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Шпаргалка */}
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onMouseDown={e => e.stopPropagation()}
+            onClick={() => setOpenMenu(m => (m === 'snippets' ? null : 'snippets'))}
+            className="h-8 px-2.5 rounded-lg bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-slate-200 text-xs font-semibold flex items-center gap-1 whitespace-nowrap"
+          >
+            <BookOpen size={12} className="text-sky-400" />
+            <span className="hidden sm:inline">Шпаргалка</span>
+            <ChevronDown size={12} />
+          </button>
+          {openMenu === 'snippets' && (
+            <div
+              onMouseDown={e => e.stopPropagation()}
+              className="absolute right-0 sm:left-0 top-full mt-1.5 z-50 w-72 max-w-[calc(100vw-24px)] max-h-[65vh] overflow-y-auto rounded-xl bg-[#161b22] border border-[#30363d] shadow-2xl p-2 space-y-1"
+            >
+              {SQL_SNIPPETS.map((sn, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    addQueryBlock(sn.code, sn.label)
+                    setOpenMenu(null)
+                    toast(`Добавлен блок «${sn.label}»`, 'info')
+                  }}
+                  className="w-full text-left p-2 rounded-lg hover:bg-[#21262d] transition"
+                >
+                  <div className="text-xs font-bold text-slate-100">{sn.label}</div>
+                  <pre className="text-[10px] font-mono text-slate-400 line-clamp-2 mt-0.5">{sn.code}</pre>
                 </button>
               ))}
             </div>
-            <div className="flex-1 min-h-0 relative">
-              <Editor
-                height="100%"
-                path="sqllab-schema"
-                language="sql"
-                value={schema}
-                onChange={v=>setSchema(v||'')}
-                theme="vs-dark"
-                options={editorOpts}
-                loading={<div className="flex items-center justify-center h-full text-slate-500 text-xs"><Loader2 size={12} className="animate-spin mr-1"/> {t('sql_loading')}</div>}
-              />
-            </div>
-            {tables.length>0 && (
-              <div className="h-24 lg:h-28 bg-[#181818] border-t border-[#2d2d2d] flex flex-col shrink-0">
-                <div className="h-6 px-2 flex items-center gap-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase shrink-0">
-                  <Table2 size={10}/> {t('sql_tables')} <span className="text-slate-600 normal-case font-normal hidden sm:inline">— {t('sql_tables_hint')}</span>
-                </div>
-                <div className="flex-1 overflow-auto px-2 pb-2 flex flex-wrap content-start gap-1">
-                  {tables.map(name=>(
-                    <button key={name} onClick={()=>clickTable(name)} className="min-h-[30px] px-2.5 py-1 rounded bg-[#2a3a2e] hover:bg-emerald-700 border border-emerald-900/60 text-emerald-200 hover:text-white text-[11px] font-mono">
-                      {name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          )}
+        </div>
 
-          {/* Запрос + результат */}
-          <div className={`${mobTab==='run'?'flex':'hidden'} lg:flex flex-1 min-h-0 flex-col min-w-0`}>
-            <div className="h-8 bg-[#252526] border-b border-[#2d2d2d] flex items-center gap-2 px-2 shrink-0">
-              <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase whitespace-nowrap">{t('sql_query')}</span>
-              <span className="hidden sm:inline text-[10px] text-slate-600 whitespace-nowrap">{t('sql_hint')}</span>
+        {/* ER-схема */}
+        <button
+          type="button"
+          onClick={() => setShowErModal(true)}
+          disabled={tables.length === 0}
+          className="h-8 px-2.5 rounded-lg bg-[#21262d] hover:bg-[#30363d] disabled:opacity-40 border border-[#30363d] text-slate-200 text-xs font-semibold flex items-center gap-1 shrink-0 whitespace-nowrap"
+          title="Показать визуальную схему связей таблиц"
+        >
+          <GitFork size={12} className="text-sky-400" />
+          <span className="hidden sm:inline">ER-схема</span>
+        </button>
+
+        {/* Справа: Сброс и Скачать .sql */}
+        <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={resetToDefault}
+            title="Сбросить к примеру «Школа»"
+            className="h-8 px-2.5 rounded-lg bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-slate-300 text-xs flex items-center gap-1 whitespace-nowrap"
+          >
+            <RefreshCw size={12} />
+            <span className="hidden md:inline">Сброс</span>
+          </button>
+          <button
+            type="button"
+            onClick={downloadSql}
+            title="Скачать .sql файл"
+            className="h-8 px-2.5 rounded-lg bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-slate-300 text-xs flex items-center gap-1 whitespace-nowrap"
+          >
+            <Download size={12} />
+            <span className="hidden md:inline">.sql</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ==================== 2. ПОЛОСА ТАБЛИЦ БАЗЫ (ВСЕГДА ПОД РУКОЙ) ==================== */}
+      <div className="bg-[#12171f] border-b border-[#222a36] px-3 py-1.5 flex items-center gap-1.5 overflow-x-auto shrink-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1 shrink-0 mr-1">
+          <Table2 size={12} className="text-emerald-400" /> Таблицы:
+        </span>
+        {tables.length === 0 ? (
+          <span className="text-[11px] text-slate-500">
+            {phase === 'loading' ? 'Запускается PostgreSQL…' : 'Нет таблиц — нажмите «Запустить всё»'}
+          </span>
+        ) : (
+          tables.map(tbl => {
+            const active = inspectedTable === tbl.name
+            return (
               <button
-                onClick={()=>runRef.current()}
-                disabled={running || phase!=='ready'}
-                className="ml-auto hidden lg:flex px-3 py-0.5 rounded bg-[#16825d] hover:bg-[#1a9c6e] disabled:opacity-60 text-white text-xs font-bold items-center gap-1 shrink-0"
+                key={tbl.name}
+                type="button"
+                onClick={() => setInspectedTable(active ? null : tbl.name)}
+                className={`px-2.5 py-0.5 rounded-md border text-[11.5px] font-mono flex items-center gap-1.5 shrink-0 transition ${
+                  active
+                    ? 'bg-sky-600 text-white border-sky-500'
+                    : 'bg-[#1a222d] hover:bg-[#222d3c] border-[#2c3645] text-slate-200'
+                }`}
+                title="Нажмите, чтобы увидеть колонки и содержимое таблицы"
               >
-                {running ? <Loader2 size={11} className="animate-spin"/> : <Play size={11}/>} {t('sql_run')}
+                {tbl.kind === 'view' ? <Eye size={11} className="text-violet-300" /> : null}
+                <span className="font-bold">{tbl.name}</span>
+                <span className={`text-[10px] ${active ? 'text-sky-100' : 'text-slate-400'}`}>({tbl.rowCount})</span>
               </button>
-            </div>
-            <div className="h-40 lg:h-48 shrink-0 relative border-b border-[#2d2d2d]">
-              <Editor
-                height="100%"
-                path="sqllab-query"
-                language="sql"
-                value={query}
-                onChange={v=>setQuery(v||'')}
-                theme="vs-dark"
-                options={editorOpts}
-                loading={<div className="flex items-center justify-center h-full text-slate-500 text-xs"><Loader2 size={12} className="animate-spin mr-1"/> {t('sql_loading')}</div>}
-              />
-            </div>
+            )
+          })
+        )}
+        <span className="ml-auto text-[10.5px] text-slate-500 hidden lg:inline shrink-0">
+          Ctrl+Enter в любом блоке — выполнить
+        </span>
+      </div>
 
-            {/* Результаты */}
-            <div className="flex-1 min-h-0 overflow-auto p-3">
-              {runErr && (
-                <div className="mb-3 rounded border border-red-900 bg-red-950/40 px-3 py-2">
-                  <div className="text-red-400 font-bold text-xs flex items-center gap-1">✖ {t('sql_err')}</div>
-                  <div className="text-red-300 text-[11px] font-mono mt-1 break-all">{runErr}</div>
-                </div>
-              )}
-              {!runErr && results.length===0 && rowsChanged!==null && (
-                <div className="rounded border border-emerald-800 bg-emerald-950/30 px-3 py-2 text-emerald-300 text-xs flex items-center gap-1">
-                  <CircleCheck size={12}/> {t('sql_done_ok')} {rowsChanged}
-                </div>
-              )}
-              {results.length===0 && rowsChanged===null && !runErr && (
-                <div className="text-slate-600 text-xs font-mono">{t('sql_empty')}</div>
-              )}
-              {results.map((r,i)=>(
-                <div key={i} className="mb-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[11px] text-slate-500 font-mono">#{i+1} · {r.values.length} {t('sql_rows')} · {r.columns.length} cols</span>
-                    <button onClick={()=>downloadCsv(`result-${i+1}.csv`, r)} className="ml-auto flex items-center gap-1 min-h-[30px] px-2.5 rounded bg-[#2d2d2d] hover:bg-[#3c3c3c] text-slate-300 hover:text-white text-[10px]">
-                      <Download size={10}/> {t('sql_csv')}
-                    </button>
-                  </div>
-                  <div className="overflow-auto rounded border border-[#2d2d2d] max-h-72">
-                    <table className="w-full text-left border-collapse font-mono text-[11px]">
-                      <thead className="sticky top-0">
-                        <tr className="bg-[#252526]">
-                          {r.columns.map((c,ci)=>(<th key={ci} className="px-2 py-1 border-b border-[#3c3c3c] text-amber-300 whitespace-nowrap font-bold">{c}</th>))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {r.values.slice(0, MAX_ROWS_SHOWN).map((row,ri)=>(
-                          <tr key={ri} className={ri%2 ? 'bg-white/[0.03]' : ''}>
-                            {row.map((cell,ci)=>(
-                              <td key={ci} className={`px-2 py-1 border-t border-[#2a2a2a] whitespace-nowrap ${cell==null?'text-slate-600 italic':'text-emerald-200'}`}>
-                                {cellText(cell)}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {r.values.length>MAX_ROWS_SHOWN && (
-                    <div className="text-slate-600 text-[10px] mt-1">+{r.values.length-MAX_ROWS_SHOWN} {t('sql_more')} · CSV — все</div>
-                  )}
-                </div>
+      {/* Быстрый просмотр структуры выбранной таблицы */}
+      {activeInspected && (
+        <div className="bg-[#161d27] border-b border-sky-800/60 px-4 py-2.5 shrink-0">
+          <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-bold text-sm text-white">{activeInspected.name}</span>
+              <span className="text-xs text-slate-400">{activeInspected.rowCount} строк</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 flex-1">
+              {activeInspected.columns.map(col => (
+                <span
+                  key={col.name}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#0d1117] border border-[#2c3645] text-[11px] font-mono"
+                >
+                  {col.isPk && <KeyRound size={10} className="text-amber-400" />}
+                  {col.fkTarget && <Link2 size={10} className="text-sky-400" />}
+                  <span className={col.isPk ? 'text-amber-200 font-bold' : 'text-slate-200'}>{col.name}</span>
+                  <span className="text-sky-400/80 text-[10px]">{col.type}</span>
+                </span>
               ))}
             </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => previewTableRows(activeInspected.name)}
+                className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold"
+              >
+                SELECT * FROM {activeInspected.name}
+              </button>
+              <button
+                type="button"
+                onClick={() => setInspectedTable(null)}
+                className="p-1 rounded hover:bg-white/10 text-slate-400"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-            {/* Статус-бар */}
-            <div className="h-6 bg-[#181818] border-t border-[#2d2d2d] flex items-center gap-3 px-2 text-[10px] text-slate-500 font-mono shrink-0">
-              <span>SQLite WASM</span>
-              {ms!==null && <span>{ms} ms</span>}
-              {tables.length>0 && <span>{tables.length} {t('sql_tables').toLowerCase()}</span>}
-              <span className="ml-auto">{t('sql_hint')}</span>
+      {/* ==================== 3. РАБОЧАЯ ОБЛАСТЬ (ПРОСТОЙ ПОНЯТНЫЙ БЛОКНОТ) ==================== */}
+      {phase === 'fail' ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
+          <div className="text-4xl">🐘</div>
+          <p className="text-slate-200 font-bold">Не удалось запустить PostgreSQL в браузере</p>
+          {initErr && <p className="text-rose-400 text-xs font-mono max-w-lg break-all">{initErr}</p>}
+          <button
+            type="button"
+            onClick={() => bootPostgres()}
+            className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5"
+          >
+            <RefreshCw size={13} /> Повторить запуск
+          </button>
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-5 py-4">
+          <div className="max-w-5xl mx-auto space-y-4 pb-10">
+            {phase === 'loading' && (
+              <div className="rounded-xl border border-sky-800/60 bg-sky-950/30 px-4 py-3 flex items-center gap-3 text-xs text-sky-200">
+                <Loader2 size={16} className="animate-spin text-sky-400 shrink-0" />
+                <span>Загружается настоящий PostgreSQL (WASM)… это займёт пару секунд.</span>
+              </div>
+            )}
+
+            {blocks.map((blk, idx) => {
+              const out = outcomes[blk.id]
+              const isRunning = runningId === blk.id
+              const isSchema = idx === 0 && blk.isSchema
+              const isCollapsed = isSchema && collapsedSchema
+
+              return (
+                <div
+                  key={blk.id}
+                  className={`rounded-xl border overflow-hidden transition ${
+                    out?.error ? 'border-rose-700/80 bg-[#141921]' : 'border-[#27303d] bg-[#141921]'
+                  }`}
+                >
+                  {/* Шапка блока */}
+                  <div className="px-2.5 sm:px-3 py-2 bg-[#181f29] border-b border-[#242d3a] flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    {isSchema && (
+                      <button
+                        type="button"
+                        onClick={() => setCollapsedSchema(v => !v)}
+                        className="p-0.5 rounded hover:bg-white/10 text-slate-400"
+                        title={isCollapsed ? 'Развернуть код создания таблиц' : 'Свернуть код создания таблиц'}
+                      >
+                        {isCollapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+                      </button>
+                    )}
+
+                    <input
+                      value={blk.title}
+                      onChange={e => updateBlock(blk.id, { title: e.target.value })}
+                      className="bg-transparent text-xs sm:text-sm font-bold text-slate-100 outline-none flex-1 min-w-[100px]"
+                    />
+
+                    {out && !out.error && (
+                      <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1 shrink-0">
+                        <CircleCheck size={12} /> {out.durationMs} ms
+                      </span>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={phase !== 'ready' || isRunning || runningAll}
+                      onClick={() => runOneBlock(blk.id, false)}
+                      className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1 shrink-0"
+                      title="Выполнить этот блок (Ctrl+Enter)"
+                    >
+                      {isRunning ? <Loader2 size={12} className="animate-spin" /> : <Play size={11} className="fill-white" />}
+                      <span>Выполнить</span>
+                    </button>
+
+                    {!isSchema && (
+                      <button
+                        type="button"
+                        disabled={phase !== 'ready' || isRunning || runningAll}
+                        onClick={() => runOneBlock(blk.id, true)}
+                        className="px-2 py-1 rounded-lg bg-[#222a36] hover:bg-sky-700 text-sky-300 hover:text-white text-[11px] font-mono font-bold hidden sm:flex items-center gap-1 shrink-0"
+                        title="План выполнения запроса (EXPLAIN ANALYZE)"
+                      >
+                        <SearchCode size={12} /> EXPLAIN
+                      </button>
+                    )}
+
+                    {blocks.length > 1 && !isSchema && (
+                      <button
+                        type="button"
+                        onClick={() => removeBlock(blk.id)}
+                        title="Удалить блок"
+                        className="p-1.5 rounded-lg hover:bg-rose-900/50 text-slate-400 hover:text-rose-300 shrink-0"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Код SQL */}
+                  {!isCollapsed && (
+                    <div style={{ height: calcEditorHeight(blk.sql) }} className="relative bg-[#1e1e1e]">
+                      <Editor
+                        height="100%"
+                        path={`pg-blk-${blk.id}`}
+                        language="sql"
+                        value={blk.sql}
+                        onChange={v => updateBlock(blk.id, { sql: v || '' })}
+                        onMount={mountEditor(blk.id)}
+                        theme="vs-dark"
+                        options={editorOpts}
+                        loading={<div className="flex items-center justify-center h-full text-slate-500 text-xs">Загрузка редактора…</div>}
+                      />
+                    </div>
+                  )}
+
+                  {/* Результат прямо под блоком */}
+                  {out && (
+                    <div className="p-3 bg-[#0f141b] border-t border-[#242d3a] space-y-2.5">
+                      {out.error && (
+                        <div className="rounded-lg border border-rose-800/70 bg-rose-950/40 p-3 text-xs space-y-1.5">
+                          <div className="flex items-center gap-2 text-rose-300 font-bold">
+                            <AlertTriangle size={14} className="shrink-0" />
+                            <span>Ошибка PostgreSQL</span>
+                            {out.error.code && (
+                              <span className="px-1.5 py-0.5 rounded bg-rose-900/60 font-mono text-[10px]">
+                                {out.error.code}
+                              </span>
+                            )}
+                            {out.error.line && (
+                              <span className="ml-auto font-mono text-[11px] text-amber-300">
+                                строка {out.error.line}, кол. {out.error.col}
+                              </span>
+                            )}
+                          </div>
+                          <div className="font-mono text-[12px] text-rose-200 break-words">{out.error.message}</div>
+                          {out.error.snippet && (
+                            <pre className="p-2 rounded bg-[#0d1117] text-[11px] font-mono text-amber-200 overflow-x-auto">
+                              {out.error.snippet}
+                            </pre>
+                          )}
+                          {out.error.detail && <div className="text-[11px] text-slate-300">{out.error.detail}</div>}
+                          {out.error.hint && <div className="text-[11px] text-sky-300">Подсказка: {out.error.hint}</div>}
+                        </div>
+                      )}
+
+                      {!out.error && out.results.length === 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-emerald-300">
+                          <CircleCheck size={13} />
+                          <span>
+                            {isSchema
+                              ? `Готово: создано таблиц — ${tables.length} (${tables.map(t => t.name).join(', ') || 'нет'})`
+                              : out.notices.map(n => `${n.command}${n.rowCount ? ` (${n.rowCount})` : ''}`).join(' · ') || 'Выполнено успешно'}
+                          </span>
+                        </div>
+                      )}
+
+                      {out.results.map((res, ri) => (
+                        <SqlResultTable key={ri} result={res} index={ri} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+
+            {/* Кнопка добавить ещё запрос */}
+            <div className="flex justify-center pt-1">
+              <button
+                type="button"
+                onClick={() => addQueryBlock()}
+                className="px-4 py-2 rounded-xl bg-[#1a222d] hover:bg-sky-600 border border-[#303a49] hover:border-sky-500 text-slate-200 hover:text-white text-xs font-bold flex items-center gap-1.5 transition"
+              >
+                <Plus size={14} /> Добавить ещё SQL-запрос
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== МОДАЛКА: ER-СХЕМА ТАБЛИЦ ==================== */}
+      {showErModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+          onMouseDown={e => { if (e.target === e.currentTarget) setShowErModal(false) }}
+        >
+          <div className="w-full max-w-4xl max-h-[85vh] rounded-2xl border border-[#30363d] bg-[#0d1117] shadow-2xl flex flex-col overflow-hidden">
+            <div className="px-4 py-3 bg-[#161b22] border-b border-[#30363d] flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-bold text-white">
+                <GitFork size={16} className="text-sky-400" /> ER-схема базы данных
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowErModal(false)}
+                className="w-8 h-8 rounded-lg hover:bg-white/10 text-slate-300 flex items-center justify-center"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <ErDiagramSvg
+                tables={tables}
+                selectedTable={selectedErTable}
+                onSelectTable={name => setSelectedErTable(prev => (prev === name ? null : name))}
+              />
             </div>
           </div>
         </div>

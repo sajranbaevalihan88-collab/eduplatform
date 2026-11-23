@@ -1,52 +1,78 @@
-import { useEffect, useLayoutEffect, useState, useRef } from 'react'
+import { useEffect, useLayoutEffect, useState, useRef, useCallback, memo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import client, { mediaUrl } from '../api/client'
-const resolveSrc = (src?: string) => src?.startsWith('/media') ? mediaUrl(src) : (src || '')
-import { Plus, Trash2, Save, Eye, Play, Type, Image as ImgIcon, Square, Circle, Triangle, Star, Table, BarChart3, Video, Palette, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Copy, Layers, Maximize2, ZoomIn, ZoomOut, List, ListOrdered, Highlighter, WrapText, Undo2, Redo2, Move, Sparkles, Layout, Paintbrush, Wand2, Film, FileImage, Shapes, Hexagon, Diamond, Pentagon, BookOpen, Pencil } from 'lucide-react'
-import { SvgShape, PdfPage, FitBox } from '../components/pptxView'
+import {
+  Plus, Trash2, Save, Eye, Play, Type, Image as ImgIcon, Table, BarChart3, Video,
+  Palette, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Copy, Layers,
+  Maximize2, ZoomIn, ZoomOut, List, ListOrdered, Highlighter, Undo2, Redo2, Shapes,
+  BookOpen, Pencil, Printer, ArrowUp, ArrowDown, BringToFront, SendToBack, CheckCircle2,
+  Wand2, ChevronDown, Lock, Unlock, GripHorizontal, MessageSquare, FileImage, Sparkles,
+  RotateCw, LayoutTemplate, AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter,
+} from 'lucide-react'
+import { PdfPage, FitBox } from '../components/pptxView'
+import {
+  SlideShape, SlideTable, SlideChart, ChartDataModal, createDefaultTable, createDefaultChartData,
+  renderShapeHtml, renderTableHtml, renderChartHtml, ChartKind, getShapeDef,
+} from '../components/SlideVisuals'
+import {
+  ShapePickerPopover, TableSizePickerPopover, ChartPickerPopover,
+  TextPresetPopover, SlideLayoutPopover, PresentationTemplatesModal, TEXT_PRESETS,
+} from '../components/SlideInsertMenus'
+import SlidePropsPanel from '../components/SlidePropsPanel'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
 
-// Потерянный файл картинки: прячем битую иконку, показываем плейсхолдер (CSS .img-missing)
+const resolveSrc = (src?: string) => src?.startsWith('/media') ? mediaUrl(src) : (src || '')
+
 const imgMissing = (e: React.SyntheticEvent<HTMLImageElement>) => {
   const t = e.currentTarget
   t.style.display = 'none'
   t.parentElement?.classList.add('img-missing')
 }
 
-
-type Block = { id: string, type: 'text' | 'image' | 'shape' | 'table' | 'chart' | 'video' | 'icon', content?: string, src?: string, shape?: string, style?: any, table?: any, chartData?: any, animation?: string, paragraphs?: any }
-type Slide = { id?: number, order: number, background: string, backgroundType?: 'solid' | 'gradient' | 'image', gradient?: string, bgImage?: string, content: { blocks: Block[] }, notes?: string, layout?: string, transition?: string, width?: number, height?: number }
-type Snapshot = { slides: Slide[], active: number }
-
-const SHAPES = [
-  { k: 'rect', label: 'Прямоугольник', icon: Square },
-  { k: 'rounded', label: 'Скругл', icon: Square },
-  { k: 'circle', label: 'Круг', icon: Circle },
-  { k: 'ellipse', label: 'Эллипс', icon: Circle },
-  { k: 'triangle', label: 'Треугольник', icon: Triangle },
-  { k: 'rightTriangle', label: 'Прям.треуг', icon: Triangle },
-  { k: 'diamond', label: 'Ромб', icon: Diamond },
-  { k: 'pentagon', label: 'Пятиугольник', icon: Pentagon },
-  { k: 'hexagon', label: 'Шестиугольник', icon: Hexagon },
-  { k: 'star', label: 'Звезда', icon: Star },
-  { k: 'arrow', label: 'Стрелка', icon: Move },
-  { k: 'line', label: 'Линия', icon: WrapText },
-  { k: 'parallelogram', label: 'Параллелограмм', icon: Square },
-  { k: 'trapezoid', label: 'Трапеция', icon: Square },
-]
+type Block = {
+  id: string
+  type: 'text' | 'image' | 'shape' | 'table' | 'chart' | 'video' | 'icon'
+  content?: string
+  src?: string
+  shape?: string
+  style?: any
+  table?: any
+  chartData?: any
+  animation?: string
+  paragraphs?: any
+}
+type Slide = {
+  id?: number
+  order: number
+  background: string
+  backgroundType?: 'solid' | 'gradient' | 'image'
+  gradient?: string
+  bgImage?: string
+  content: { blocks: Block[] }
+  notes?: string
+  layout?: string
+  transition?: string
+  width?: number
+  height?: number
+}
+type Snapshot = { slides: Slide[]; active: number }
 
 const FONTS = ['Inter', 'Manrope', 'Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana']
 const TRANSITIONS = ['нет', 'fade', 'slide', 'zoom', 'wipe', 'split', 'random']
 const ANIMATIONS = ['нет', 'fadeIn', 'slideIn', 'zoomIn', 'bounce', 'flip', 'float']
 
-function slideDotsCls(bg: any) {
-  // точечная текстура тёмных слайдов как в PowerPoint (едва заметная)
-  try {
-    if (typeof bg === 'string' && bg.startsWith('#') && isDarkColor(bg)) return 'slide-dots'
-  } catch { }
-  return ''
-}
+const PPT_THEMES = [
+  { id: 'office', name: 'Офис', bg: '#ffffff', type: 'solid' as const, grad: '', titleColor: '#1e293b', bodyColor: '#475569', accent: '#2563eb' },
+  { id: 'midnight', name: 'Полночь', bg: '#0f172a', type: 'gradient' as const, grad: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 55%, #312e81 100%)', titleColor: '#f8fafc', bodyColor: '#cbd5e1', accent: '#38bdf8' },
+  { id: 'alatoo', name: 'Ала-Тоо', bg: '#1e3a8a', type: 'gradient' as const, grad: 'linear-gradient(135deg, #1e3a8a 0%, #0284c7 60%, #0ea5e9 100%)', titleColor: '#ffffff', bodyColor: '#e0f2fe', accent: '#facc15' },
+  { id: 'emerald', name: 'Изумруд', bg: '#064e3b', type: 'gradient' as const, grad: 'linear-gradient(135deg, #022c22 0%, #065f46 60%, #0d9488 100%)', titleColor: '#ffffff', bodyColor: '#d1fae5', accent: '#34d399' },
+  { id: 'sunset', name: 'Закат', bg: '#7c2d12', type: 'gradient' as const, grad: 'linear-gradient(135deg, #4c1d95 0%, #be123c 55%, #f97316 100%)', titleColor: '#ffffff', bodyColor: '#ffedd5', accent: '#fde047' },
+  { id: 'academy', name: 'Академия', bg: '#fdf8ee', type: 'solid' as const, grad: '', titleColor: '#451a03', bodyColor: '#78350f', accent: '#b45309' },
+  { id: 'cyber', name: 'Неон', bg: '#090d1f', type: 'gradient' as const, grad: 'linear-gradient(135deg, #090d1f 0%, #2e1065 50%, #831843 100%)', titleColor: '#f8fafc', bodyColor: '#f5d0fe', accent: '#22d3ee' },
+  { id: 'minimal', name: 'Минимал', bg: '#f1f5f9', type: 'solid' as const, grad: '', titleColor: '#0f172a', bodyColor: '#334155', accent: '#0f172a' },
+]
+
 function isDarkColor(hex: string) {
   try {
     if (!hex || typeof hex !== 'string') return false
@@ -61,19 +87,21 @@ function isDarkColor(hex: string) {
   } catch { return false }
 }
 
-// PowerPoint overflow model: text box keeps fixed geometry, content is anchored
-// (top/middle/bottom) and spills symmetrically instead of pushing siblings down.
-// НЕ ставить overflow:hidden — PowerPoint по умолчанию показывает выплёскивающийся текст, а не обрезает его
-function anchoredInner(s: any) {
-  const va = s.verticalAlign || 'top', hasH = s.h != null
-  if (!hasH) return { position: 'relative' as any }
-  if (va === 'middle') return { position: 'absolute' as any, left: 0, right: 0, top: '50%', transform: 'translateY(-50%)' }
-  if (va === 'bottom') return { position: 'absolute' as any, left: 0, right: 0, bottom: 0 }
-  return { position: 'absolute' as any, left: 0, right: 0, top: 0 }
+function slideDotsCls(bg: any) {
+  try {
+    if (typeof bg === 'string' && bg.startsWith('#') && isDarkColor(bg)) return 'slide-dots'
+  } catch { }
+  return ''
 }
 
-// Строит paragraphs так, чтобы форматирование (размер/цвет/жирность/выравнивание) строк сохранилось.
-// Шаблон каждой строки берём из ЕЁ абзаца; если там пустой стиль — из первого "стилевого" run во всём блоке.
+function anchoredInner(s: any) {
+  const va = s.verticalAlign || 'top', hasH = s.h != null
+  if (!hasH) return { position: 'relative' as const }
+  if (va === 'middle') return { position: 'absolute' as const, left: 0, right: 0, top: '50%', transform: 'translateY(-50%)' }
+  if (va === 'bottom') return { position: 'absolute' as const, left: 0, right: 0, bottom: 0 }
+  return { position: 'absolute' as const, left: 0, right: 0, top: 0 }
+}
+
 const runHasStyle = (st: any) => !!st && ['fontSize', 'color', 'bold', 'italic', 'fontFamily', 'underline'].some(k => st[k] !== undefined)
 function restyleParas(oldPs: any[], val: string) {
   const ps = Array.isArray(oldPs) ? oldPs : []
@@ -93,6 +121,216 @@ function restyleParas(oldPs: any[], val: string) {
   })
 }
 
+function videoEmbedUrl(src: string) {
+  const s = (src || '').trim()
+  let m = s.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{6,})/)
+  if (m) return `https://www.youtube.com/embed/${m[1]}`
+  m = s.match(/vk\.com\/video(-?\d+)_(\d+)/)
+  if (m) return `https://vk.com/video_ext.php?oid=${m[1]}&id=${m[2]}`
+  m = s.match(/rutube\.ru\/video\/([\w]+)/)
+  if (m) return `https://rutube.ru/play/embed/${m[1]}`
+  return s
+}
+
+function getSlideBgStyle(s: Slide): React.CSSProperties {
+  const g = (s as any).gradient || (s as any).bg_image || (s as any).bgImage
+  const bg = (s as any).background
+  if (g && (g.startsWith('linear-gradient') || g.startsWith('radial-gradient'))) return { background: g }
+  if (s.backgroundType === 'gradient' && s.gradient) return { background: s.gradient }
+  if (s.backgroundType === 'image' && s.bgImage) return { backgroundImage: `url(${s.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+  if (s.bgImage && s.bgImage.startsWith('data:image')) return { backgroundImage: `url(${s.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+  if (bg && (bg.startsWith('linear-gradient') || bg.startsWith('radial-gradient') || bg.startsWith('url('))) return { background: bg }
+  return { background: bg || '#ffffff' }
+}
+
+const getTransitionClass = (tr: string) => ({ fade: 'animate-enter', slide: 'animate-slide', zoom: 'animate-zoom', wipe: 'animate-wipe', split: 'animate-split', random: 'animate-random', 'нет': '' } as any)[tr] || ''
+const getAnimationClass = (a: string) => ({ fadeIn: 'animate-fadeIn', slideIn: 'animate-slideIn', zoomIn: 'animate-zoomIn', bounce: 'animate-bounce', flip: 'animate-flip', float: 'animate-float', 'нет': '' } as any)[a] || ''
+const slideAspectStyle = (s: any) => (s?.width && s?.height && s.width > 0 && s.height > 0) ? { aspectRatio: `${s.width} / ${s.height}` } : { aspectRatio: '16 / 9' }
+const textLineHeight = (st: any) => st?.lineHeight && st.lineHeight >= 0.5 && st.lineHeight <= 3 ? st.lineHeight : 1.25
+const fontStack = (f?: string) => f ? `'${f}', 'Segoe UI', system-ui, -apple-system, 'Microsoft YaHei', 'Noto Sans SC', sans-serif` : undefined
+
+function renderStaticBlock(b: any, prefix: string, fontScale = 1) {
+  const st = b.style || {}
+  const anim = getAnimationClass(b.animation || 'нет')
+  const boxPos: React.CSSProperties = {
+    position: 'absolute',
+    left: `${st.x ?? 0}%`,
+    top: `${st.y ?? 0}%`,
+    width: `${st.w ?? 80}%`,
+    height: st.h != null ? `${st.h}%` : 'auto',
+    zIndex: st.z || 0,
+    opacity: st.opacity ?? 1,
+    transform: st.rotation ? `rotate(${st.rotation}deg)` : undefined,
+  }
+  if (b.type === 'text') {
+    return (
+      <div
+        key={b.id}
+        className={anim}
+        style={{
+          ...boxPos,
+          overflow: 'visible',
+          display: 'block',
+          padding: st.background ? '6px 8px' : '2px 7px',
+          background: st.background || 'transparent',
+          borderRadius: st.borderRadius ? `${st.borderRadius}px` : undefined,
+          boxShadow: st.shadow ? '0 4px 14px rgba(15,23,42,0.1)' : undefined,
+          border: st.stroke ? `${st.strokeWidth || 1}px ${st.dash || 'solid'} ${st.stroke}` : undefined,
+        }}
+      >
+        <div style={anchoredInner(st)}>
+          <div style={{
+            fontSize: (st.fontSize || 18) * fontScale,
+            fontFamily: fontStack(st.fontFamily),
+            lineHeight: textLineHeight(st),
+            color: st.color || '#1e293b',
+            textAlign: st.align || 'left',
+            fontWeight: st.bold ? 700 : 400,
+            fontStyle: st.italic ? 'italic' : 'normal',
+            textDecoration: st.underline ? 'underline' : 'none',
+            whiteSpace: 'pre-wrap',
+          }}>
+            {b.paragraphs ? b.paragraphs.map((p: any, pi: number) => (
+              <div key={pi} style={{ textAlign: p.align || st.align || 'left', marginBottom: '0.18em', lineHeight: p.lineHeight || textLineHeight(st) }}>
+                {p.runs ? p.runs.map((r: any, ri: number) => (
+                  <span key={ri} style={{
+                    fontFamily: fontStack(r.style?.fontFamily),
+                    fontSize: r.style?.fontSize ? r.style.fontSize * fontScale : undefined,
+                    fontWeight: r.style?.bold ? 700 : undefined,
+                    fontStyle: r.style?.italic ? 'italic' : undefined,
+                    textDecoration: r.style?.underline ? 'underline' : undefined,
+                    color: r.style?.color,
+                    background: r.style?.highlight ? '#fef08a' : undefined,
+                  }}>{r.text}</span>
+                )) : p.text}
+              </div>
+            )) : (
+              st.bullet
+                ? String(b.content || '').split('\n').map((ln, idx) => <div key={idx}>• {ln}</div>)
+                : st.numbered
+                  ? String(b.content || '').split('\n').map((ln, idx) => <div key={idx}>{idx + 1}. {ln}</div>)
+                  : b.content
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+  if (b.type === 'image') {
+    return (
+      <div key={b.id} className={anim} style={boxPos}>
+        {b.unrenderable ? (
+          <div className="w-full h-full rounded flex items-center justify-center bg-slate-100 border border-dashed border-slate-300 text-slate-500 text-xs p-2 text-center">
+            Изображение недоступно
+          </div>
+        ) : (
+          <img
+            onError={imgMissing}
+            src={resolveSrc(b.src)}
+            style={{
+              width: '100%', height: '100%',
+              objectFit: st.objectFit || 'contain',
+              borderRadius: st.borderRadius ? `${st.borderRadius}px` : undefined,
+              boxShadow: st.shadow ? '0 8px 24px rgba(15,23,42,0.18)' : undefined,
+            }}
+            alt=""
+          />
+        )}
+      </div>
+    )
+  }
+  if (b.type === 'shape') {
+    return (
+      <div key={b.id} className={anim} style={{ ...boxPos, overflow: 'visible' }}>
+        <SlideShape block={b} gid={`${prefix}-sh-${b.id}`} />
+      </div>
+    )
+  }
+  if (b.type === 'table') {
+    return (
+      <div key={b.id} className={anim} style={boxPos}>
+        <SlideTable block={b} />
+      </div>
+    )
+  }
+  if (b.type === 'chart') {
+    return (
+      <div key={b.id} className={anim} style={boxPos}>
+        <SlideChart block={b} gid={`${prefix}-ch-${b.id}`} />
+      </div>
+    )
+  }
+  if (b.type === 'video') {
+    return (
+      <div key={b.id} className={anim} style={boxPos}>
+        <iframe src={videoEmbedUrl(b.content || '')} title="video" className="w-full h-full rounded-lg" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups" />
+      </div>
+    )
+  }
+  return <div key={b.id} className={anim} style={{ ...boxPos, fontSize: st.fontSize || 32, textAlign: 'center' }}>{b.content}</div>
+}
+
+const SlideThumbItem = memo(function SlideThumbItem({
+  slide,
+  index,
+  isActive,
+  canDelete,
+  onSelect,
+  onDelete,
+}: {
+  slide: Slide
+  index: number
+  isActive: boolean
+  canDelete: boolean
+  onSelect: (idx: number) => void
+  onDelete: (idx: number) => void
+}) {
+  const hasG = (slide.content.blocks || []).some((b: any) => b.style?.x !== undefined)
+  const sBg = (slide as any).background || '#ffffff'
+  const isDark = isDarkColor(sBg)
+  return (
+    <div
+      data-slide-index={index}
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(index)}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(index) } }}
+      className={`text-left rounded-lg border-2 overflow-hidden bg-white dark:bg-slate-800 relative cursor-pointer group w-[118px] shrink-0 lg:w-auto ${isActive ? 'border-[#d24726] shadow-md' : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'}`}
+    >
+      <div className="aspect-video shrink-0 overflow-hidden relative" style={{ ...getSlideBgStyle(slide), ...slideAspectStyle(slide) }}>
+        {hasG ? (
+          <div className="absolute inset-0 pointer-events-none" style={{ width: 960, height: 540, transform: 'scale(0.19)', transformOrigin: 'top left' }}>
+            {slide.content.blocks.slice(0, 12).map((b: any) => renderStaticBlock(b, `th-${index}`, 1))}
+          </div>
+        ) : (
+          <div className="p-1.5 flex flex-col gap-0.5 overflow-hidden h-full">
+            {slide.content.blocks.slice(0, 3).map((b: any, bi: number) => (
+              <div key={bi} className="truncate text-[9px] leading-tight" style={{ fontWeight: b.style?.bold ? 700 : 400, color: b.style?.color || (isDark ? '#fff' : '#1e293b') }}>
+                {b.type === 'text' ? b.content?.slice(0, 30) : b.type}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="px-2 py-1 flex items-center justify-between bg-slate-50 dark:bg-slate-800/90 border-t dark:border-slate-700 dark:text-slate-200">
+        <span className="text-[11px] font-bold">{index + 1} {slide.transition && slide.transition !== 'нет' ? `· ${slide.transition}` : ''}</span>
+        <span className="text-[10px] text-slate-400">{slide.layout || 'slide'}</span>
+      </div>
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          onDelete(index)
+        }}
+        disabled={!canDelete}
+        title="Удалить слайд"
+        className={`absolute top-1 right-1 w-6 h-6 rounded-full bg-white dark:bg-slate-900 border dark:border-slate-700 shadow flex items-center justify-center ${!canDelete ? 'opacity-30 cursor-not-allowed' : 'opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600'} transition-opacity`}
+      >
+        <Trash2 size={11} />
+      </button>
+    </div>
+  )
+})
+
 export default function PresentationEditor() {
   const { t, lang } = useLang()
   const PUI = {
@@ -100,62 +338,100 @@ export default function PresentationEditor() {
     en: { imp: 'Import', prev: 'Preview', show: 'Slideshow', full: 'Fullscreen', exit: 'Exit', home: 'Home', insert: 'Insert', design: 'Design', trans: 'Transitions', anim: 'Animations', pub: 'Public', priv: 'Private' },
     kg: { imp: 'Импорт', prev: 'Алдын ала', show: 'Слайд-шоу', full: 'Толук экран', exit: 'Чыгуу', home: 'Башкы', insert: 'Киргизүү', design: 'Дизайн', trans: 'Өтүүлөр', anim: 'Анимация', pub: 'Ачык', priv: 'Жеке' },
   }[lang] || { imp: 'Импорт', prev: 'Предпросмотр', show: 'Слайд-шоу', full: 'На весь', exit: 'Выйти', home: 'Главная', insert: 'Вставка', design: 'Дизайн', trans: 'Переходы', anim: 'Анимации', pub: 'Публичная', priv: 'Приватная' }
+
   const { id } = useParams()
   const nav = useNavigate()
   const isNew = !id
+
   const [title, setTitle] = useState('Новая презентация')
   const [desc, setDesc] = useState('')
-  // публичность: приватная = только внутри платформы, публичная = в каталоге и по ссылке
   const [isPublic, setIsPublic] = useState(false)
   const [subject, setSubject] = useState<any>(null)
   const [subjects, setSubjects] = useState<any[]>([])
   const [subjSlug, setSubjSlug] = useState('')
-  const [newLayout, setNewLayout] = useState('blank')
   const [slides, setSlidesRaw] = useState<Slide[]>([{
     order: 0, background: '#ffffff', backgroundType: 'solid', layout: 'title', transition: 'fade', content: {
       blocks: [
-        { id: 'b1', type: 'text', content: 'Заголовок презентации', style: { fontSize: 36, bold: true, align: 'center', color: '#1e293b', fontFamily: 'Manrope', x: 5, y: 15, w: 90, h: 20, z: 1, unit: '%' } },
-        { id: 'b2', type: 'text', content: 'Подзаголовок — идея урока, класс, цель', style: { fontSize: 18, align: 'center', color: '#64748b', fontFamily: 'Inter', x: 5, y: 38, w: 90, h: 12, z: 2, unit: '%' } },
-      ]
-    }
+        { id: 'b1', type: 'text', content: 'Заголовок презентации', style: { fontSize: 36, bold: true, align: 'center', color: '#1e293b', fontFamily: 'Manrope', x: 5, y: 20, w: 90, h: 18, z: 1, unit: '%' } },
+        { id: 'b2', type: 'text', content: 'Подзаголовок — идея урока, класс, цель', style: { fontSize: 18, align: 'center', color: '#64748b', fontFamily: 'Inter', x: 10, y: 42, w: 80, h: 12, z: 2, unit: '%' } },
+      ],
+    },
   }])
-  // любой setSlides = несохранённая правка (autosave/индикатор/beforeunload завязаны на dirty)
   const setSlides: React.Dispatch<React.SetStateAction<Slide[]>> = (v) => { setSlidesRaw(v); setDirty(true) }
+
   const [active, setActive] = useState(0)
   const [selectedBlock, setSelectedBlock] = useState<string | null>(null)
+  const [activeCell, setActiveCell] = useState<{ r: number; c: number } | null>(null)
+  const [editingText, setEditingText] = useState<string | null>(null)
+  const [editingShape, setEditingShape] = useState<string | null>(null)
+  const [clipboardBlock, setClipboardBlock] = useState<Block | null>(null)
+
   const [showPreview, setShowPreview] = useState(false)
   const [slideshow, setSlideshow] = useState(false)
+  const [showIdx, setShowIdx] = useState(0)
+  const [showSpeakerNotes, setShowSpeakerNotes] = useState(false)
   const [pdfUrl, setPdfUrl] = useState('')
   const [pvMode, setPvMode] = useState<'orig' | 'blocks'>('orig')
+
   const [zoom, setZoom] = useState(100)
   const [canvasFit, setCanvasFit] = useState(1)
   const canvasWrapRef = useRef<HTMLDivElement>(null)
-  const savingRef = useRef(false)
-  const [loadFailed, setLoadFailed] = useState(false)
-  const [ribbonTab, setRibbonTab] = useState<'home' | 'insert' | 'design' | 'transitions' | 'animations'>('home')
-  const [history, setHistory] = useState<Snapshot[]>([])
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const bgImageRef = useRef<HTMLInputElement>(null)
-  const pptxInputRef = useRef<HTMLInputElement>(null)
-  const [importing, setImporting] = useState(false)
-  const [propsOpen, setPropsOpen] = useState(false)
+  const stageRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const slideListRef = useRef<HTMLDivElement>(null)
   const fullscreenRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const bgImageRef = useRef<HTMLInputElement>(null)
+  const pptxInputRef = useRef<HTMLInputElement>(null)
+  const savingRef = useRef(false)
+
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [ribbonTab, setRibbonTab] = useState<'home' | 'insert' | 'design' | 'transitions' | 'animations'>('home')
+  const [openMenu, setOpenMenu] = useState<null | 'text' | 'shapes' | 'table' | 'chart' | 'layout'>(null)
+  const [history, setHistory] = useState<Snapshot[]>([])
+  const [redoStack, setRedoStack] = useState<Snapshot[]>([])
+  const [importing, setImporting] = useState(false)
+  const [propsOpen, setPropsOpen] = useState(false)
   const [isEditFullscreen, setIsEditFullscreen] = useState(false)
-  const [dragging, setDragging] = useState<{ id: string, startX: number, startY: number, origX: number, origY: number } | null>(null)
-  const [resizing, setResizing] = useState<{ id: string, handle: string, startX: number, startY: number, origX: number, origY: number, origW: number, origH: number } | null>(null)
   const [showGrid, setShowGrid] = useState(true)
   const [importedId, setImportedId] = useState<number | null>(null)
-  // Правка текста слайда (как в PowerPoint): двойной клик или ✏️ включают ввод,
-  // blur сохраняет — в бокс и в paragraphs (импортированный текст)
-  const [editingText, setEditingText] = useState<string | null>(null)
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const [dragging, setDragging] = useState<{
+    id: string; startX: number; startY: number; origX: number; origY: number; origW: number; origH: number; origRot: number
+  } | null>(null)
+  const [resizing, setResizing] = useState<{
+    id: string; handle: string; startX: number; startY: number; origX: number; origY: number; origW: number; origH: number; origRot: number
+  } | null>(null)
+  const [rotating, setRotating] = useState<{
+    id: string; cx: number; cy: number; startAngle: number; origRot: number; origX: number; origY: number; origW: number; origH: number
+  } | null>(null)
+  const [liveTransform, setLiveTransform] = useState<{
+    id: string; x: number; y: number; w: number; h: number; rotation: number
+  } | null>(null)
+  const liveTransformRef = useRef<{ id: string; x: number; y: number; w: number; h: number; rotation: number } | null>(null)
+  const [guides, setGuides] = useState<{ v: number | null; h: number | null }>({ v: null, h: null })
+  const [chartModalBlockId, setChartModalBlockId] = useState<string | null>(null)
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; blockId: string } | null>(null)
+
+  const cur = slides[active] || slides[0]
+  const curSelected = cur?.content.blocks.find(b => b.id === selectedBlock)
+  const isAbsolute = cur && (cur.content.blocks || []).some((b: any) => b.style && b.style.x !== undefined)
+
+  useEffect(() => {
+    if (!openMenu && !ctxMenu) return
+    const close = () => { setOpenMenu(null); setCtxMenu(null) }
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [openMenu, ctxMenu])
+
   useEffect(() => {
     if (!editingText) return
     try {
       const el = (canvasRef.current || document).querySelector('[data-editing="1"]') as HTMLElement | null
       if (el) {
-        // заполняем редактируемый бокс исходным текстом (React его не контролирует: data-orig)
         const orig = el.getAttribute('data-orig') || ''
         if (!el.textContent && orig) el.innerText = orig
         el.focus()
@@ -164,28 +440,32 @@ export default function PresentationEditor() {
       }
     } catch { }
   }, [editingText, active])
-  // исходный текст блока для редактирования
+
   const blockOrigText = (b: any) => {
-    if ((b as any).paragraphs && (b as any).paragraphs.length) {
-      return (b as any).paragraphs.map((p: any) => p.runs ? p.runs.map((r: any) => r.text || '').join('') : (p.text || '')).join('\n')
+    if (b.paragraphs && b.paragraphs.length) {
+      return b.paragraphs.map((p: any) => p.runs ? p.runs.map((r: any) => r.text || '').join('') : (p.text || '')).join('\n')
     }
     return String(b.content || '')
   }
-  // bridge: целим текст в бокс, а если блок был импортирован с paragraphs — обновляем их
-  // (оформление каждой строки берём из её же абзаца; если там пусто — из ближайшего "стилевого" run)
+
+  const pushHistory = useCallback(() => {
+    setHistory(h => [...h.slice(-24), { slides: JSON.parse(JSON.stringify(slides)), active }])
+    setRedoStack([])
+  }, [slides, active])
+
   const commitText = (blockId: string, val: string) => {
     pushHistory()
     setSlides(sl => sl.map((si, i) => i !== active ? si : {
-      ...si, content: {
-        ...si.content, blocks: si.content.blocks.map(x => {
+      ...si,
+      content: {
+        ...si.content,
+        blocks: si.content.blocks.map(x => {
           if (x.id !== blockId) return x
           const oldPs = (x as any).paragraphs
-          if (oldPs && oldPs.length) {
-            return { ...x, content: val, paragraphs: restyleParas(oldPs, val) }
-          }
+          if (oldPs && oldPs.length) return { ...x, content: val, paragraphs: restyleParas(oldPs, val) }
           return { ...x, content: val }
-        })
-      }
+        }),
+      },
     }))
   }
 
@@ -201,15 +481,17 @@ export default function PresentationEditor() {
         if (r.data.pdf_url) setPdfUrl(resolveSrc(r.data.pdf_url))
         if (r.data.slides?.length) {
           const s = r.data.slides.sort((a: any, b: any) => a.order - b.order).map((s: any, idx: number) => ({
-            id: s.id, order: idx, background: s.background || '#ffffff', backgroundType: s.backgroundType || s.background_type || 'solid', gradient: s.gradient, bgImage: s.bgImage || s.bg_image, layout: s.layout || 'blank', transition: s.transition || 'fade', width: s.width, height: s.height,
+            id: s.id, order: idx, background: s.background || '#ffffff',
+            backgroundType: s.backgroundType || s.background_type || 'solid',
+            gradient: s.gradient, bgImage: s.bgImage || s.bg_image,
+            layout: s.layout || 'blank', transition: s.transition || 'fade',
+            width: s.width, height: s.height,
             content: s.content?.blocks ? s.content : { blocks: [{ id: 'b' + idx, type: 'text', content: 'Слайд ' + (idx + 1) }] },
-            notes: s.notes || ''
+            notes: s.notes || '',
           }))
-          setSlidesRaw(s) // загрузка с сервера — НЕ помечаем dirty
+          setSlidesRaw(s)
         }
-      }).catch((e: any) => {
-        // раньше ошибка глоталась: редактор молча показывал шаблон, и «Сохранить»
-        // затирал реальную презентацию пустышкой — теперь честный отказ
+      }).catch(() => {
         toast('Не удалось загрузить презентацию — проверь соединение и обнови страницу', 'error')
         setLoadFailed(true)
       })
@@ -218,7 +500,6 @@ export default function PresentationEditor() {
     const subjFromUrl = sp.get('subject')
     setSubjSlug(subjFromUrl || '')
     if (subjFromUrl && isNew) {
-      // если пришли из урока с ?subject=slug
       client.get('/subjects/').then(r => {
         const arr = Array.isArray(r.data) ? r.data : r.data.results || []
         const found = arr.find((x: any) => String(x.slug) === String(subjFromUrl) || String(x.id) === String(subjFromUrl))
@@ -227,29 +508,20 @@ export default function PresentationEditor() {
     }
   }, [id])
 
-  const cur = slides[active]
-  const curSelected = cur?.content.blocks.find(b => b.id === selectedBlock)
-
-  // --- Несохранённые правки: индикатор + autosave + страж beforeunload + Ctrl+S ---
-  const [dirty, setDirty] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const markDirty = () => setDirty(true)
-
-  const pushHistory = () => {
-    setHistory(h => [...h.slice(-19), { slides: JSON.parse(JSON.stringify(slides)), active }])
-  }
-  // один переход по слайдам: не оставляет выделение/правку со старого слайда
-  const selectSlide = (i: number) => {
+  const selectSlide = useCallback((i: number) => {
     setActive(i)
     setSelectedBlock(null)
+    setActiveCell(null)
     setEditingText(null)
-  }
+    setEditingShape(null)
+    setCtxMenu(null)
+  }, [])
+
   useEffect(() => {
     const list = slideListRef.current
     if (!list) return
     const el = list.querySelector(`[data-slide-index="${active}"]`) as HTMLElement | null
     if (!el) return
-    // телефон: горизонтальная лента, десктоп: вертикальный список
     if (window.innerWidth >= 1024) {
       list.scrollTo({ top: Math.max(0, el.offsetTop - 12), behavior: 'smooth' })
     } else {
@@ -257,141 +529,385 @@ export default function PresentationEditor() {
       list.scrollTo({ left: Math.max(0, left), behavior: 'smooth' })
     }
   }, [active, slides.length])
-  // undo/redo: снимок хранит и активный индекс — не падаем, если он вышел за длину
-  const [redoStack, setRedoStack] = useState<Snapshot[]>([])
+
   const undo = () => {
     if (!history.length) return
     const prev = history[history.length - 1]
-    setRedoStack(r => [...r.slice(-19), { slides: JSON.parse(JSON.stringify(slides)), active }])
-    setSlides(prev.slides)
+    setRedoStack(r => [...r.slice(-24), { slides: JSON.parse(JSON.stringify(slides)), active }])
+    setSlidesRaw(prev.slides)
     setActive(Math.min(prev.active, prev.slides.length - 1))
     setHistory(h => h.slice(0, -1))
-    markDirty()
+    setDirty(true)
   }
+
   const redo = () => {
     if (!redoStack.length) return
     const next = redoStack[redoStack.length - 1]
-    setHistory(h => [...h.slice(-19), { slides: JSON.parse(JSON.stringify(slides)), active }])
-    setSlides(next.slides)
+    setHistory(h => [...h.slice(-24), { slides: JSON.parse(JSON.stringify(slides)), active }])
+    setSlidesRaw(next.slides)
     setActive(Math.min(next.active, next.slides.length - 1))
     setRedoStack(r => r.slice(0, -1))
-    markDirty()
+    setDirty(true)
   }
-  // Ctrl+Z / Ctrl+Y(Shift+Z) / Ctrl+S / Delete — как в настоящем редакторе
+
+  // ==================== FIT-TO-STAGE (ИСПРАВЛЕНИЕ БАГА ПОСЛЕ СЛАЙД-ШОУ!) ====================
+  const baseSlideW = 960
+  const baseSlideH = (cur?.width && cur?.height && cur.width > 0 && cur.height > 0)
+    ? Math.round(960 * (cur.height / cur.width))
+    : 540
+
+  const recalcFit = useCallback(() => {
+    const wrap = canvasWrapRef.current
+    if (!wrap) return
+    const cw = wrap.clientWidth
+    if (cw < 160) return
+    const stageH = stageRef.current?.clientHeight || 0
+    const maxW = Math.min(cw, baseSlideW)
+    const fitByW = maxW / baseSlideW
+    const fitByH = stageH > 220 ? Math.min(1, (stageH - 125) / baseSlideH) : 1
+    const fit = Math.max(0.32, Math.min(1, fitByW, Math.max(0.45, fitByH)))
+    setCanvasFit(prev => Math.abs(prev - fit) > 0.002 ? fit : prev)
+  }, [baseSlideW, baseSlideH])
+
+  useLayoutEffect(() => {
+    if (!isAbsolute) return
+    recalcFit()
+    const raf = requestAnimationFrame(recalcFit)
+    const wrap = canvasWrapRef.current
+    const stage = stageRef.current
+    const ro = new ResizeObserver(() => recalcFit())
+    if (wrap) ro.observe(wrap)
+    if (stage) ro.observe(stage)
+    window.addEventListener('resize', recalcFit)
+    return () => {
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+      window.removeEventListener('resize', recalcFit)
+    }
+  }, [isAbsolute, baseSlideW, baseSlideH, active, slides.length, slideshow, showPreview, isEditFullscreen, recalcFit])
+
+  const canvasScale = Math.max(0.25, (zoom / 100) * canvasFit)
+
+  // Горячие клавиши редактора
   useEffect(() => {
+    if (slideshow || showPreview) return
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase()
-      if (tag === 'input' || tag === 'textarea' || (e.target as HTMLElement | null)?.isContentEditable) return
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName?.toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable) return
       const ctrl = e.ctrlKey || e.metaKey
-      if (ctrl && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo() }
+      if (e.key === 'F5') { e.preventDefault(); setSlideshow(true) }
+      else if (e.key === 'Escape') {
+        if (chartModalBlockId) { setChartModalBlockId(null); return }
+        if (showTemplates) { setShowTemplates(false); return }
+        if (ctxMenu) { setCtxMenu(null); return }
+        setSelectedBlock(null); setActiveCell(null); setOpenMenu(null)
+      }
+      else if (ctrl && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo() }
       else if (ctrl && e.key.toLowerCase() === 'y') { e.preventDefault(); redo() }
       else if (ctrl && e.key.toLowerCase() === 's') { e.preventDefault(); save() }
-      else if (e.key === 'Delete' && selectedBlock) { e.preventDefault(); deleteBlock(selectedBlock) }
-      else if (e.key === 'PageDown' || (e.key === 'ArrowDown' && e.altKey)) { e.preventDefault(); setActive(i => Math.min(i + 1, slides.length - 1)) }
-      else if (e.key === 'PageUp' || (e.key === 'ArrowUp' && e.altKey)) { e.preventDefault(); setActive(i => Math.max(i - 1, 0)) }
+      else if (ctrl && e.key.toLowerCase() === 'c' && curSelected) {
+        e.preventDefault()
+        setClipboardBlock(JSON.parse(JSON.stringify(curSelected)))
+        toast('Блок скопирован (Ctrl+V чтобы вставить)', 'info')
+      }
+      else if (ctrl && e.key.toLowerCase() === 'v' && clipboardBlock) {
+        e.preventDefault()
+        pasteBlock(clipboardBlock)
+      }
+      else if (ctrl && e.key.toLowerCase() === 'd' && selectedBlock) { e.preventDefault(); duplicateBlock() }
+      else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBlock) { e.preventDefault(); deleteBlock(selectedBlock) }
+      else if (selectedBlock && !curSelected?.style?.locked && !e.altKey && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault()
+        const step = e.shiftKey ? 5 : 1
+        const dx = e.key === 'ArrowRight' ? step : e.key === 'ArrowLeft' ? -step : 0
+        const dy = e.key === 'ArrowDown' ? step : e.key === 'ArrowUp' ? -step : 0
+        setSlides(sl => sl.map((s, i) => i !== active ? s : {
+          ...s,
+          content: {
+            ...s.content,
+            blocks: s.content.blocks.map(b => b.id !== selectedBlock || b.style?.x === undefined ? b : {
+              ...b, style: { ...b.style, x: Math.max(-10, Math.min(96, (b.style.x || 0) + dx)), y: Math.max(-10, Math.min(96, (b.style.y || 0) + dy)) },
+            }),
+          },
+        }))
+      }
+      else if (e.key === 'PageDown' || (e.key === 'ArrowDown' && e.altKey)) { e.preventDefault(); selectSlide(Math.min(active + 1, slides.length - 1)) }
+      else if (e.key === 'PageUp' || (e.key === 'ArrowUp' && e.altKey)) { e.preventDefault(); selectSlide(Math.max(active - 1, 0)) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [history, redoStack, slides, selectedBlock, active])
-  // Слайд-шоу: Esc — выход, стрелки/пробел — навигация (кнопка «Выйти Esc» больше не врёт)
+  }, [slideshow, showPreview, chartModalBlockId, showTemplates, ctxMenu, history, redoStack, slides, selectedBlock, curSelected, active, clipboardBlock])
+
+  // Слайд-шоу: клавиатура
   useEffect(() => {
     if (!slideshow) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { e.preventDefault(); setSlideshow(false) }
-      else if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); setShowIdx(i => Math.min(i + 1, slides.length - 1)) }
-      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); setShowIdx(i => Math.max(i - 1, 0)) }
+      else if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown' || e.key === 'Enter') { e.preventDefault(); setShowIdx(i => Math.min(i + 1, slides.length - 1)) }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'Backspace') { e.preventDefault(); setShowIdx(i => Math.max(i - 1, 0)) }
+      else if (e.key === 'Home') { e.preventDefault(); setShowIdx(0) }
+      else if (e.key === 'End') { e.preventDefault(); setShowIdx(slides.length - 1) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [slideshow, slides.length])
-  // Страж потери правок: F5/закрытие вкладки с несохранённым — спросим браузер
+
   useEffect(() => {
     const onBefore = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = '' } }
     window.addEventListener('beforeunload', onBefore)
     return () => window.removeEventListener('beforeunload', onBefore)
   }, [dirty])
-  const handleDragStart = (e: React.MouseEvent, blockId: string) => {
+
+  // ==================== ПЛАВНОЕ 60 FPS ПЕРЕТАСКИВАНИЕ, РЕСАЙЗ И ПОВОРОТ ====================
+  const commitLiveTransform = useCallback(() => {
+    const lt = liveTransformRef.current
+    liveTransformRef.current = null
+    setLiveTransform(null)
+    setGuides({ v: null, h: null })
+    if (!lt) return
+    pushHistory()
+    setSlides(sl => sl.map((s, i) => i !== active ? s : {
+      ...s,
+      content: {
+        ...s.content,
+        blocks: s.content.blocks.map(b => b.id === lt.id ? {
+          ...b,
+          style: {
+            ...b.style,
+            x: parseFloat(lt.x.toFixed(2)),
+            y: parseFloat(lt.y.toFixed(2)),
+            w: parseFloat(lt.w.toFixed(2)),
+            h: parseFloat(lt.h.toFixed(2)),
+            rotation: Math.round(lt.rotation),
+          },
+        } : b),
+      },
+    }))
+  }, [active, pushHistory])
+
+  const handleDragStart = (e: React.PointerEvent, blockId: string) => {
+    if (e.button !== 0) return
     const block = cur?.content.blocks.find(b => b.id === blockId)
     if (!block || block.style?.x === undefined) return
+    setCtxMenu(null)
+    setSelectedBlock(blockId)
+    if (block.style?.locked) return
     e.preventDefault()
-    setDragging({ id: blockId, startX: e.clientX, startY: e.clientY, origX: block.style.x, origY: block.style.y })
+    liveTransformRef.current = null
+    setDragging({
+      id: blockId,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: block.style.x ?? 10,
+      origY: block.style.y ?? 10,
+      origW: block.style.w ?? 30,
+      origH: block.style.h ?? 20,
+      origRot: block.style.rotation ?? 0,
+    })
   }
-  const handleDragMove = (e: React.MouseEvent | MouseEvent) => {
+
+  const handleDragMove = (e: PointerEvent) => {
     if (!dragging) return
     const rect = canvasRef.current?.getBoundingClientRect()
-    const w = rect?.width || 960
-    const h = rect?.height || 540
-    const scale = (zoom / 100) * canvasFit
-    const dx = ((e.clientX - dragging.startX) / (w / scale)) * 100
-    const dy = ((e.clientY - dragging.startY) / (h / scale)) * 100
-    const block = cur?.content.blocks.find(b => b.id === dragging.id)
-    const bw = block?.style?.w || 30
-    const bh = block?.style?.h || 20
-    const newX = Math.max(0, Math.min(100 - bw, dragging.origX + dx))
-    const newY = Math.max(0, Math.min(100 - bh, dragging.origY + dy))
-    setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: s.content.blocks.map(b => b.id === dragging.id ? { ...b, style: { ...b.style, x: parseFloat(newX.toFixed(2)), y: parseFloat(newY.toFixed(2)) } } : b) } }))
-  }
-  const handleDragEnd = () => {
-    if (dragging) {
-      pushHistory()
-      setDragging(null)
+    if (!rect || rect.width < 10 || rect.height < 10) return
+    if (Math.abs(e.clientX - dragging.startX) < 2 && Math.abs(e.clientY - dragging.startY) < 2 && !liveTransformRef.current) return
+    const dx = ((e.clientX - dragging.startX) / rect.width) * 100
+    const dy = ((e.clientY - dragging.startY) / rect.height) * 100
+    const bw = dragging.origW
+    const bh = dragging.origH
+    let newX = Math.max(-5, Math.min(105 - bw, dragging.origX + dx))
+    let newY = Math.max(-5, Math.min(105 - bh, dragging.origY + dy))
+
+    let snapV: number | null = null
+    let snapH: number | null = null
+
+    if (!e.altKey) {
+      const threshX = 1.0
+      const threshY = 1.2
+      // Опорные линии: центр/края слайда + соседние блоки
+      const vTargets: number[] = [50, 5, 95]
+      const hTargets: number[] = [50, 6, 94]
+      for (const ob of (cur?.content.blocks || [])) {
+        if (ob.id === dragging.id || ob.style?.x === undefined) continue
+        const ox = ob.style.x, ow = ob.style.w || 20
+        const oy = ob.style.y, oh = ob.style.h || 15
+        vTargets.push(ox, ox + ow / 2, ox + ow)
+        hTargets.push(oy, oy + oh / 2, oy + oh)
+      }
+      for (const tx of vTargets) {
+        if (Math.abs((newX + bw / 2) - tx) < threshX) { newX = tx - bw / 2; snapV = tx; break }
+        if (Math.abs(newX - tx) < threshX * 0.8) { newX = tx; snapV = tx; break }
+        if (Math.abs((newX + bw) - tx) < threshX * 0.8) { newX = tx - bw; snapV = tx; break }
+      }
+      for (const ty of hTargets) {
+        if (Math.abs((newY + bh / 2) - ty) < threshY) { newY = ty - bh / 2; snapH = ty; break }
+        if (Math.abs(newY - ty) < threshY * 0.8) { newY = ty; snapH = ty; break }
+        if (Math.abs((newY + bh) - ty) < threshY * 0.8) { newY = ty - bh; snapH = ty; break }
+      }
     }
+
+    setGuides({ v: snapV, h: snapH })
+    const next = { id: dragging.id, x: newX, y: newY, w: bw, h: bh, rotation: dragging.origRot }
+    liveTransformRef.current = next
+    setLiveTransform(next)
   }
-  const handleResizeStart = (e: React.MouseEvent, blockId: string, handle: string) => {
+
+  const handleDragEnd = () => {
+    if (!dragging) return
+    setDragging(null)
+    commitLiveTransform()
+  }
+
+  const handleResizeStart = (e: React.PointerEvent, blockId: string, handle: string) => {
+    if (e.button !== 0) return
     const block = cur?.content.blocks.find(b => b.id === blockId)
-    if (!block) return
+    if (!block || block.style?.locked) return
     e.preventDefault()
     e.stopPropagation()
-    setResizing({ id: blockId, handle, startX: e.clientX, startY: e.clientY, origX: block.style?.x || 10, origY: block.style?.y || 10, origW: block.style?.w || 30, origH: block.style?.h || 20 })
+    setCtxMenu(null)
+    liveTransformRef.current = null
+    setResizing({
+      id: blockId,
+      handle,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: block.style?.x ?? 10,
+      origY: block.style?.y ?? 10,
+      origW: block.style?.w ?? 30,
+      origH: block.style?.h ?? 20,
+      origRot: block.style?.rotation ?? 0,
+    })
   }
-  const handleResizeMove = (e: MouseEvent) => {
+
+  const handleResizeMove = (e: PointerEvent) => {
     if (!resizing) return
     const rect = canvasRef.current?.getBoundingClientRect()
-    const w = rect?.width || 960
-    const h = rect?.height || 540
-    const scale = (zoom / 100) * canvasFit
-    const dx = ((e.clientX - resizing.startX) / (w / scale)) * 100
-    const dy = ((e.clientY - resizing.startY) / (h / scale)) * 100
+    if (!rect || rect.width < 10 || rect.height < 10) return
+    const dx = ((e.clientX - resizing.startX) / rect.width) * 100
+    const dy = ((e.clientY - resizing.startY) / rect.height) * 100
     let newW = resizing.origW
     let newH = resizing.origH
     let newX = resizing.origX
     let newY = resizing.origY
     const handle = resizing.handle
-    if (handle.includes('e')) newW = Math.max(5, resizing.origW + dx)
-    if (handle.includes('s')) newH = Math.max(5, resizing.origH + dy)
-    if (handle.includes('w')) { newW = Math.max(5, resizing.origW - dx); newX = resizing.origX + dx }
-    if (handle.includes('n')) { newH = Math.max(5, resizing.origH - dy); newY = resizing.origY + dy }
-    const snap = showGrid ? 2 : 0
-    if (snap) {
-      newX = Math.round(newX / snap) * snap
-      newY = Math.round(newY / snap) * snap
-      newW = Math.round(newW / snap) * snap
-      newH = Math.round(newH / snap) * snap
+    const isCorner = handle.length === 2
+
+    if (handle.includes('e')) newW = Math.max(4, resizing.origW + dx)
+    if (handle.includes('s')) newH = Math.max(3, resizing.origH + dy)
+    if (handle.includes('w')) {
+      const clampedW = Math.max(4, resizing.origW - dx)
+      newX = resizing.origX + (resizing.origW - clampedW)
+      newW = clampedW
     }
-    newX = Math.max(0, Math.min(100 - newW, newX))
-    newY = Math.max(0, Math.min(100 - newH, newY))
-    setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: s.content.blocks.map(b => b.id === resizing.id ? { ...b, style: { ...b.style, x: parseFloat(newX.toFixed(2)), y: parseFloat(newY.toFixed(2)), w: parseFloat(newW.toFixed(2)), h: parseFloat(newH.toFixed(2)) } } : b) } }))
+    if (handle.includes('n')) {
+      const clampedH = Math.max(3, resizing.origH - dy)
+      newY = resizing.origY + (resizing.origH - clampedH)
+      newH = clampedH
+    }
+
+    // Shift + угловая ручка = сохраняем пропорции как в PowerPoint / Figma!
+    if (e.shiftKey && isCorner && resizing.origW > 0 && resizing.origH > 0) {
+      const ratio = resizing.origW / resizing.origH
+      const propH = Math.max(3, newW / ratio)
+      if (handle.includes('n')) newY = resizing.origY + (resizing.origH - propH)
+      newH = propH
+    }
+
+    newX = Math.max(-5, Math.min(105 - newW, newX))
+    newY = Math.max(-5, Math.min(105 - newH, newY))
+    const next = { id: resizing.id, x: newX, y: newY, w: newW, h: newH, rotation: resizing.origRot }
+    liveTransformRef.current = next
+    setLiveTransform(next)
   }
+
   const handleResizeEnd = () => {
-    if (resizing) {
-      pushHistory()
-      setResizing(null)
-    }
+    if (!resizing) return
+    setResizing(null)
+    commitLiveTransform()
   }
-  const handleCancel = () => {
-    if (dirty && !confirm('Есть несохранённые правки. Выйти без сохранения?')) return
-    const hasAnyBlock = slides.some(s => s.content.blocks.some((b: any) => b.type !== 'text' || b.content?.trim() || b.src || b.table || b.shape))
-    const hasContent = title.trim() !== 'Новая презентация' || desc.trim() || subject || slides.length > 1 || hasAnyBlock
-    if (importedId) {
-      // уже создан черновик на сервере — остаётся в профиле как черновик (видно только владельцу)
-      if (hasContent && !confirm('Отменить? Презентация сохранена как черновик в профиле (видно только вам) — можно вернуться и доделать.')) return
-      nav('/profile?tab=draft')
-      return
-    }
-    if (hasContent && !confirm('Отменить создание презентации? Чёрновик не сохранялся — данные будут потеряны.')) return
-    if (window.history.length > 2) nav(-1)
-    else nav('/presentations')
+
+  const handleRotateStart = (e: React.PointerEvent, blockId: string) => {
+    if (e.button !== 0) return
+    const block = cur?.content.blocks.find(b => b.id === blockId)
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!block || block.style?.locked || !rect) return
+    e.preventDefault()
+    e.stopPropagation()
+    const origX = block.style?.x ?? 10
+    const origY = block.style?.y ?? 10
+    const origW = block.style?.w ?? 30
+    const origH = block.style?.h ?? 20
+    const origRot = block.style?.rotation ?? 0
+    const cx = rect.left + ((origX + origW / 2) / 100) * rect.width
+    const cy = rect.top + ((origY + origH / 2) / 100) * rect.height
+    const startAngle = (Math.atan2(e.clientY - cy, e.clientX - cx) * 180) / Math.PI
+    liveTransformRef.current = null
+    setRotating({ id: blockId, cx, cy, startAngle, origRot, origX, origY, origW, origH })
   }
+
+  const handleRotateMove = (e: PointerEvent) => {
+    if (!rotating) return
+    const curAngle = (Math.atan2(e.clientY - rotating.cy, e.clientX - rotating.cx) * 180) / Math.PI
+    let rot = rotating.origRot + (curAngle - rotating.startAngle)
+    rot = ((rot % 360) + 360) % 360
+    if (rot > 180) rot -= 360
+    if (e.shiftKey) rot = Math.round(rot / 15) * 15
+    else if (Math.abs(rot) < 4) rot = 0
+    else if (Math.abs(Math.abs(rot) - 90) < 4) rot = rot > 0 ? 90 : -90
+    const next = { id: rotating.id, x: rotating.origX, y: rotating.origY, w: rotating.origW, h: rotating.origH, rotation: Math.round(rot) }
+    liveTransformRef.current = next
+    setLiveTransform(next)
+  }
+
+  const handleRotateEnd = () => {
+    if (!rotating) return
+    setRotating(null)
+    commitLiveTransform()
+  }
+
+  useEffect(() => {
+    if (!dragging) return
+    const mm = (e: PointerEvent) => handleDragMove(e)
+    const mu = () => handleDragEnd()
+    window.addEventListener('pointermove', mm)
+    window.addEventListener('pointerup', mu)
+    window.addEventListener('pointercancel', mu)
+    return () => {
+      window.removeEventListener('pointermove', mm)
+      window.removeEventListener('pointerup', mu)
+      window.removeEventListener('pointercancel', mu)
+    }
+  }, [dragging, cur, active, commitLiveTransform])
+
+  useEffect(() => {
+    if (!resizing) return
+    const mm = (e: PointerEvent) => handleResizeMove(e)
+    const mu = () => handleResizeEnd()
+    window.addEventListener('pointermove', mm)
+    window.addEventListener('pointerup', mu)
+    window.addEventListener('pointercancel', mu)
+    return () => {
+      window.removeEventListener('pointermove', mm)
+      window.removeEventListener('pointerup', mu)
+      window.removeEventListener('pointercancel', mu)
+    }
+  }, [resizing, cur, active, commitLiveTransform])
+
+  useEffect(() => {
+    if (!rotating) return
+    const mm = (e: PointerEvent) => handleRotateMove(e)
+    const mu = () => handleRotateEnd()
+    window.addEventListener('pointermove', mm)
+    window.addEventListener('pointerup', mu)
+    window.addEventListener('pointercancel', mu)
+    return () => {
+      window.removeEventListener('pointermove', mm)
+      window.removeEventListener('pointerup', mu)
+      window.removeEventListener('pointercancel', mu)
+    }
+  }, [rotating, commitLiveTransform])
+
   const toggleEditFullscreen = async () => {
     const el = fullscreenRef.current as any
     try {
@@ -408,138 +924,248 @@ export default function PresentationEditor() {
   }
   useEffect(() => {
     const onFs = () => setIsEditFullscreen(!!document.fullscreenElement)
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && document.fullscreenElement) setIsEditFullscreen(false) }
     document.addEventListener('fullscreenchange', onFs)
-    window.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('fullscreenchange', onFs); window.removeEventListener('keydown', onKey) }
+    return () => document.removeEventListener('fullscreenchange', onFs)
   }, [])
-  useEffect(() => {
-    if (!dragging) return
-    const mm = (e: PointerEvent) => handleDragMove(e as any)
-    const mu = () => handleDragEnd()
-    const mc = () => handleDragEnd()
-    window.addEventListener('pointermove', mm)
-    window.addEventListener('pointerup', mu)
-    window.addEventListener('pointercancel', mc)
-    return () => { window.removeEventListener('pointermove', mm); window.removeEventListener('pointerup', mu); window.removeEventListener('pointercancel', mc) }
-  }, [dragging, cur, zoom])
-  useEffect(() => {
-    if (!resizing) return
-    const mm = (e: PointerEvent) => handleResizeMove(e as any)
-    const mu = () => handleResizeEnd()
-    const mc = () => handleResizeEnd()
-    window.addEventListener('pointermove', mm)
-    window.addEventListener('pointerup', mu)
-    window.addEventListener('pointercancel', mc)
-    return () => { window.removeEventListener('pointermove', mm); window.removeEventListener('pointerup', mu); window.removeEventListener('pointercancel', mc) }
-  }, [resizing, cur, zoom, showGrid])
 
+  // ==================== ОПЕРАЦИИ СО СЛАЙДАМИ ====================
   const addSlide = (layout = 'blank') => {
     pushHistory()
-    const genId = () => 'b' + Date.now().toString().slice(-6) + Math.random().toString(36).slice(2, 4)
-    const layouts: any = {
-      blank: { blocks: [{ id: genId(), type: 'text', content: 'Новый слайд', style: { fontSize: 28, bold: true, fontFamily: 'Manrope', x: 5, y: 40, w: 90, h: 20, z: 1, unit: '%' } }] },
+    const genId = () => 'b' + Date.now().toString().slice(-6) + Math.random().toString(36).slice(2, 5)
+    const layouts: Record<string, { blocks: Block[]; bg?: string; grad?: string; bgType?: 'solid' | 'gradient' }> = {
+      blank: { blocks: [{ id: genId(), type: 'text', content: 'Новый слайд', style: { fontSize: 28, bold: true, fontFamily: 'Manrope', color: '#1e293b', x: 8, y: 12, w: 84, h: 15, z: 1, unit: '%' } }] },
       title: {
         blocks: [
-          { id: genId(), type: 'text', content: 'Заголовок слайда', style: { fontSize: 32, bold: true, align: 'center', fontFamily: 'Manrope', x: 5, y: 20, w: 90, h: 18, z: 1, unit: '%' } },
-          { id: genId(), type: 'text', content: 'Подзаголовок', style: { fontSize: 18, align: 'center', color: '#64748b', x: 5, y: 42, w: 90, h: 12, z: 2, unit: '%' } },
-        ]
+          { id: genId(), type: 'text', content: 'Заголовок слайда', style: { fontSize: 36, bold: true, align: 'center', fontFamily: 'Manrope', color: '#0f172a', x: 6, y: 24, w: 88, h: 18, z: 1, unit: '%' } },
+          { id: genId(), type: 'text', content: 'Подзаголовок или имя автора', style: { fontSize: 18, align: 'center', color: '#64748b', x: 12, y: 46, w: 76, h: 12, z: 2, unit: '%' } },
+        ],
       },
       content: {
         blocks: [
-          { id: genId(), type: 'text', content: 'Заголовок раздела', style: { fontSize: 24, bold: true, fontFamily: 'Manrope', x: 5, y: 10, w: 90, h: 15, z: 1, unit: '%' } },
-          { id: genId(), type: 'text', content: '• Пункт 1\n• Пункт 2\n• Пункт 3', style: { fontSize: 16, bullet: true, x: 5, y: 30, w: 90, h: 40, z: 2, unit: '%' } },
-        ]
+          { id: genId(), type: 'text', content: 'Заголовок раздела', style: { fontSize: 28, bold: true, fontFamily: 'Manrope', color: '#0f172a', x: 6, y: 8, w: 88, h: 14, z: 1, unit: '%' } },
+          { id: genId(), type: 'text', content: 'Главный тезис 1\nГлавный тезис 2\nГлавный тезис 3', style: { fontSize: 18, bullet: true, color: '#334155', x: 8, y: 26, w: 84, h: 52, z: 2, unit: '%' } },
+        ],
+      },
+      two_col: {
+        blocks: [
+          { id: genId(), type: 'text', content: 'Сравнение / Две колонки', style: { fontSize: 26, bold: true, fontFamily: 'Manrope', color: '#0f172a', x: 5, y: 7, w: 90, h: 13, z: 1, unit: '%' } },
+          { id: genId(), type: 'text', content: 'Левая колонка\n• Тезис 1\n• Тезис 2', style: { fontSize: 17, x: 5, y: 24, w: 43, h: 60, z: 2, background: '#f8fafc', borderRadius: 10, color: '#1e293b', unit: '%' } },
+          { id: genId(), type: 'text', content: 'Правая колонка\n• Тезис 1\n• Тезис 2', style: { fontSize: 17, x: 52, y: 24, w: 43, h: 60, z: 3, background: '#f8fafc', borderRadius: 10, color: '#1e293b', unit: '%' } },
+        ],
       },
       image: {
         blocks: [
-          { id: genId(), type: 'text', content: 'Слайд с картинкой', style: { fontSize: 24, bold: true, x: 5, y: 10, w: 90, h: 12, z: 1, unit: '%' } },
-          { id: genId(), type: 'image', src: 'https://picsum.photos/800/400', style: { x: 10, y: 25, w: 80, h: 55, z: 2, unit: '%' } },
-        ]
+          { id: genId(), type: 'text', content: 'Слайд с иллюстрацией', style: { fontSize: 26, bold: true, color: '#0f172a', x: 6, y: 8, w: 88, h: 12, z: 1, unit: '%' } },
+          { id: genId(), type: 'image', src: 'https://picsum.photos/800/450', style: { x: 8, y: 24, w: 50, h: 62, z: 2, borderRadius: 10, unit: '%' } },
+          { id: genId(), type: 'text', content: 'Описание иллюстрации и ключевые выводы по теме.', style: { fontSize: 17, color: '#334155', x: 62, y: 28, w: 32, h: 52, z: 3, unit: '%' } },
+        ],
       },
       table: {
         blocks: [
-          { id: genId(), type: 'text', content: 'Таблица данных', style: { fontSize: 20, bold: true, x: 5, y: 10, w: 90, h: 12, z: 1, unit: '%' } },
-          { id: genId(), type: 'table', table: { rows: 3, cols: 3, cells: Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => ({ text: '', style: {} }))) }, style: { x: 5, y: 25, w: 90, h: 55, z: 2, unit: '%' } },
-        ]
+          { id: genId(), type: 'text', content: 'Таблица данных', style: { fontSize: 24, bold: true, color: '#0f172a', x: 6, y: 7, w: 88, h: 12, z: 1, unit: '%' } },
+          { id: genId(), type: 'table', table: createDefaultTable(4, 3), style: { x: 6, y: 22, w: 88, h: 64, z: 2, unit: '%' } },
+        ],
       },
       chart: {
         blocks: [
-          { id: genId(), type: 'text', content: 'Диаграмма', style: { fontSize: 20, bold: true, x: 5, y: 10, w: 90, h: 12, z: 1, unit: '%' } },
-          { id: genId(), type: 'chart', style: { chartType: 'bar', x: 10, y: 25, w: 80, h: 55, z: 2, unit: '%' }, chartData: { labels: ['A', 'B', 'C', 'D', 'E'], values: [40, 70, 50, 80, 60] } },
-        ]
+          { id: genId(), type: 'text', content: 'Аналитика и график', style: { fontSize: 24, bold: true, color: '#0f172a', x: 6, y: 7, w: 88, h: 12, z: 1, unit: '%' } },
+          { id: genId(), type: 'chart', style: { chartType: 'bar', x: 10, y: 22, w: 80, h: 66, z: 2, unit: '%' }, chartData: createDefaultChartData('Результаты по четвертям') },
+        ],
+      },
+      quote: {
+        blocks: [
+          { id: genId(), type: 'text', content: '«Образование — самое мощное оружие, с помощью которого можно изменить мир.»', style: { fontSize: 28, italic: true, bold: true, align: 'center', fontFamily: 'Georgia', color: '#0f172a', x: 10, y: 26, w: 80, h: 32, z: 1, unit: '%' } },
+          { id: genId(), type: 'text', content: '— Нельсон Мандела', style: { fontSize: 17, align: 'center', color: '#64748b', x: 20, y: 62, w: 60, h: 10, z: 2, unit: '%' } },
+        ],
+      },
+      thanks: {
+        bg: '#0f172a',
+        bgType: 'gradient',
+        grad: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 55%, #312e81 100%)',
+        blocks: [
+          { id: genId(), type: 'text', content: 'Спасибо за внимание!', style: { fontSize: 44, bold: true, align: 'center', fontFamily: 'Manrope', color: '#ffffff', x: 8, y: 34, w: 84, h: 20, z: 1, unit: '%' } },
+          { id: genId(), type: 'text', content: 'Вопросы и обсуждение', style: { fontSize: 20, align: 'center', color: '#cbd5e1', x: 18, y: 56, w: 64, h: 12, z: 2, unit: '%' } },
+        ],
       },
     }
-    const base = layouts[layout] || layouts.blank
-    // ensure all blocks have z
-    base.blocks.forEach((b: any, i: number) => { if (!b.style) b.style = {}; if (b.style.z === undefined) b.style.z = i + 1; if (!b.style.unit) b.style.unit = '%' })
-    setSlides(s => [...s, { order: s.length, background: '#ffffff', backgroundType: 'solid', layout, transition: 'fade', content: base }])
-    setActive(slides.length)
+    const spec = layouts[layout] || layouts.blank
+    spec.blocks.forEach((b: any, i: number) => { if (!b.style) b.style = {}; if (b.style.z === undefined) b.style.z = i + 1; if (!b.style.unit) b.style.unit = '%' })
+    const insertAt = active + 1
+    const nextSlide: Slide = {
+      order: insertAt,
+      background: spec.bg || '#ffffff',
+      backgroundType: spec.bgType || 'solid',
+      gradient: spec.grad,
+      layout,
+      transition: cur?.transition || 'fade',
+      content: { blocks: spec.blocks },
+    }
+    setSlides(s => {
+      const copy = [...s]
+      copy.splice(insertAt, 0, nextSlide)
+      return copy.map((x, idx) => ({ ...x, order: idx }))
+    })
+    selectSlide(insertAt)
   }
+
+  const moveSlide = (dir: -1 | 1) => {
+    const ni = active + dir
+    if (ni < 0 || ni >= slides.length) return
+    pushHistory()
+    setSlides(s => {
+      const c = [...s]
+      const tmp = c[active]; c[active] = c[ni]; c[ni] = tmp
+      return c.map((x, i) => ({ ...x, order: i }))
+    })
+    setActive(ni)
+  }
+
   const duplicateSlide = () => {
     pushHistory()
-    const copy = { ...cur, id: undefined, order: slides.length, content: JSON.parse(JSON.stringify(cur.content)) }
-    // копия сразу ПОСЛЕ текущего (как в PowerPoint), а не в конец
+    const copy = { ...cur, id: undefined, content: JSON.parse(JSON.stringify(cur.content)) }
     const at = active + 1
     setSlides(s => { const c = [...s]; c.splice(at, 0, { ...copy, order: at }); return c.map((s2, i2) => ({ ...s2, order: i2 })) })
-    setActive(at)
+    selectSlide(at)
   }
+
   const deleteSlide = () => {
     if (slides.length <= 1) return
     pushHistory()
-    setSlides(s => s.filter((_, i) => i !== active)); setActive(a => Math.max(0, a - 1))
+    setSlides(s => s.filter((_, i) => i !== active).map((x, i) => ({ ...x, order: i })))
+    selectSlide(Math.max(0, active - 1))
   }
 
+  // ==================== ОПЕРАЦИИ С БЛОКАМИ ====================
   const addBlock = (type: Block['type'], extra: any = {}) => {
     pushHistory()
-    const nid = 'b' + Date.now()
-    // каждый тип кладём в предсказуемое место по центру слайда — не в случайную точку
-    const geomByType: any = { text: { x: 20, y: 38, w: 60, h: 18 }, image: { x: 20, y: 20, w: 60, h: 52 }, shape: { x: 30, y: 33, w: 40, h: 30 }, table: { x: 10, y: 24, w: 80, h: 46 }, chart: { x: 15, y: 22, w: 70, h: 52 }, video: { x: 15, y: 22, w: 70, h: 50 }, icon: { x: 40, y: 32, w: 20, h: 28 } }
-    const baseGeom = { x: 20, y: 35, w: 60, h: 30, ...(geomByType[type] || {}), z: (cur?.content.blocks.length || 0) + 1, unit: '%' }
+    const nid = 'b' + Date.now() + Math.random().toString(36).slice(2, 4)
+    const maxZ = Math.max(0, ...(cur?.content.blocks || []).map(b => b.style?.z || 0))
+    const geomByType: any = {
+      text: { x: 18, y: 36, w: 64, h: 18 },
+      image: { x: 20, y: 18, w: 56, h: 56 },
+      shape: { x: 34, y: 30, w: 28, h: 32 },
+      table: { x: 8, y: 20, w: 84, h: 52 },
+      chart: { x: 12, y: 18, w: 76, h: 62 },
+      video: { x: 15, y: 20, w: 70, h: 54 },
+      icon: { x: 42, y: 34, w: 16, h: 24 },
+    }
     let block: Block = { id: nid, type } as any
-    if (type === 'text') block = { id: nid, type, content: 'Новый текст — выдели чтобы форматировать', style: { fontSize: 18, color: '#1e293b', align: 'left', fontFamily: 'Inter', lineHeight: 1.4, ...baseGeom } }
-    if (type === 'video') block = { id: nid, type, content: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', style: { ...baseGeom } }
-    if (type === 'image') block = { id: nid, type, src: extra.src || 'https://picsum.photos/800/400', style: { borderRadius: 8, shadow: false, ...baseGeom, w: (baseGeom as any).w || 35, h: (baseGeom as any).h || 30 } }
-    if (type === 'shape') block = { id: nid, type, shape: extra.shape || 'rect', style: { fill: '#3B82F6', stroke: '#1e40af', strokeWidth: 2, opacity: 1, ...baseGeom } }
-    if (type === 'table') block = { id: nid, type, table: { rows: 3, cols: 3, cells: Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => ({ text: '', style: {} }))) }, style: { ...baseGeom } }
-    if (type === 'chart') block = { id: nid, type, content: 'chart', style: { chartType: extra.chartType || 'bar', ...baseGeom }, chartData: { labels: ['A', 'B', 'C', 'D', 'E'], values: [40, 70, 50, 80, 60] } as any }
-    if (type === 'icon') block = { id: nid, type, content: extra.icon || '⭐', style: { fontSize: 32, ...baseGeom } }
+    const baseGeom = { ...(geomByType[type] || { x: 20, y: 30, w: 50, h: 30 }), z: maxZ + 1, unit: '%' }
+
+    if (type === 'text') {
+      block = {
+        id: nid, type,
+        content: extra.content || 'Введите текст…',
+        style: { fontSize: 18, color: '#1e293b', align: 'left', fontFamily: 'Inter', lineHeight: 1.35, ...baseGeom, ...(extra.style || {}) },
+      }
+    } else if (type === 'video') {
+      block = { id: nid, type, content: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', style: { ...baseGeom } }
+    } else if (type === 'image') {
+      block = { id: nid, type, src: extra.src || 'https://picsum.photos/800/450', style: { borderRadius: 8, objectFit: 'contain', ...baseGeom } }
+    } else if (type === 'shape') {
+      const shKey = extra.shape || 'rect'
+      const def = getShapeDef(shKey)
+      const shGeom = def.isLine
+        ? { ...baseGeom, x: 25, y: 46, w: 50, h: 8 }
+        : ['circle', 'star', 'heart', 'plus', 'diamond', 'pentagon', 'hexagon', 'badge'].includes(shKey)
+          ? { ...baseGeom, x: 38, y: 26, w: 24, h: 42 }
+          : shKey === 'callout'
+            ? { ...baseGeom, x: 30, y: 26, w: 36, h: 30 }
+            : { ...baseGeom, x: 32, y: 30, w: 34, h: 26 }
+      block = {
+        id: nid, type, shape: shKey,
+        content: shKey === 'callout' ? 'Важная заметка!' : '',
+        style: {
+          fill: def.isLine ? 'transparent' : '#3b82f6',
+          stroke: '#1d4ed8',
+          strokeWidth: def.isLine ? 4 : 2,
+          dash: 'solid',
+          opacity: 1,
+          textColor: '#ffffff',
+          textSize: 16,
+          textBold: true,
+          ...shGeom,
+        },
+      }
+    } else if (type === 'table') {
+      const tRows = extra.rows || 3
+      const tCols = extra.cols || 3
+      const tbl = createDefaultTable(tRows, tCols)
+      if (extra.theme) tbl.theme = extra.theme
+      block = { id: nid, type, table: tbl, style: { ...baseGeom } }
+    } else if (type === 'chart') {
+      const kind: ChartKind = extra.chartType || 'bar'
+      block = {
+        id: nid, type, content: '',
+        style: { chartType: kind, ...baseGeom },
+        chartData: createDefaultChartData(kind === 'pie' || kind === 'donut' ? 'Распределение' : 'Показатели'),
+      }
+    } else if (type === 'icon') {
+      block = { id: nid, type, content: extra.icon || '★', style: { fontSize: 42, ...baseGeom } }
+    }
+
     setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: [...s.content.blocks, block] } }))
     setSelectedBlock(nid)
-    setPropsOpen(true)
+    setActiveCell(type === 'table' ? { r: 0, c: 0 } : null)
+    if (type === 'text') setEditingText(nid)
   }
 
-  // YouTube/VK/Rutube → embed-URL. Ничего не знаем о ссылке — отдаём как есть (iframe sandbox).
-  const videoEmbedUrl = (src: string) => {
-    const s = (src || '').trim()
-    let m = s.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{6,})/)
-    if (m) return `https://www.youtube.com/embed/${m[1]}`
-    m = s.match(/vk\.com\/video(-?\d+)_(\d+)/)
-    if (m) return `https://vk.com/video_ext.php?oid=${m[1]}&id=${m[2]}`
-    m = s.match(/rutube\.ru\/video\/([\w]+)/)
-    if (m) return `https://rutube.ru/play/embed/${m[1]}`
-    return s
+  const pasteBlock = (src: Block) => {
+    pushHistory()
+    const nid = 'b' + Date.now()
+    const clone: Block = JSON.parse(JSON.stringify(src))
+    clone.id = nid
+    const maxZ = Math.max(1, ...(cur?.content.blocks || []).map(b => b.style?.z || 1))
+    if (clone.style?.x !== undefined) {
+      clone.style.x = Math.min(86, (clone.style.x || 0) + 3)
+      clone.style.y = Math.min(86, (clone.style.y || 0) + 3)
+      clone.style.z = maxZ + 1
+      clone.style.locked = false
+    }
+    setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: [...s.content.blocks, clone] } }))
+    setSelectedBlock(nid)
+    toast('Блок вставлен', 'success')
   }
-  const addVideo = () => {
-    // блок с дефолтной ссылкой сразу на слайде — URL меняется в панели «Свойства» (текстовое поле)
-    addBlock('video')
-    toast('Видео добавлено — вставь свою ссылку в поле текста в «Свойствах» (YouTube/VK/Rutube)', 'info')
+
+  const duplicateBlock = () => {
+    if (!selectedBlock || !curSelected) return
+    pasteBlock(curSelected)
+  }
+
+  const updateSlide = (patch: Partial<Slide>) => {
+    setSlides(sl => sl.map((s, i) => i === active ? { ...s, ...patch } : s))
+  }
+
+  const applyTransitionAll = (tr: string) => {
+    pushHistory()
+    setSlides(sl => sl.map(s => ({ ...s, transition: tr })))
+    toast(`Переход «${tr}» применён ко всем слайдам`, 'success')
   }
 
   const updateSelected = (patch: any) => {
     if (!selectedBlock) return
-    pushHistory()
-    setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: s.content.blocks.map(b => b.id === selectedBlock ? { ...b, ...patch, style: { ...b.style, ...patch.style } } : b) } }))
+    setSlides(sl => sl.map((s, i) => i !== active ? s : {
+      ...s,
+      content: {
+        ...s.content,
+        blocks: s.content.blocks.map(b => b.id === selectedBlock ? {
+          ...b, ...patch,
+          style: patch.style ? { ...b.style, ...patch.style } : b.style,
+        } : b),
+      },
+    }))
   }
+
   const updateSelectedStyle = (patch: any) => {
     if (!selectedBlock) return
     setSlides(sl => sl.map((s, i) => i !== active ? s : {
-      ...s, content: {
-        ...s.content, blocks: s.content.blocks.map(b => {
+      ...s,
+      content: {
+        ...s.content,
+        blocks: s.content.blocks.map(b => {
           if (b.id !== selectedBlock) return b
           const paras = (b as any).paragraphs
           let np = paras
-          // лента/панель стилей должна работать и для импортированного текста (runs побеждают рендер)
           if (Array.isArray(paras) && paras.length) {
             const RK = ['fontSize', 'color', 'fontFamily', 'bold', 'italic', 'underline', 'highlight', 'highlightColor', 'textShadow']
             const keys = Object.keys(patch).filter(k => RK.includes(k))
@@ -550,101 +1176,218 @@ export default function PresentationEditor() {
             }))
           }
           return { ...b, style: { ...b.style, ...patch }, ...(np !== paras ? { paragraphs: np } : {}) }
-        })
-      }
+        }),
+      },
     }))
   }
+
   const deleteBlock = (blockId: string | null) => {
     if (!blockId) return
     pushHistory()
     setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: s.content.blocks.filter(b => b.id !== blockId) } }))
     setSelectedBlock(prev => prev === blockId ? null : prev)
+    setActiveCell(null)
   }
-  const deleteSelected = () => deleteBlock(selectedBlock)
-  // для импортированного текста оформление живёт в runs — панель должна показывать его
-  // приоритет: первый абзац → стиль блока → любой другой run
-  const runStyleOf = (cb: any) => { if (Array.isArray(cb?.paragraphs) && cb.paragraphs.length) { const f = (cb.paragraphs[0]?.runs || []).find((r: any) => r?.style && (r.style.fontSize || r.style.color || r.style.fontFamily)); if (f) return f.style; const s = cb.style || {}; if (s.fontSize || s.color || s.fontFamily) return s; for (const pp of cb.paragraphs.slice(1)) { const r2 = (pp.runs || []).find((r: any) => r?.style && (r.style.fontSize || r.style.color || r.style.fontFamily)); if (r2) return r2.style } } return {} }
-  // окно правки тоже показывает настоящий стиль (не дефолтный чёрный 16px)
-  const editInline = (b: any, s: any) => { const rs = runStyleOf(b) as any; return { fontSize: ((rs.fontSize || s?.fontSize || 16)) + 'px', color: rs.color || s?.color || '#1e293b', fontFamily: fontStack(rs.fontFamily || s?.fontFamily), fontWeight: (rs.bold || s?.bold) ? 700 : 400, fontStyle: rs.italic ? 'italic' : undefined, lineHeight: textLineHeight(s) } }
-  const renderPropsContent = () => (
-    <>
-      <div className="p-3 border-b">
-        <h3 className="font-bold text-sm flex items-center gap-1"><Wand2 size={14} /> Свойства</h3>
-        {selectedBlock ? <div className="text-xs text-slate-500">{curSelected?.type} • анимация: {curSelected?.animation || 'нет'}</div> : <div className="text-xs text-slate-500">Выдели блок на слайде</div>}
-      </div>
-      <div className="flex-1 p-3 space-y-3 overflow-auto">
-        {selectedBlock && curSelected?.style?.x !== undefined && (
-          <div className="space-y-2 pb-3 border-b">
-            <label className="text-xs font-semibold">Позиция и размер (% слайда)</label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {[['X', 'x'], ['Y', 'y'], ['Ш', 'w'], ['В', 'h']].map(([lab, k]: any) => (
-                <label key={k} className="text-[11px]">{lab}
-                  <input type="number" min={-20} max={200} step={1} value={Math.round(curSelected.style?.[k] ?? 0)} onChange={e => updateSelectedStyle({ [k]: Number(e.target.value) || 0 })} className="w-full px-1 py-1.5 rounded border text-sm" />
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-        {selectedBlock && curSelected?.type === 'video' && (
-          <div className="space-y-2">
-            <label className="text-xs font-semibold">Ссылка на видео (YouTube / VK / Rutube)</label>
-            <textarea value={curSelected.content || ''} onChange={e => updateSelected({ content: e.target.value })} rows={2} placeholder="https://www.youtube.com/watch?v=..." className="w-full px-2 py-1.5 rounded border text-sm break-all" />
-            <div className="text-[11px] text-slate-400">Ссылка автоматически превращается в плеер: watch?v=…, youtu.be/…, shorts/… — всё работает.</div>
-          </div>
-        )}
-        {selectedBlock && curSelected?.type === 'text' && (
-          <div className="space-y-2">
-            <label className="text-xs font-semibold">Текст</label>
-            <textarea value={curSelected.content} onChange={e => updateSelected({ content: e.target.value, paragraphs: (curSelected as any).paragraphs ? restyleParas((curSelected as any).paragraphs, e.target.value) : undefined })} rows={3} className="w-full px-2 py-1.5 rounded border text-sm" />
-            <div className="text-[11px] text-slate-400">Править текст можно и прямо на слайде: двойной клик по нему или кнопка ✏️ на выделенном блоке. Enter — новая строка, Esc — готово.</div>
-            <div className="grid grid-cols-2 gap-2">
-              <label className="text-xs">Шрифт <select value={curSelected.style?.fontFamily || runStyleOf(curSelected).fontFamily || 'Inter'} onChange={e => updateSelectedStyle({ fontFamily: e.target.value })} className="w-full px-1 py-1 rounded border text-xs">{FONTS.map(f => <option key={f} value={f}>{f}</option>)}</select></label>
-              <label className="text-xs">Размер <input type="range" min={10} max={96} value={curSelected.style?.fontSize || runStyleOf(curSelected).fontSize || 18} onChange={e => updateSelectedStyle({ fontSize: parseInt(e.target.value) })} className="w-full" /></label>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <label className="text-xs">Цвет <input type="color" value={curSelected.style?.color || runStyleOf(curSelected).color || '#1e293b'} onChange={e => updateSelectedStyle({ color: e.target.value })} className="w-full h-9 rounded border" /></label>
-              <label className="text-xs">Маркер <input type="color" value={curSelected.style?.highlightColor || '#fef08a'} onChange={e => updateSelectedStyle({ highlight: true, highlightColor: e.target.value })} className="w-full h-9 rounded border" /></label>
-            </div>
-            <label className="text-xs flex items-center gap-1"><input type="checkbox" checked={!!curSelected.style?.shadow} onChange={e => updateSelectedStyle({ shadow: e.target.checked })} className="w-5 h-5" /> Тень</label>
-          </div>
-        )}
-        {selectedBlock && curSelected?.type === 'shape' && (
-          <div className="space-y-2">
-            <label className="text-xs">Фигура <select value={curSelected.shape} onChange={e => updateSelected({ shape: e.target.value })} className="w-full px-2 py-1.5 rounded border text-sm">{SHAPES.map(s => <option key={s.k} value={s.k}>{s.label}</option>)}</select></label>
-            <div className="grid grid-cols-2 gap-2">
-              <label className="text-xs">Заливка <input type="color" value={curSelected.style?.fill || '#3B82F6'} onChange={e => updateSelectedStyle({ fill: e.target.value })} className="w-full h-9 rounded" /></label>
-              <label className="text-xs">Контур <input type="color" value={curSelected.style?.stroke || '#1e40af'} onChange={e => updateSelectedStyle({ stroke: e.target.value })} className="w-full h-9 rounded" /></label>
-            </div>
-          </div>
-        )}
-        {selectedBlock && curSelected?.type === 'image' && (
-          <div className="space-y-2">
-            <label className="text-xs">Скругление <input type="range" min={0} max={24} value={curSelected.style?.borderRadius || 8} onChange={e => updateSelectedStyle({ borderRadius: parseInt(e.target.value) })} className="w-full" /></label>
-          </div>
-        )}
-        <div className="pt-3 border-t">
-          <label className="text-xs font-semibold">Заметки к слайду</label>
-          <textarea value={cur.notes || ''} onChange={e => setSlides(sl => sl.map((s, i) => i === active ? { ...s, notes: e.target.value } : s))} placeholder="Подсказки докладчику..." rows={3} className="w-full mt-1 px-2 py-1.5 rounded border text-sm" />
-        </div>
-      </div>
-      <div className="p-3 border-t space-y-2">
-        <button onClick={deleteSelected} disabled={!selectedBlock} className="w-full py-3 min-h-[44px] rounded-lg bg-red-50 text-red-600 border border-red-200 text-sm flex items-center justify-center gap-1 disabled:opacity-50"><Trash2 size={14} /> Удалить блок</button>
-      </div>
-    </>
-  )
+
+  const bringForward = () => {
+    if (!selectedBlock || !curSelected) return
+    const maxZ = Math.max(1, ...(cur?.content.blocks || []).map(b => b.style?.z || 1))
+    updateSelectedStyle({ z: maxZ + 1 })
+  }
+
+  const sendBackward = () => {
+    if (!selectedBlock || !curSelected) return
+    updateSelectedStyle({ z: Math.max(0, (curSelected.style?.z || 1) - 1) })
+  }
+
+  const centerBlock = (axis: 'h' | 'v') => {
+    if (!selectedBlock || !curSelected || curSelected.style?.x === undefined) return
+    if (axis === 'h') updateSelectedStyle({ x: Math.max(0, Math.round((100 - (curSelected.style.w || 40)) / 2)) })
+    else updateSelectedStyle({ y: Math.max(0, Math.round((100 - (curSelected.style.h || 20)) / 2)) })
+  }
+
+  // ---- Операции с таблицей ----
+  const updateTableCell = (blockId: string, r: number, c: number, text: string) => {
+    setSlides(sl => sl.map((s, i) => i !== active ? s : {
+      ...s,
+      content: {
+        ...s.content,
+        blocks: s.content.blocks.map(bb => {
+          if (bb.id !== blockId) return bb
+          const tbl = bb.table || createDefaultTable(3, 3)
+          const rows = Math.max(tbl.rows || 3, r + 1)
+          const cols = Math.max(tbl.cols || 3, c + 1)
+          const cells = Array.from({ length: rows }, (_, ri) =>
+            Array.from({ length: cols }, (_, ci) => tbl.cells?.[ri]?.[ci] ? { ...tbl.cells[ri][ci] } : { text: '', style: {} })
+          )
+          cells[r][c] = { ...cells[r][c], text }
+          return { ...bb, table: { ...tbl, rows, cols, cells } }
+        }),
+      },
+    }))
+  }
+
+  const updateTableColWidths = (blockId: string, colWidths: number[]) => {
+    setSlides(sl => sl.map((s, i) => i !== active ? s : {
+      ...s,
+      content: {
+        ...s.content,
+        blocks: s.content.blocks.map(bb => bb.id !== blockId ? bb : {
+          ...bb, table: { ...(bb.table || createDefaultTable(3, 3)), colWidths },
+        }),
+      },
+    }))
+  }
+
+  const updateBlockById = (blockId: string, patch: any) => {
+    setSlides(sl => sl.map((s, i) => i !== active ? s : {
+      ...s,
+      content: {
+        ...s.content,
+        blocks: s.content.blocks.map(b => b.id === blockId ? {
+          ...b,
+          ...patch,
+          style: patch.style ? { ...b.style, ...patch.style } : b.style,
+        } : b),
+      },
+    }))
+  }
+
+  const applyTemplate = (tplSlides: Slide[], mode: 'replace' | 'append', tplName: string) => {
+    pushHistory()
+    if (mode === 'replace') {
+      setSlides(tplSlides.map((s, idx) => ({ ...s, order: idx })))
+      selectSlide(0)
+      if (!title || title === 'Новая презентация') setTitle(tplName)
+      toast(`Применён шаблон «${tplName}» (${tplSlides.length} слайдов)`, 'success')
+    } else {
+      const startIdx = slides.length
+      setSlides(prev => [...prev, ...tplSlides].map((s, idx) => ({ ...s, order: idx })))
+      selectSlide(startIdx)
+      toast(`Добавлено ${tplSlides.length} слайдов из шаблона «${tplName}»`, 'success')
+    }
+  }
+
+  const deleteSlideAt = useCallback((idx: number) => {
+    if (slides.length <= 1) { toast('Должен остаться хотя бы один слайд', 'error'); return }
+    if (!confirm(`Удалить слайд ${idx + 1}?`)) return
+    pushHistory()
+    setSlides(sl => sl.filter((_, i) => i !== idx).map((x, i) => ({ ...x, order: i })))
+    if (idx <= active) setActive(Math.max(0, active - 1))
+    if (active === idx) setSelectedBlock(null)
+  }, [slides.length, active, pushHistory])
+
+  const editTableSize = (action: 'addRow' | 'delRow' | 'addCol' | 'delCol', targetId?: string) => {
+    const bid = targetId || selectedBlock
+    if (!bid) return
+    pushHistory()
+    setSlides(sl => sl.map((s, i) => i !== active ? s : {
+      ...s,
+      content: {
+        ...s.content,
+        blocks: s.content.blocks.map(bb => {
+          if (bb.id !== bid || bb.type !== 'table') return bb
+          const tbl = bb.table || createDefaultTable(3, 3)
+          let rows = tbl.rows || tbl.cells?.length || 3
+          let cols = tbl.cols || tbl.cells?.[0]?.length || 3
+          let cells: any[][] = Array.from({ length: rows }, (_, ri) =>
+            Array.from({ length: cols }, (_, ci) => tbl.cells?.[ri]?.[ci] ? JSON.parse(JSON.stringify(tbl.cells[ri][ci])) : { text: '', style: {} })
+          )
+          let colWidths = tbl.colWidths
+          if (action === 'addRow' && rows < 14) {
+            rows += 1
+            cells.push(Array.from({ length: cols }, (_, ci) => ({ text: ci === 0 ? `Строка ${rows - 1}` : '', style: {} })))
+          } else if (action === 'delRow' && rows > 1) {
+            rows -= 1
+            cells = cells.slice(0, rows)
+          } else if (action === 'addCol' && cols < 10) {
+            cols += 1
+            cells = cells.map((row, ri) => [...row, { text: ri === 0 ? `Столбец ${cols}` : '', style: {} }])
+            colWidths = Array.from({ length: cols }, () => Number((100 / cols).toFixed(2)))
+          } else if (action === 'delCol' && cols > 1) {
+            cols -= 1
+            cells = cells.map(row => row.slice(0, cols))
+            colWidths = Array.from({ length: cols }, () => Number((100 / cols).toFixed(2)))
+          }
+          return { ...bb, table: { ...tbl, rows, cols, cells, colWidths } }
+        }),
+      },
+    }))
+  }
+
+  const updateTableProps = (patch: any) => {
+    if (!selectedBlock || curSelected?.type !== 'table') return
+    updateSelected({ table: { ...(curSelected.table || createDefaultTable(3, 3)), ...patch } })
+  }
+
+  const updateActiveCellStyle = (patch: any) => {
+    if (!selectedBlock || curSelected?.type !== 'table' || !activeCell) return
+    const { r, c } = activeCell
+    const tbl = curSelected.table || createDefaultTable(3, 3)
+    const rows = tbl.rows || 3, cols = tbl.cols || 3
+    const cells = Array.from({ length: rows }, (_, ri) =>
+      Array.from({ length: cols }, (_, ci) => tbl.cells?.[ri]?.[ci] ? JSON.parse(JSON.stringify(tbl.cells[ri][ci])) : { text: '', style: {} })
+    )
+    cells[r][c] = { ...cells[r][c], style: { ...(cells[r][c]?.style || {}), ...patch } }
+    updateSelected({ table: { ...tbl, cells } })
+  }
+
+  // ---- Темы и медиа ----
+  const applyTheme = (th: typeof PPT_THEMES[number], allSlides = false) => {
+    pushHistory()
+    setSlides(sl => sl.map((s, i) => {
+      if (!allSlides && i !== active) return s
+      const updatedBlocks = (s.content.blocks || []).map((b, bi) => {
+        if (b.type === 'text') {
+          const isHeading = (b.style?.fontSize || 18) >= 24 || bi === 0
+          const nextCol = isHeading ? th.titleColor : th.bodyColor
+          const paras = Array.isArray((b as any).paragraphs)
+            ? (b as any).paragraphs.map((p: any) => ({
+                ...p,
+                runs: Array.isArray(p.runs) ? p.runs.map((r: any) => ({ ...r, style: { ...(r.style || {}), color: nextCol } })) : p.runs,
+              }))
+            : (b as any).paragraphs
+          return { ...b, style: { ...b.style, color: nextCol }, ...(paras ? { paragraphs: paras } : {}) }
+        }
+        if (b.type === 'shape') return { ...b, style: { ...b.style, fill: th.accent } }
+        return b
+      })
+      return {
+        ...s,
+        background: th.bg,
+        backgroundType: th.type,
+        gradient: th.grad || undefined,
+        content: { ...s.content, blocks: updatedBlocks },
+      }
+    }))
+    toast(allSlides ? `Тема «${th.name}» применена ко всем слайдам` : `Тема «${th.name}» применена к слайду`, 'success')
+  }
+
+  const addVideo = () => {
+    addBlock('video')
+    toast('Видео добавлено — вставьте ссылку YouTube / VK / Rutube в панели «Свойства»', 'info')
+  }
 
   const handleImageUpload = (e: any) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 8 * 1024 * 1024) { alert('Макс 8MB'); return }
+    if (file.size > 8 * 1024 * 1024) { toast('Картинка больше 8MB', 'error'); return }
+    const reader = new FileReader()
+    reader.onload = () => {
+      addBlock('image', { src: reader.result as string })
+      toast('Картинка добавлена на слайд', 'success')
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  const replaceSelectedImage = (file: File) => {
+    if (file.size > 8 * 1024 * 1024) { toast('Картинка больше 8MB', 'error'); return }
     const reader = new FileReader()
     reader.onload = () => {
       pushHistory()
-      const nid = 'b' + Date.now()
-      const block: Block = { id: nid, type: 'image', src: reader.result as string, style: { borderRadius: 8 } }
-      setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: [...s.content.blocks, block] } }))
-      setSelectedBlock(nid)
-      setPropsOpen(true)
+      updateSelected({ src: reader.result as string })
+      toast('Изображение заменено', 'success')
     }
     reader.readAsDataURL(file)
   }
@@ -654,208 +1397,97 @@ export default function PresentationEditor() {
     if (!file) return
     const reader = new FileReader()
     reader.onload = () => {
-      setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, backgroundType: 'image', bgImage: reader.result as string }))
+      pushHistory()
+      updateSlide({ backgroundType: 'image', bgImage: reader.result as string })
     }
     reader.readAsDataURL(file)
+    e.target.value = ''
   }
 
+  // ==================== ЭКСПОРТ PDF ====================
+  const exportSlidesPdf = () => {
+    const win = window.open('', '_blank')
+    if (!win) { toast('Разреши всплывающие окна для экспорта в PDF / печати', 'error'); return }
+    const esc = (s: string) => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[c])
+    const pagesHtml = slides.map(s => {
+      const bg = s.backgroundType === 'gradient' && s.gradient ? s.gradient : (s.background || '#ffffff')
+      const blocksHtml = (s.content.blocks || [])
+        .slice()
+        .sort((a: any, b: any) => (a.style?.z || 0) - (b.style?.z || 0))
+        .map((b: any) => {
+          const st = b.style || {}
+          const pos = `position:absolute;left:${st.x ?? 5}%;top:${st.y ?? 10}%;width:${st.w ?? 90}%;height:${st.h != null ? `${st.h}%` : 'auto'};z-index:${st.z || 1};`
+          if (b.type === 'text') {
+            const txt = b.paragraphs ? b.paragraphs.map((p: any) => p.runs ? p.runs.map((r: any) => r.text || '').join('') : (p.text || '')).join('\n') : (b.content || '')
+            return `<div style="${pos}font-size:${st.fontSize || 18}px;font-weight:${st.bold ? 700 : 400};font-style:${st.italic ? 'italic' : 'normal'};color:${st.color || '#1e293b'};text-align:${st.align || 'left'};white-space:pre-wrap;font-family:${st.fontFamily || 'Inter'},sans-serif;background:${st.background || 'transparent'};border-radius:${st.borderRadius || 0}px;padding:${st.background ? '6px 8px' : '2px 6px'}">${esc(txt)}</div>`
+          }
+          if (b.type === 'image' && b.src) return `<img src="${esc(resolveSrc(b.src))}" style="${pos}object-fit:${st.objectFit || 'contain'};border-radius:${st.borderRadius || 0}px;" />`
+          if (b.type === 'shape') return renderShapeHtml(b, pos)
+          if (b.type === 'table') return renderTableHtml(b, pos)
+          if (b.type === 'chart') return renderChartHtml(b, pos)
+          return ''
+        }).join('')
+      return `<section class="slide" style="background:${bg}">${blocksHtml}</section>`
+    }).join('')
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:landscape;margin:0}*{box-sizing:border-box}body{margin:0;background:#111;display:flex;flex-direction:column;align-items:center;gap:16px;padding:16px;font-family:Inter,system-ui,sans-serif}.slide{width:960px;height:540px;position:relative;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.4);page-break-after:always}@media print{body{background:#fff;padding:0;gap:0}.slide{width:100vw;height:100vh;box-shadow:none}}</style></head><body>${pagesHtml}<script>setTimeout(()=>window.print(),350)</script></body></html>`)
+    win.document.close()
+  }
+
+  // ==================== СОХРАНЕНИЕ И ИМПОРТ ====================
   const save = async (silent = false) => {
-    if (loadFailed) { toast('Презентация не загружена — сохранить нельзя, чтобы не затереть реальные данные. Обнови страницу.', 'error'); return }
-    const token = localStorage.getItem('token')
-    if (!token) { alert('Войди чтобы сохранить'); nav('/login'); return }
-    if (!title.trim()) { alert('Название обязательно'); return }
+    if (loadFailed) { toast('Презентация не загружена — обновите страницу', 'error'); return }
+    const token = localStorage.getItem('token') || localStorage.getItem('access')
+    if (!token) { toast('Войди чтобы сохранить', 'error'); nav('/login'); return }
+    if (!title.trim()) { toast('Укажи название презентации', 'error'); return }
     if (!silent && !subject && !confirm('Сохранить без предмета? Презентация не попадёт в уроки — предмет можно выбрать позже.')) return
     setSaving(true); savingRef.current = true
     try {
-      if (isNew) {
-        if (importedId) {
-          // публикация черновика
-          await client.patch(`/presentations/${importedId}/`, { title: title.trim(), description: desc.trim(), subject: subject || null, is_public: isPublic })
-          const existing = await client.get(`/presentations/${importedId}/`).then(r => r.data.slides || [])
-          for (const s of existing) await client.delete(`/slides/${s.id}/`).catch(() => { })
-          for (let i = 0; i < slides.length; i++) await client.post(`/presentations/${importedId}/slides/`, { order: i, background: slides[i].background, backgroundType: slides[i].backgroundType, gradient: slides[i].gradient, bgImage: slides[i].bgImage, content: slides[i].content, notes: slides[i].notes || '', layout: slides[i].layout, transition: slides[i].transition })
-          nav(`/presentations/${importedId}`)
-          alert('Презентация опубликована')
-        } else {
-          const r = await client.post('/presentations/', { title: title.trim(), description: desc.trim(), subject: subject || null, is_public: isPublic })
-          const pid = r.data.id
-          for (let i = 0; i < slides.length; i++) await client.post(`/presentations/${pid}/slides/`, { order: i, background: slides[i].background, backgroundType: slides[i].backgroundType, gradient: slides[i].gradient, bgImage: slides[i].bgImage, content: slides[i].content, notes: slides[i].notes || '', layout: slides[i].layout, transition: slides[i].transition })
-          nav(`/presentations/${pid}`)
-          alert('Презентация создана')
+      const targetId = isNew ? importedId : id
+      if (isNew && !importedId) {
+        const r = await client.post('/presentations/', { title: title.trim(), description: desc.trim(), subject: subject || null, is_public: isPublic })
+        const pid = r.data.id
+        for (let i = 0; i < slides.length; i++) {
+          await client.post(`/presentations/${pid}/slides/`, {
+            order: i, background: slides[i].background, backgroundType: slides[i].backgroundType,
+            gradient: slides[i].gradient, bgImage: slides[i].bgImage, content: slides[i].content,
+            notes: slides[i].notes || '', layout: slides[i].layout, transition: slides[i].transition,
+          })
         }
-      } else {
-        await client.patch(`/presentations/${id}/`, { title: title.trim(), description: desc.trim(), subject: subject || null, is_public: isPublic })
-        const existing = await client.get(`/presentations/${id}/`).then(r => r.data.slides || [])
-        for (const s of existing) await client.delete(`/slides/${s.id}/`).catch(() => { })
-        for (let i = 0; i < slides.length; i++) await client.post(`/presentations/${id}/slides/`, { order: i, background: slides[i].background, backgroundType: slides[i].backgroundType, gradient: slides[i].gradient, bgImage: slides[i].bgImage, content: slides[i].content, notes: slides[i].notes || '', layout: slides[i].layout, transition: slides[i].transition })
-        if (!silent) alert('Сохранено')
         setDirty(false)
+        toast('Презентация сохранена', 'success')
+        nav(`/presentations/${pid}`)
+      } else if (targetId) {
+        await client.patch(`/presentations/${targetId}/`, { title: title.trim(), description: desc.trim(), subject: subject || null, is_public: isPublic })
+        const existing = await client.get(`/presentations/${targetId}/`).then(r => r.data.slides || [])
+        for (const s of existing) await client.delete(`/slides/${s.id}/`).catch(() => { })
+        for (let i = 0; i < slides.length; i++) {
+          await client.post(`/presentations/${targetId}/slides/`, {
+            order: i, background: slides[i].background, backgroundType: slides[i].backgroundType,
+            gradient: slides[i].gradient, bgImage: slides[i].bgImage, content: slides[i].content,
+            notes: slides[i].notes || '', layout: slides[i].layout, transition: slides[i].transition,
+          })
+        }
+        setDirty(false)
+        if (!silent) toast('Презентация сохранена', 'success')
+        if (isNew && importedId) nav(`/presentations/${importedId}`)
       }
     } catch (e: any) {
-      alert(e.response?.data?.detail || JSON.stringify(e.response?.data) || 'Ошибка сохранения')
+      toast(e.response?.data?.detail || JSON.stringify(e.response?.data) || 'Ошибка сохранения', 'error')
     }
     setSaving(false); savingRef.current = false
   }
 
-  // Autosave: каждые 5с, только для уже сохранённой презентации, молча и не параллельно
   useEffect(() => {
     if (isNew || !id) return
     const iv = setInterval(() => { if (dirty && !savingRef.current) save(true) }, 5000)
     return () => clearInterval(iv)
   }, [isNew, id, dirty])
 
-  const [showIdx, setShowIdx] = useState(0)
-  useEffect(() => { if (slideshow) setShowIdx(active) }, [slideshow])
-
-  const getSlideBgStyle = (s: Slide) => {
-    const g = (s as any).gradient || (s as any).bg_image || (s as any).bgImage
-    const bg = (s as any).background
-    if (g && (g.startsWith('linear-gradient') || g.startsWith('radial-gradient'))) return { background: g } as any
-    if (s.backgroundType === 'gradient' && s.gradient) return { background: s.gradient } as any
-    if (s.backgroundType === 'image' && s.bgImage) return { backgroundImage: `url(${s.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } as any
-    if (s.bgImage && s.bgImage.startsWith('data:image')) return { backgroundImage: `url(${s.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } as any
-    if (bg && (bg.startsWith('linear-gradient') || bg.startsWith('radial-gradient') || bg.startsWith('url('))) return { background: bg } as any
-    return { background: bg || '#ffffff' } as any
-  }
-
-  const isAbsolute = cur && (cur.content.blocks || []).some((b: any) => b.style && b.style.x !== undefined)
-  const getTransitionClass = (t: string) => { const m: any = { fade: 'animate-enter', slide: 'animate-slide', zoom: 'animate-zoom', wipe: 'animate-wipe', split: 'animate-split', random: 'animate-random', 'нет': '' }; return m[t] || '' }
-  const getAnimationClass = (a: string) => { const m: any = { fadeIn: 'animate-fadeIn', slideIn: 'animate-slideIn', zoomIn: 'animate-zoomIn', bounce: 'animate-bounce', flip: 'animate-flip', float: 'animate-float', 'нет': '' }; return m[a] || '' }
-  // aspect слайда из реальных размеров (EMU): 4:3 слайды больше не тянутся на 16:9 канвас
-  const slideAspectStyle = (s: any) => { const w = s?.width, h = s?.height; if (w && h && w > 0 && h > 0) return { aspectRatio: `${w} / ${h}` } as any; return { aspectRatio: '16 / 9' } as any }
-  // Канвас редактора всегда верстается как реальный слайд 960px, затем масштабируется.
-  // Это сохраняет точки/размеры шрифтов как в PowerPoint и убирает наложение текста на телефоне.
-  const baseSlideW = 960
-  const baseSlideH = (cur?.width && cur?.height && cur.width > 0 && cur.height > 0)
-    ? Math.round(960 * (cur.height / cur.width))
-    : 540
-  const canvasScale = Math.max(0.05, (zoom / 100) * canvasFit)
-  useLayoutEffect(() => {
-    const wrap = canvasWrapRef.current
-    if (!wrap || !isAbsolute) return
-    const update = () => {
-      const fit = Math.min(1, wrap.clientWidth / baseSlideW)
-      setCanvasFit(prev => Math.abs(prev - fit) > 0.001 ? fit : prev)
-    }
-    update()
-    const ro = new ResizeObserver(update)
-    ro.observe(wrap)
-    window.addEventListener('resize', update)
-    return () => { ro.disconnect(); window.removeEventListener('resize', update) }
-  }, [isAbsolute, baseSlideW, active, slides.length])
-  // lineHeight из оригинала (PowerPoint single ≈ 1.0–1.2), иначе многострочный текст разъезжается
-  const textLineHeight = (st: any) => st?.lineHeight && st.lineHeight >= 0.5 && st.lineHeight <= 3 ? st.lineHeight : 1.25
-  // шрифт из оригинала + системные фолбэки (MiSans и др. обычно не стоят в системе)
-  const fontStack = (f?: string) => f ? `'${f}', 'Segoe UI', system-ui, -apple-system, 'Microsoft YaHei', 'Noto Sans SC', sans-serif` : undefined
-
-  if (showPreview) {
-    return (
-      <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col">
-        <div className="h-12 bg-slate-800 flex items-center justify-between px-4 text-white">
-          <span className="font-bold">{title} — предпросмотр • {slides.length} слайдов</span>
-          <div className="flex items-center gap-2">
-            {pdfUrl && (
-              <div className="flex rounded-lg overflow-hidden text-sm">
-                <button onClick={() => setPvMode('orig')} className={`px-3 py-1.5 ${pvMode === 'orig' ? 'bg-white text-slate-900' : 'bg-slate-700 text-slate-200'}`}>📄 Оригинал</button>
-                <button onClick={() => setPvMode('blocks')} className={`px-3 py-1.5 ${pvMode === 'blocks' ? 'bg-white text-slate-900' : 'bg-slate-700 text-slate-200'}`}>🧩 Конструктор</button>
-              </div>
-            )}
-            <button onClick={() => setShowPreview(false)} className="px-4 py-1.5 rounded-lg bg-white text-slate-900 font-semibold">✕ Закрыть</button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-auto p-8 bg-slate-800 flex flex-col items-center gap-6">
-          {slides.map((s, i) => {
-            if (pvMode === 'orig' && pdfUrl) {
-              return (
-                <div key={`${i}-${s.transition}`} className="w-[900px] max-w-[90vw] aspect-video shrink-0 rounded-xl border-4 border-white shadow-2xl overflow-hidden relative flex items-center justify-center bg-black">
-                  <PdfPage url={pdfUrl} page={i + 1} scale={1.5} className="w-full h-full object-contain" onError={() => setPvMode('blocks')} />
-                </div>
-              )
-            }
-            const hasG = (s.content.blocks || []).some((b: any) => b.style?.x !== undefined)
-            return (
-              <div key={`${i}-${s.transition}`} className={`w-[900px] max-w-[90vw] aspect-video shrink-0 rounded-xl border-4 border-white shadow-2xl overflow-hidden relative ${getTransitionClass(s.transition || 'нет')} ${slideDotsCls((s as any).background)} ${hasG ? '' : 'p-10 flex flex-col gap-4'}`} style={{ ...getSlideBgStyle(s), ...slideAspectStyle(s) }}>
-                {hasG ? (
-                  <div className="absolute inset-0">
-                    {s.content.blocks.map((b: any) => {
-                      const st = b.style || {}
-                      const anim = getAnimationClass(b.animation || 'нет')
-                      if (b.type === 'text') {
-                        return <div key={b.id} className={anim} style={{ position: 'absolute', left: st.x != null ? `${st.x}%` : '0%', top: st.y != null ? `${st.y}%` : '0%', width: st.w != null ? `${st.w}%` : '90%', height: st.h != null ? `${st.h}%` : 'auto', zIndex: st.z || 0, transform: st.rotation ? `rotate(${st.rotation}deg)` : undefined, overflow: 'visible', display: 'block', padding: st.background ? '4px 6px' : '1px 7px', background: st.background || 'transparent', border: st.stroke ? `${st.strokeWidth || 1}px ${st.dash || 'solid'} ${st.stroke}` : undefined }}><div style={anchoredInner(st)}><div style={{ fontSize: st.fontSize || 16, fontFamily: fontStack(st.fontFamily), lineHeight: textLineHeight(st), color: st.color || '#1e293b', textAlign: st.align || 'left' }}>{b.paragraphs ? b.paragraphs.map((p: any, pi: number) => <div key={pi} style={{ textAlign: p.align || st.align || 'left', marginBottom: '0.2em', lineHeight: p.lineHeight || textLineHeight(st) }}>{p.runs ? p.runs.map((r: any, ri: number) => <span key={ri} style={{ fontFamily: fontStack(r.style?.fontFamily), fontSize: r.style?.fontSize, fontWeight: r.style?.bold ? '700' : undefined, fontStyle: r.style?.italic ? 'italic' : undefined, textDecoration: r.style?.underline ? 'underline' : undefined, color: r.style?.color, background: r.style?.highlight ? '#fef08a' : undefined, textShadow: r.style?.textShadow || undefined }}>{r.text}</span>) : p.text}</div>) : b.content}</div></div></div>
-                      }
-                      if (b.type === 'image') return <div key={b.id} className={anim} style={{ position: 'absolute', left: `${st.x || 0}%`, top: `${st.y || 0}%`, width: `${st.w || 30}%`, height: `${st.h || 30}%`, zIndex: st.z || 0, transform: st.rotation ? `rotate(${st.rotation}deg)` : undefined }}>{b.unrenderable ? <div className="w-full h-full rounded flex flex-col items-center justify-center bg-slate-100 border border-dashed border-slate-300 text-slate-500 text-xs p-1 text-center">{b.brokenLink ? '🖼 Картинка повреждена в исходном файле' : <>🖼 Картинка .{b.origExt || 'emf'} не поддерживается браузером</>}</div> : <img onError={imgMissing} src={resolveSrc(b.src)} style={{ width: '100%', height: '100%', objectFit: st.objectFit || 'contain' }} alt="" />}</div>
-                      if (b.type === 'shape' && st.svgPath) return <div key={b.id} className={anim} style={{ position: 'absolute', left: `${st.x || 0}%`, top: `${st.y || 0}%`, width: `${st.w || 20}%`, height: `${st.h || 15}%`, zIndex: st.z || 0 }}><SvgShape st={st} gid={`ed-pv-${b.id}`} /></div>
-                      if (b.type === 'shape') return <div key={b.id} className={anim} style={{ position: 'absolute', left: `${st.x || 0}%`, top: `${st.y || 0}%`, width: `${st.w || 20}%`, height: `${st.h || 15}%`, zIndex: st.z || 0, transform: st.rotation ? `rotate(${st.rotation}deg)` : undefined, background: st.fill || '#3B82F6', border: st.stroke ? `${st.strokeWidth || 1}px ${st.dash || 'solid'} ${st.stroke}` : undefined, borderRadius: st.shape === 'circle' || st.shape === 'ellipse' ? '50%' : (st.radiusPct != null ? (st.radiusPct <= 0 ? 0 : '12px') : 6) }}></div>
-                      if (b.type === 'table') return <div key={b.id} className={anim} style={{ position: 'absolute', left: `${st.x || 0}%`, top: `${st.y || 0}%`, width: `${st.w || 40}%`, height: `${st.h || 25}%`, zIndex: st.z || 0 }}><div className={`grid gap-px w-full h-full ${((b.table?.cells || []).some((row: any) => row.some((c: any) => c?.style?.background))) ? 'bg-slate-200' : 'bg-transparent'}`} style={{ gridTemplateColumns: `repeat(${b.table?.cols || 3},1fr)` }}>{(b.table?.cells || []).flatMap((row: any) => row.filter((c: any) => !c?.merged).map((c: any, k: number) => <div key={k} className="p-1 text-xs flex items-center justify-center overflow-hidden" style={{ gridColumn: `span ${c?.colspan || 1}`, gridRow: `span ${c?.rowspan || 1}` }}>{c?.text || '—'}</div>))}</div></div>
-                      if (b.type === 'chart') return <div key={b.id} className={anim} style={{ position: 'absolute', left: `${st.x || 0}%`, top: `${st.y || 0}%`, width: `${st.w || 40}%`, height: `${st.h || 30}%`, zIndex: st.z || 0 }}><div className="w-full h-full bg-white rounded-lg border flex flex-col items-center justify-center p-1"><BarChart3 size={14} /><span className="text-xs">{b.style?.chartType || 'bar'}</span></div></div>
-                      if (b.type === 'video') return <div key={b.id} className={anim} style={{ position: 'absolute', left: `${st.x || 0}%`, top: `${st.y || 0}%`, width: `${st.w || 40}%`, height: `${st.h || 30}%`, zIndex: st.z || 0 }}><iframe src={videoEmbedUrl(b.content || '')} title="video" className="w-full h-full rounded" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups" /></div>
-                      return <div key={b.id} className={anim} style={{ position: 'absolute', left: `${st.x || 0}%`, top: `${st.y || 0}%`, width: `${st.w || 30}%`, zIndex: st.z || 0 }}>{b.content}</div>
-                    })}
-                  </div>
-                ) : (
-                  s.content.blocks.map((b: any) => (
-                    <div key={b.id} className={getAnimationClass(b.animation || 'нет')}>
-                      {b.type === 'text' && <div style={{ fontSize: b.style?.fontSize || 20, fontWeight: b.style?.bold ? '700' : '400', textAlign: b.style?.align || 'left', color: b.style?.color || '#1e293b' }}>{b.style?.bullet ? '• ' + b.content : b.content}</div>}
-                      {b.type === 'image' && (b.unrenderable ? <div className="rounded-lg bg-slate-100 border border-dashed border-slate-300 text-slate-500 text-xs p-2 text-center">{b.brokenLink ? '🖼 Картинка повреждена в исходном файле' : <>🖼 Картинка .{b.origExt || 'emf'} не поддерживается браузером</>}</div> : <img onError={imgMissing} src={resolveSrc(b.src)} className="rounded-lg max-h-[300px] w-full object-contain" alt="" />)}
-                      {b.type === 'shape' && <div className="h-12 rounded-lg border-2 flex items-center justify-center" style={{ background: b.style?.fill || '#3B82F6', borderRadius: b.shape === 'circle' ? '50%' : 6 }}></div>}
-                      {b.type === 'table' && <div className="border rounded-lg overflow-hidden"><div className="grid gap-px bg-slate-300" style={{ gridTemplateColumns: `repeat(${b.table?.cols || 3},1fr)` }}>{(b.table?.cells || []).flatMap((row: any) => row.filter((c: any) => !c?.merged).map((c: any, k: number) => <div key={k} className="bg-white p-2 text-xs flex items-center justify-center" style={{ gridColumn: `span ${c?.colspan || 1}`, gridRow: `span ${c?.rowspan || 1}` }}>{c?.text || '—'}</div>))}</div></div>}
-                      {b.type === 'chart' && <div className="h-20 bg-white rounded-lg border flex flex-col items-center justify-center"><BarChart3 size={16} /><span className="text-xs">{b.style?.chartType || 'bar'}</span></div>}
-                      {b.type === 'video' && <div className="aspect-video rounded-lg overflow-hidden bg-black"><iframe src={videoEmbedUrl(b.content || '')} title="video" className="w-full h-full" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups" /></div>}
-                    </div>
-                  ))
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    )
-  }
-
-  if (slideshow) {
-    const s = slides[showIdx]
-    const hasGShow = (s.content.blocks || []).some((b: any) => b.style?.x !== undefined)
-    return (
-      <div className="fixed inset-0 z-50 bg-black flex flex-col">
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div key={`${showIdx}-${s.transition}`} className={`w-[960px] max-w-[95vw] aspect-video shrink-0 rounded-xl overflow-hidden shadow-2xl relative ${getTransitionClass(s.transition || 'нет')} ${slideDotsCls((s as any).background)} ${hasGShow ? '' : 'bg-white p-12 flex flex-col gap-4 overflow-auto'}`} style={{ ...getSlideBgStyle(s), ...slideAspectStyle(s) }}>
-            {hasGShow ? (
-              <div className="absolute inset-0">
-                {s.content.blocks.map((b: any) => {
-                  const st = b.style || {}
-                  const anim = getAnimationClass(b.animation || 'нет')
-                  if (b.type === 'text') {
-                    return <div key={b.id} className={anim} style={{ position: 'absolute', left: `${st.x || 0}%`, top: `${st.y || 0}%`, width: `${st.w || 80}%`, height: st.h != null ? `${st.h}%` : 'auto', zIndex: st.z || 0, transform: st.rotation ? `rotate(${st.rotation}deg)` : undefined, display: 'block', overflow: 'visible', padding: st.background ? '4px 6px' : '1px 7px', background: st.background || 'transparent', border: st.stroke ? `${st.strokeWidth || 1}px ${st.dash || 'solid'} ${st.stroke}` : undefined }}><div style={anchoredInner(st)}><div style={{ fontSize: (st.fontSize || 20) * 1.08, fontFamily: fontStack(st.fontFamily), lineHeight: textLineHeight(st), color: st.color || '#1e293b', textAlign: st.align || 'left' }}>{b.paragraphs ? b.paragraphs.map((p: any, pi: number) => <div key={pi} style={{ textAlign: p.align || st.align || 'left', lineHeight: p.lineHeight || textLineHeight(st) }}>{p.runs ? p.runs.map((r: any, ri: number) => <span key={ri} style={{ fontFamily: fontStack(r.style?.fontFamily), fontSize: r.style?.fontSize, fontWeight: r.style?.bold ? '700' : undefined, fontStyle: r.style?.italic ? 'italic' : undefined, textDecoration: r.style?.underline ? 'underline' : undefined, color: r.style?.color, background: r.style?.highlight ? '#fef08a' : undefined, textShadow: r.style?.textShadow || undefined }}>{r.text}</span>) : p.text}</div>) : b.content}</div></div></div>
-                  }
-                  if (b.type === 'image') return <div key={b.id} className={anim} style={{ position: 'absolute', left: `${st.x || 0}%`, top: `${st.y || 0}%`, width: `${st.w || 30}%`, height: `${st.h || 30}%`, zIndex: st.z || 0, transform: st.rotation ? `rotate(${st.rotation}deg)` : undefined }}>{b.unrenderable ? <div className="w-full h-full rounded flex flex-col items-center justify-center bg-white/10 border border-dashed border-white/40 text-white/80 text-xs p-1 text-center">{b.brokenLink ? '🖼 Картинка повреждена в исходном файле' : <>🖼 Картинка .{b.origExt || 'emf'} не поддерживается браузером</>}</div> : <img onError={imgMissing} src={resolveSrc(b.src)} style={{ width: '100%', height: '100%', objectFit: st.objectFit || 'contain' }} alt="" />}</div>
-                  if (b.type === 'shape' && st.svgPath) return <div key={b.id} className={anim} style={{ position: 'absolute', left: `${st.x || 0}%`, top: `${st.y || 0}%`, width: `${st.w || 20}%`, height: `${st.h || 15}%`, zIndex: st.z || 0 }}><SvgShape st={st} gid={`ed-show-${b.id}`} /></div>
-                  if (b.type === 'shape') return <div key={b.id} className={anim} style={{ position: 'absolute', left: `${st.x || 0}%`, top: `${st.y || 0}%`, width: `${st.w || 20}%`, height: `${st.h || 15}%`, zIndex: st.z || 0, transform: st.rotation ? `rotate(${st.rotation}deg)` : undefined, background: st.fill || '#3B82F6', border: st.stroke ? `${st.strokeWidth || 1}px ${st.dash || 'solid'} ${st.stroke}` : undefined, borderRadius: b.shape === 'circle' || b.shape === 'ellipse' ? '50%' : (st.radiusPct != null ? (st.radiusPct <= 0 ? 0 : '12px') : 6) }}></div>
-                  if (b.type === 'table') return <div key={b.id} className={anim} style={{ position: 'absolute', left: `${st.x || 0}%`, top: `${st.y || 0}%`, width: `${st.w || 40}%`, height: `${st.h || 25}%`, zIndex: st.z || 0 }}><div className={`grid gap-px w-full h-full ${((b.table?.cells || []).some((row: any) => row.some((c: any) => c?.style?.background))) ? 'bg-slate-200' : 'bg-transparent'}`} style={{ gridTemplateColumns: `repeat(${b.table?.cols || 3},1fr)` }}>{(b.table?.cells || []).flatMap((row: any) => row.filter((c: any) => !c?.merged).map((c: any, k: number) => <div key={k} className="p-1 text-xs flex items-center justify-center overflow-hidden" style={{ gridColumn: `span ${c?.colspan || 1}`, gridRow: `span ${c?.rowspan || 1}` }}>{c?.text || '—'}</div>))}</div></div>
-                  if (b.type === 'video') return <div key={b.id} className={anim} style={{ position: 'absolute', left: `${st.x || 0}%`, top: `${st.y || 0}%`, width: `${st.w || 40}%`, height: `${st.h || 30}%`, zIndex: st.z || 0 }}><iframe src={videoEmbedUrl(b.content || '')} title="video" className="w-full h-full rounded" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups" /></div>
-                  return <div key={b.id} className={anim} style={{ position: 'absolute', left: `${st.x || 0}%`, top: `${st.y || 0}%`, zIndex: st.z || 0 }}>{b.content}</div>
-                })}
-              </div>
-            ) : (
-              s.content.blocks.map((b: any) => (
-                <div key={b.id} className={getAnimationClass(b.animation || 'нет')}>
-                  {b.type === 'text' && <div style={{ fontSize: (b.style?.fontSize || 24) * 1.1, color: b.style?.color || '#0f172a', textAlign: b.style?.align || 'left' }}>{b.content}</div>}
-                  {b.type === 'image' && <img onError={imgMissing} src={resolveSrc(b.src)} className="max-h-[400px] w-full object-contain rounded-xl" alt="" />}
-                  {b.type === 'shape' && <div className="h-12 rounded-lg border-2 flex items-center justify-center" style={{ background: b.style?.fill || '#3B82F6', borderRadius: b.shape === 'circle' ? '50%' : 6 }}></div>}
-                  {b.type === 'table' && <div className="border rounded-lg overflow-hidden"><div className="grid gap-px bg-slate-200" style={{ gridTemplateColumns: `repeat(${b.table?.cols || 3},1fr)` }}>{Array.from({ length: (b.table?.rows || 3) * (b.table?.cols || 3) }).map((_, k) => <div key={k} className="bg-white p-2 text-xs flex items-center justify-center">{b.table?.cells?.[Math.floor(k / (b.table?.cols || 3))]?.[k % (b.table?.cols || 3)]?.text || '—'}</div>)}</div></div>}
-                  {b.type === 'chart' && <div className="h-20 bg-white rounded-lg border flex flex-col items-center justify-center"><BarChart3 size={16} /><span className="text-xs">{b.style?.chartType || 'bar'}</span></div>}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-        <div className="h-14 bg-white/10 backdrop-blur flex items-center justify-center gap-3 text-white">
-          <button onClick={() => setShowIdx(i => Math.max(0, i - 1))} className="px-4 py-2 rounded-lg bg-white text-slate-900">‹ Назад</button>
-          <span>{showIdx + 1} / {slides.length} {s.transition && s.transition !== 'нет' && `• ${s.transition}`}</span>
-          <button onClick={() => setShowIdx(i => Math.min(slides.length - 1, i + 1))} className="px-4 py-2 rounded-lg bg-white text-slate-900">Вперед ›</button>
-          <button onClick={() => setSlideshow(false)} className="ml-6 px-4 py-2 rounded-lg bg-red-600">Выйти Esc</button>
-        </div>
-      </div>
-    )
+  const handleCancel = () => {
+    if (dirty && !confirm('Есть несохранённые правки. Выйти без сохранения?')) return
+    if (importedId) { nav('/profile?tab=draft'); return }
+    if (window.history.length > 2) nav(-1)
+    else nav('/presentations')
   }
 
   const handlePptxImport = async (e: any) => {
@@ -870,578 +1502,1179 @@ export default function PresentationEditor() {
       fd.append('file', file)
       fd.append('title', file.name.replace(/\.[^/.]+$/, ''))
       if (subject) fd.append('subject', String(subject))
-      // черновик только владельцу — не попадает в общую ленту
       fd.append('is_public', 'false')
+      const r = await client.post('/presentations/import/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const imported = (r.data.slides || []).sort((a: any, b: any) => a.order - b.order).map((s: any, idx: number) => ({
+        id: s.id, order: idx, background: s.background || '#ffffff',
+        backgroundType: s.backgroundType || s.background_type || 'solid',
+        gradient: s.gradient, bgImage: s.bgImage || s.bg_image,
+        layout: s.layout || 'blank', transition: s.transition || 'fade',
+        width: s.width, height: s.height, content: s.content, notes: s.notes || '',
+      }))
       if (isNew) {
-        const r = await client.post('/presentations/import/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-        const imported = (r.data.slides || []).sort((a: any, b: any) => a.order - b.order).map((s: any, idx: number) => ({
-          id: s.id, order: idx, background: s.background || '#ffffff', backgroundType: s.backgroundType || s.background_type || 'solid', gradient: s.gradient, bgImage: s.bgImage || s.bg_image, layout: s.layout || 'blank', transition: s.transition || 'fade', width: s.width, height: s.height, content: s.content, notes: s.notes || ''
-        }))
-        if (imported.length) {
-          setSlides(imported)
-          setTitle(r.data.title)
-          setDesc(r.data.description || '')
-        }
+        if (imported.length) { setSlides(imported); setTitle(r.data.title); setDesc(r.data.description || '') }
         setImportedId(r.data.id)
-        alert(`Импортировано ${imported.length} слайдов из ${file.name} — сохранено как черновик (видно только вам). Нажмите Сохранить чтобы опубликовать.`)
+        toast(`Импортировано ${imported.length} слайдов из ${file.name}`, 'success')
       } else {
-        const r = await client.post('/presentations/import/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-        const imported = (r.data.slides || []).sort((a: any, b: any) => a.order - b.order)
         for (const s of imported) {
           await client.post(`/presentations/${id}/slides/`, { order: slides.length, background: s.background, content: s.content, notes: s.notes || '' })
         }
         const fresh = await client.get(`/presentations/${id}/`)
         const s = fresh.data.slides.sort((a: any, b: any) => a.order - b.order).map((x: any, idx: number) => ({ id: x.id, order: idx, background: x.background || '#ffffff', content: x.content, notes: x.notes || '' }))
         setSlides(s)
-        alert(`Добавлено ${imported.length} слайдов из ${file.name}`)
+        toast(`Добавлено ${imported.length} слайдов`, 'success')
         try { await client.delete(`/presentations/${r.data.id}/`) } catch { }
       }
     } catch (err: any) {
-      alert(err?.response?.data?.detail || 'Ошибка импорта')
+      toast(err?.response?.data?.detail || 'Ошибка импорта', 'error')
     } finally {
       setImporting(false)
       if (pptxInputRef.current) pptxInputRef.current.value = ''
     }
   }
 
-  return (
-    <div ref={fullscreenRef} className={`${isEditFullscreen ? 'fixed inset-0 z-50 bg-[#e9e9e9] flex flex-col' : 'flex flex-col h-[calc(100dvh-7.5rem)] -m-4 -mb-28 lg:h-[calc(100vh-64px)] lg:-m-8 lg:mb-0'}`}>
-      <h1 className="sr-only">Редактор презентаций</h1>
-      <div className="h-14 bg-[#f3f3f3] border-b flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 overflow-hidden">
-        <button onClick={() => nav(subjSlug ? `/subjects/${subjSlug}` : '/my-lessons')} className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs sm:text-sm font-semibold shrink-0 min-h-[38px] flex items-center justify-center" title={t('back')}><span>←</span><span className="hidden sm:inline ml-1">{t('back')}</span></button>
-        <div className="hidden sm:flex w-8 h-8 rounded bg-[#d24726] items-center justify-center text-white font-bold text-sm shrink-0">P</div>
-        <input value={title} onChange={e => { setTitle(e.target.value); setDirty(true) }} className="flex-1 min-w-[70px] sm:max-w-[280px] px-2 sm:px-3 py-1.5 sm:py-2 rounded border bg-white text-slate-900 font-semibold text-xs sm:text-sm truncate min-h-[38px]" title={title} placeholder={t('prog_title_ph')} />
-        <input value={desc} onChange={e => { setDesc(e.target.value); setDirty(true) }} placeholder={t('subj_add_desc')} className="hidden xl:block flex-1 min-w-[160px] max-w-[260px] px-3 py-1.5 rounded border bg-white text-sm truncate" title={desc} />
-        <button onClick={() => setIsPublic(v => !v)} data-testid="pres-visibility" title={isPublic ? PUI.pub : PUI.priv}
-          className={`px-2 py-1.5 rounded-lg border text-xs font-medium whitespace-nowrap shrink-0 min-h-[38px] flex items-center justify-center ${isPublic ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'bg-white border-slate-300 text-slate-600'}`}>
-          <span>{isPublic ? '🌐' : '🔒'}</span>
-          <span className="hidden md:inline ml-1">{isPublic ? PUI.pub : PUI.priv}</span>
-        </button>
-        <span className="hidden md:inline text-xs text-slate-500 whitespace-nowrap shrink-0">{slides.length} {t('pres_slides_short')}</span>
-        <div className="ml-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
-          <button onClick={() => pptxInputRef.current?.click()} disabled={importing} className="hidden md:flex px-2.5 py-1.5 rounded-lg bg-white border border-orange-200 text-orange-700 items-center gap-1 text-xs font-medium hover:bg-orange-50 whitespace-nowrap" title=".pptx/.pdf">{importing ? '⏳' : '⬆'}<span className="hidden lg:inline">{PUI.imp}</span></button>
-          <input ref={pptxInputRef} type="file" accept=".pptx,.ppt,.pdf" className="hidden" onChange={handlePptxImport} />
-          <button onClick={undo} disabled={!history.length} title="Undo (Ctrl+Z)" className="p-1.5 sm:p-2 rounded-lg bg-white border disabled:opacity-30 shrink-0 min-h-[36px] min-w-[36px] flex items-center justify-center"><Undo2 size={14} /></button>
-          <button onClick={redo} disabled={!redoStack.length} title="Redo (Ctrl+Y)" className="p-1.5 sm:p-2 rounded-lg bg-white border disabled:opacity-30 shrink-0 min-h-[36px] min-w-[36px] flex items-center justify-center"><Redo2 size={14} /></button>
-          <button onClick={() => setShowPreview(true)} className="hidden sm:flex px-3 py-1.5 rounded-lg bg-white border items-center gap-1.5 text-sm whitespace-nowrap"><Eye size={14} /> <span className="hidden lg:inline">{PUI.prev}</span></button>
-          <button onClick={() => setSlideshow(true)} className="hidden sm:flex px-3 py-1.5 rounded-lg bg-slate-900 text-white items-center gap-1.5 text-sm whitespace-nowrap"><Play size={14} /> <span className="hidden lg:inline">{PUI.show}</span></button>
-          <button onClick={toggleEditFullscreen} className="hidden sm:flex px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 items-center gap-1.5 text-sm whitespace-nowrap" title="Fullscreen (F)"><Maximize2 size={14} /> <span className="hidden lg:inline">{isEditFullscreen ? PUI.exit : PUI.full}</span></button>
-          <button onClick={handleCancel} className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-white border border-slate-300 text-slate-700 font-semibold flex items-center justify-center text-xs sm:text-sm whitespace-nowrap hover:bg-slate-50 shrink-0 min-h-[38px]">{t('cancel')}</button>
-          <button onClick={() => save()} className="px-2.5 sm:px-3 py-1.5 sm:py-2 min-h-[38px] sm:min-h-[40px] rounded-lg bg-[#d24726] hover:bg-[#b83b1d] text-white font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm whitespace-nowrap shrink-0"><Save size={14} /> <span className="hidden sm:inline">{t('save')}</span>{dirty && <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulseSoft" />}</button>
-        </div>
-      </div>
-      <div className="px-3 py-2 bg-white border-b flex flex-nowrap overflow-x-auto lg:flex-wrap lg:overflow-visible items-center gap-2">
-        <span className="text-sm font-medium flex items-center gap-1 shrink-0"><BookOpen size={14} /> {t('subj_label')}:</span>
-        <select value={subject || ''} onChange={e => setSubject(e.target.value ? Number(e.target.value) : null)} className="px-3 py-2 rounded-lg border bg-slate-50 text-sm min-w-0 max-sm:flex-1 lg:min-w-[180px] shrink-0">
-          <option value="">{t('subj_no_subject')}</option>
-          {subjects.map((s: any) => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
-        </select>
-        {subject ? (
-          <span className="shrink-0 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-1 rounded-full">{subjects.find((x: any) => String(x.id) === String(subject))?.icon} {subjects.find((x: any) => String(x.id) === String(subject))?.name}</span>
-        ) : (
-          <span className="hidden sm:inline text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-full">{t('subj_no_subject')}</span>
+  useEffect(() => { if (slideshow) setShowIdx(active) }, [slideshow, active])
+
+  // ==================== РЕНДЕР-ХЕЛПЕРЫ ====================
+  const runStyleOf = (cb: any) => {
+    if (Array.isArray(cb?.paragraphs) && cb.paragraphs.length) {
+      const f = (cb.paragraphs[0]?.runs || []).find((r: any) => r?.style && (r.style.fontSize || r.style.color || r.style.fontFamily))
+      if (f) return f.style
+      const s = cb.style || {}
+      if (s.fontSize || s.color || s.fontFamily) return s
+      for (const pp of cb.paragraphs.slice(1)) {
+        const r2 = (pp.runs || []).find((r: any) => r?.style && (r.style.fontSize || r.style.color || r.style.fontFamily))
+        if (r2) return r2.style
+      }
+    }
+    return {}
+  }
+  const editInline = (b: any, s: any) => {
+    const rs = runStyleOf(b) as any
+    return {
+      fontSize: ((rs.fontSize || s?.fontSize || 16)) + 'px',
+      color: rs.color || s?.color || '#1e293b',
+      fontFamily: fontStack(rs.fontFamily || s?.fontFamily),
+      fontWeight: (rs.bold || s?.bold) ? 700 : 400,
+      fontStyle: rs.italic || s?.italic ? 'italic' : undefined,
+      textAlign: s?.align || 'left',
+      lineHeight: textLineHeight(s),
+    }
+  }
+
+  const renderBlockOverlay = (b: Block, isSelected: boolean) => {
+    if (!isSelected) return null
+    const locked = !!b.style?.locked
+    const isTransforming = liveTransform?.id === b.id
+    return (
+      <>
+        {/* Плавающая мини-панель действий */}
+        {!isTransforming && (
+          <div
+            data-pe-overlay
+            onMouseDown={e => e.stopPropagation()}
+            onPointerDown={e => e.stopPropagation()}
+            className="absolute -top-9 left-1/2 -translate-x-1/2 z-30 flex items-center gap-0.5 px-1.5 py-1 rounded-lg bg-slate-900/95 text-white shadow-xl border border-white/15 whitespace-nowrap"
+            style={{ transform: `translateX(-50%) scale(var(--pe-inv, 1))`, transformOrigin: 'bottom center' }}
+          >
+            {b.type === 'table' && (
+              <>
+                <span
+                  onMouseDown={e => e.stopPropagation()}
+                  onPointerDown={e => handleDragStart(e, b.id)}
+                  className="px-1.5 py-0.5 rounded hover:bg-white/15 cursor-move flex items-center gap-1 text-[11px] font-semibold text-orange-300 touch-none"
+                  title="Перетащить таблицу"
+                >
+                  <GripHorizontal size={13} /> Двигать
+                </span>
+                <span className="w-px h-3.5 bg-white/20 mx-0.5" />
+                <button type="button" onClick={() => editTableSize('addRow', b.id)} className="px-1.5 py-0.5 rounded hover:bg-white/15 text-[11px] font-semibold">+Стр</button>
+                <button type="button" onClick={() => editTableSize('addCol', b.id)} className="px-1.5 py-0.5 rounded hover:bg-white/15 text-[11px] font-semibold">+Стлб</button>
+                <span className="w-px h-3.5 bg-white/20 mx-0.5" />
+              </>
+            )}
+            {b.type === 'chart' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setChartModalBlockId(b.id)}
+                  className="px-2 py-0.5 rounded bg-[#b7472a] hover:bg-[#d24726] text-white text-[11px] font-bold flex items-center gap-1"
+                  title="Редактировать таблицу значений диаграммы"
+                >
+                  <BarChart3 size={12} /> Изменить данные
+                </button>
+                <span className="w-px h-3.5 bg-white/20 mx-0.5" />
+              </>
+            )}
+            {(b.type === 'text' || (b.type === 'shape' && b.shape !== 'line' && b.shape !== 'lineArrow')) && (
+              <button
+                type="button"
+                onClick={() => b.type === 'text' ? setEditingText(b.id) : setEditingShape(b.id)}
+                title="Редактировать текст"
+                className="p-1 rounded hover:bg-white/15"
+              >
+                <Pencil size={12} />
+              </button>
+            )}
+            <button type="button" onClick={duplicateBlock} title="Дублировать (Ctrl+D)" className="p-1 rounded hover:bg-white/15"><Copy size={12} /></button>
+            <button type="button" onClick={bringForward} title="На передний план" className="p-1 rounded hover:bg-white/15"><BringToFront size={12} /></button>
+            <button type="button" onClick={sendBackward} title="На задний план" className="p-1 rounded hover:bg-white/15"><SendToBack size={12} /></button>
+            <button type="button" onClick={() => updateSelectedStyle({ locked: !locked })} title={locked ? 'Разблокировать' : 'Заблокировать'} className={`p-1 rounded hover:bg-white/15 ${locked ? 'text-amber-400' : ''}`}>
+              {locked ? <Lock size={12} /> : <Unlock size={12} />}
+            </button>
+            <button type="button" onClick={() => deleteBlock(b.id)} title="Удалить (Del)" className="p-1 rounded hover:bg-red-500/80 text-red-300 hover:text-white"><Trash2 size={12} /></button>
+          </div>
         )}
+
+        {/* Живая подсказка координат/размера/угла при перетаскивании */}
+        {isTransforming && liveTransform && (
+          <div
+            className="absolute -top-8 left-1/2 -translate-x-1/2 z-40 px-2 py-0.5 rounded-md bg-slate-900/95 text-white text-[11px] font-mono font-bold shadow-lg whitespace-nowrap pointer-events-none"
+            style={{ transform: `translateX(-50%) scale(var(--pe-inv, 1))`, transformOrigin: 'bottom center' }}
+          >
+            {rotating
+              ? `${Math.round(liveTransform.rotation)}°`
+              : resizing
+                ? `${Math.round(liveTransform.w)}% × ${Math.round(liveTransform.h)}%`
+                : `X ${Math.round(liveTransform.x)}% · Y ${Math.round(liveTransform.y)}%`}
+          </div>
+        )}
+
+        {/* 8 ручек масштабирования */}
+        {!locked && ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map(h => (
+          <div
+            key={h}
+            className="absolute z-20"
+            style={{
+              left: h.includes('w') ? 0 : h.includes('e') ? undefined : '50%',
+              right: h.includes('e') ? 0 : undefined,
+              top: h.includes('n') ? 0 : h.includes('s') ? undefined : '50%',
+              bottom: h.includes('s') ? 0 : undefined,
+              transform: (h === 'n' || h === 's') ? 'translateX(-50%)' : (h === 'e' || h === 'w') ? 'translateY(-50%)' : undefined,
+              width: 0, height: 0,
+            }}
+          >
+            <span
+              data-resize-handle={h}
+              onMouseDown={e => e.stopPropagation()}
+              onPointerDown={e => handleResizeStart(e, b.id, h)}
+              className="absolute block w-6 h-6 touch-none"
+              style={{
+                left: -12, top: -12,
+                cursor: h === 'nw' || h === 'se' ? 'nwse-resize' : h === 'ne' || h === 'sw' ? 'nesw-resize' : h === 'n' || h === 's' ? 'ns-resize' : 'ew-resize',
+              }}
+            >
+              <span className="resize-dot pointer-events-none absolute block bg-white border-2 border-[#b7472a] rounded-full shadow" style={{ width: 11, height: 11, left: 6.5, top: 6.5 }} />
+            </span>
+          </div>
+        ))}
+
+        {/* Ручка вращения прямо на холсте (как в PowerPoint / Figma) */}
+        {!locked && b.type !== 'table' && (
+          <div
+            data-pe-overlay
+            className="absolute left-1/2 -bottom-8 -translate-x-1/2 z-20 flex flex-col items-center pointer-events-auto"
+            style={{ transform: `translateX(-50%) scale(var(--pe-inv, 1))`, transformOrigin: 'top center' }}
+          >
+            <div className="w-px h-3 bg-[#b7472a]" />
+            <button
+              type="button"
+              onMouseDown={e => e.stopPropagation()}
+              onPointerDown={e => handleRotateStart(e, b.id)}
+              onDoubleClick={e => { e.stopPropagation(); pushHistory(); updateSelectedStyle({ rotation: 0 }) }}
+              title="Потяните для поворота (Shift — шаг 15°, двойной клик — сброс 0°)"
+              className="w-6 h-6 rounded-full bg-white border-2 border-[#b7472a] text-[#b7472a] hover:bg-[#b7472a] hover:text-white shadow-md flex items-center justify-center cursor-grab active:cursor-grabbing touch-none transition-colors"
+            >
+              <RotateCw size={11} />
+            </button>
+          </div>
+        )}
+      </>
+    )
+  }
+
+  const propsPanelNode = (
+    <SlidePropsPanel
+      cur={cur}
+      curSelected={curSelected}
+      selectedBlock={selectedBlock}
+      activeCell={activeCell}
+      runStyleOf={runStyleOf}
+      restyleParas={restyleParas}
+      updateSelected={updateSelected}
+      updateSelectedStyle={updateSelectedStyle}
+      updateSlide={updateSlide}
+      applyTransitionAll={applyTransitionAll}
+      centerBlock={centerBlock}
+      bringForward={bringForward}
+      sendBackward={sendBackward}
+      duplicateBlock={duplicateBlock}
+      deleteSelected={() => deleteBlock(selectedBlock)}
+      onUploadReplaceImage={replaceSelectedImage}
+      onPickBgImage={() => bgImageRef.current?.click()}
+      onEditTableSize={act => editTableSize(act)}
+      onUpdateTableProps={updateTableProps}
+      onUpdateActiveCellStyle={updateActiveCellStyle}
+      onOpenChartModal={() => selectedBlock && setChartModalBlockId(selectedBlock)}
+    />
+  )
+
+  return (
+    <div ref={fullscreenRef} className={`${isEditFullscreen ? 'fixed inset-0 z-50 bg-slate-200 dark:bg-slate-950 flex flex-col' : 'flex flex-col h-[calc(100dvh-7.5rem)] -m-4 -mb-28 lg:h-[calc(100vh-64px)] lg:-m-8 lg:mb-0 bg-slate-100 dark:bg-slate-950'}`}>
+      <h1 className="sr-only">Редактор презентаций</h1>
+
+      {/* 1. ШАПКА POWERPOINT */}
+      <div className="bg-[#b7472a] dark:bg-[#8f2d14] text-white px-2 sm:px-3 py-1.5 flex items-center gap-1.5 sm:gap-2 shrink-0 shadow-md z-20">
+        <button
+          type="button"
+          onClick={() => nav(subjSlug ? `/subjects/${subjSlug}` : '/my-lessons')}
+          className="px-2 sm:px-2.5 h-9 rounded-lg bg-black/20 hover:bg-black/35 text-white text-xs sm:text-sm font-bold shrink-0 flex items-center justify-center"
+          title={t('back')}
+        >
+          <span>←</span><span className="hidden md:inline ml-1">{t('back')}</span>
+        </button>
+        <div className="hidden sm:flex w-8 h-8 rounded-lg bg-white text-[#b7472a] items-center justify-center font-black text-sm shrink-0 shadow">P</div>
+        <input
+          value={title}
+          onChange={e => { setTitle(e.target.value); setDirty(true) }}
+          className="flex-1 min-w-[80px] px-2.5 h-9 rounded-lg bg-white/15 hover:bg-white/20 focus:bg-white focus:text-slate-900 text-white placeholder-white/70 font-bold text-xs sm:text-sm outline-none transition"
+          title={title}
+          placeholder={t('prog_title_ph')}
+        />
+        <div className="flex items-center gap-1 shrink-0">
+          <button type="button" onClick={undo} disabled={!history.length} title="Отменить (Ctrl+Z)" className="w-8 h-9 sm:w-9 rounded-lg bg-white/15 hover:bg-white/25 disabled:opacity-35 flex items-center justify-center shrink-0"><Undo2 size={15} /></button>
+          <button type="button" onClick={redo} disabled={!redoStack.length} title="Вернуть (Ctrl+Y)" className="w-8 h-9 sm:w-9 rounded-lg bg-white/15 hover:bg-white/25 disabled:opacity-35 flex items-center justify-center shrink-0"><Redo2 size={15} /></button>
+          <button
+            type="button"
+            onClick={() => setSlideshow(true)}
+            title="Запустить слайд-шоу (F5)"
+            className="px-2.5 sm:px-3 h-9 rounded-lg bg-slate-900/80 hover:bg-slate-900 text-white font-bold text-xs sm:text-sm flex items-center gap-1 shrink-0"
+          >
+            <Play size={14} className="fill-white" /> <span className="hidden sm:inline">{PUI.show}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => save()}
+            disabled={saving}
+            data-testid="pe-save-btn"
+            className="px-3 sm:px-4 h-9 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-md shrink-0 whitespace-nowrap disabled:opacity-60"
+          >
+            <Save size={15} />
+            <span>{saving ? '…' : t('save')}</span>
+            {dirty && <span className="w-2 h-2 rounded-full bg-amber-300 ring-2 ring-slate-950/30 animate-pulse" />}
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white order-3 lg:order-2 border-t lg:border-t-0 border-b-0 lg:border-b shrink-0">
-        <div className="flex gap-1 px-2 py-1 border-b overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* 2. СТРОКА ДОКУМЕНТА */}
+      <div className="px-2 sm:px-3 py-1.5 bg-white dark:bg-slate-900 border-b dark:border-slate-800 flex items-center gap-1.5 sm:gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <BookOpen size={14} className="text-slate-500 dark:text-slate-400 shrink-0" />
+          <select
+            value={subject || ''}
+            onChange={e => setSubject(e.target.value ? Number(e.target.value) : null)}
+            className="px-2.5 py-1.5 rounded-lg border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold max-w-[165px]"
+          >
+            <option value="">{t('subj_no_subject')}</option>
+            {subjects.map((s: any) => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsPublic(v => !v)}
+          data-testid="pres-visibility"
+          className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold whitespace-nowrap shrink-0 flex items-center gap-1 ${
+            isPublic
+              ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
+              : 'bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+          }`}
+        >
+          {isPublic ? '🌐' : '🔒'} {isPublic ? PUI.pub : PUI.priv}
+        </button>
+        <input ref={pptxInputRef} type="file" accept=".pptx,.ppt,.pdf" className="hidden" onChange={handlePptxImport} />
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+        <input ref={bgImageRef} type="file" accept="image/*" className="hidden" onChange={handleBgImage} />
+        <button
+          type="button"
+          onClick={() => setShowTemplates(true)}
+          className="px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-bold whitespace-nowrap shrink-0 flex items-center gap-1 hover:bg-indigo-100"
+        >
+          <LayoutTemplate size={13} /> Шаблоны
+        </button>
+        <button
+          type="button"
+          onClick={() => pptxInputRef.current?.click()}
+          disabled={importing}
+          className="px-2.5 py-1.5 rounded-lg bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300 text-xs font-bold whitespace-nowrap shrink-0 flex items-center gap-1 hover:bg-orange-100"
+        >
+          {importing ? 'Импорт…' : `⬆ ${PUI.imp} PPTX/PDF`}
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowPreview(true)}
+          className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold whitespace-nowrap shrink-0 flex items-center gap-1 hover:bg-slate-100 dark:hover:bg-slate-700"
+        >
+          <Eye size={13} /> {PUI.prev}
+        </button>
+        <button
+          type="button"
+          onClick={exportSlidesPdf}
+          className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold whitespace-nowrap shrink-0 flex items-center gap-1 hover:bg-slate-100 dark:hover:bg-slate-700"
+        >
+          <Printer size={13} /> PDF / Печать
+        </button>
+        <button
+          type="button"
+          onClick={toggleEditFullscreen}
+          className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold whitespace-nowrap shrink-0 flex items-center gap-1 hover:bg-slate-100 dark:hover:bg-slate-700"
+        >
+          <Maximize2 size={13} /> {isEditFullscreen ? PUI.exit : PUI.full}
+        </button>
+        <button
+          type="button"
+          onClick={handleCancel}
+          className="ml-auto px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold whitespace-nowrap shrink-0 hover:bg-slate-200 dark:hover:bg-slate-700"
+        >
+          {t('cancel')}
+        </button>
+      </div>
+
+      {/* 3. ЛЕНТА ИНСТРУМЕНТОВ (RIBBON) */}
+      <div className="bg-white dark:bg-slate-900 order-3 lg:order-2 border-t lg:border-t-0 border-b-0 lg:border-b dark:border-slate-800 shrink-0 relative z-20">
+        <div className="flex items-center gap-1 px-2 py-1 border-b dark:border-slate-800 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {(['home', 'insert', 'design', 'transitions', 'animations'] as const).map(rt => (
-            <button key={rt} onClick={() => setRibbonTab(rt)} className={`px-4 py-2 shrink-0 rounded text-sm font-medium whitespace-nowrap ${ribbonTab === rt ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}`}>{rt === 'home' ? PUI.home : rt === 'insert' ? PUI.insert : rt === 'design' ? PUI.design : rt === 'transitions' ? PUI.trans : PUI.anim}</button>
+            <button
+              key={rt}
+              type="button"
+              onClick={() => { setRibbonTab(rt); setOpenMenu(null) }}
+              className={`px-3.5 py-1.5 shrink-0 rounded-lg text-xs sm:text-sm font-bold whitespace-nowrap transition ${
+                ribbonTab === rt
+                  ? 'bg-[#b7472a] text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              {rt === 'home' ? PUI.home : rt === 'insert' ? PUI.insert : rt === 'design' ? PUI.design : rt === 'transitions' ? PUI.trans : PUI.anim}
+            </button>
           ))}
-          <div className="ml-auto flex items-center gap-1 text-xs text-slate-500 shrink-0 pr-1">
-            <ZoomOut size={14} /> <input type="range" min={60} max={140} value={zoom} onChange={e => setZoom(parseInt(e.target.value))} className="w-20" /> <ZoomIn size={14} /> {zoom}%
+
+          <div className="ml-auto hidden sm:flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 shrink-0 pr-1">
+            <button type="button" onClick={() => setZoom(z => Math.max(50, z - 10))} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"><ZoomOut size={14} /></button>
+            <input type="range" min={50} max={150} value={zoom} onChange={e => setZoom(parseInt(e.target.value))} className="w-20 accent-[#b7472a]" />
+            <button type="button" onClick={() => setZoom(z => Math.min(150, z + 10))} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"><ZoomIn size={14} /></button>
+            <button type="button" onClick={() => { setZoom(100); recalcFit() }} title="По размеру окна" className="font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200">{zoom}%</button>
           </div>
         </div>
-        <div className="px-3 py-2 flex max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:[scrollbar-width:none] max-lg:[&::-webkit-scrollbar]:hidden lg:flex-wrap items-center gap-2 min-h-[64px]">
+
+        <div className="px-2.5 py-2 flex flex-wrap items-center gap-2 min-h-[54px] dark:text-slate-100">
           {ribbonTab === 'home' && (
             <>
-              <div className="flex items-center gap-1 pr-3 border-r shrink-0">
-                <button onClick={() => { if (selectedBlock && curSelected?.type === 'text') setEditingText(selectedBlock) }} disabled={!selectedBlock || curSelected?.type !== 'text'} title="Править выделенный текст" aria-label="Править выделенный текст"
-                  className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 disabled:opacity-35 ${editingText ? 'bg-indigo-600 text-white' : ''}`}><Pencil size={16} /></button>
-                <select value={curSelected?.style?.fontFamily || runStyleOf(curSelected).fontFamily || 'Inter'} onChange={e => selectedBlock && updateSelectedStyle({ fontFamily: e.target.value })} className="px-2 py-2 rounded border bg-white text-xs w-[110px] shrink-0">
+              <div className="relative flex items-center gap-0.5 pr-2.5 border-r dark:border-slate-700 shrink-0">
+                <button type="button" onClick={() => addSlide('content')} className="px-2.5 h-9 rounded-l-lg bg-[#b7472a]/10 dark:bg-[#b7472a]/25 text-[#b7472a] dark:text-orange-300 border border-[#b7472a]/30 font-bold text-xs flex items-center gap-1 hover:bg-[#b7472a]/20">
+                  <Plus size={14} /> Слайд
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={e => e.stopPropagation()}
+                  onClick={() => setOpenMenu(m => m === 'layout' ? null : 'layout')}
+                  title="Выбрать макет нового слайда"
+                  className="px-1.5 h-9 rounded-r-lg bg-[#b7472a]/10 dark:bg-[#b7472a]/25 text-[#b7472a] dark:text-orange-300 border border-l-0 border-[#b7472a]/30 hover:bg-[#b7472a]/20 flex items-center"
+                >
+                  <ChevronDown size={13} />
+                </button>
+                <button type="button" onClick={duplicateSlide} title="Дублировать слайд" className="ml-1 h-9 w-9 rounded-lg border dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center shrink-0"><Copy size={14} /></button>
+                {openMenu === 'layout' && <SlideLayoutPopover onSelect={addSlide} onClose={() => setOpenMenu(null)} />}
+              </div>
+
+              <div className="flex items-center gap-1 pr-2.5 border-r dark:border-slate-700 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedBlock && curSelected?.type === 'text') setEditingText(selectedBlock)
+                    else if (selectedBlock && curSelected?.type === 'shape') setEditingShape(selectedBlock)
+                  }}
+                  disabled={!selectedBlock || (curSelected?.type !== 'text' && curSelected?.type !== 'shape')}
+                  title="Редактировать текст"
+                  className={`h-9 w-9 rounded-lg border dark:border-slate-700 flex items-center justify-center disabled:opacity-35 ${editingText || editingShape ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                ><Pencil size={14} /></button>
+                <select value={curSelected?.style?.fontFamily || runStyleOf(curSelected).fontFamily || 'Inter'} onChange={e => selectedBlock && updateSelectedStyle({ fontFamily: e.target.value })} className="px-2 h-9 rounded-lg border dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white text-xs w-[108px] shrink-0">
                   {FONTS.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
-                <button onClick={() => selectedBlock && updateSelectedStyle({ bold: !curSelected?.style?.bold })} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.bold ? 'bg-slate-900 text-white' : ''}`}><Bold size={16} /></button>
-                <button onClick={() => selectedBlock && updateSelectedStyle({ italic: !curSelected?.style?.italic })} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.italic ? 'bg-slate-900 text-white' : ''}`}><Italic size={16} /></button>
-                <button onClick={() => selectedBlock && updateSelectedStyle({ underline: !curSelected?.style?.underline })} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.underline ? 'bg-slate-900 text-white' : ''}`}><Underline size={16} /></button>
-                <button onClick={() => selectedBlock && updateSelectedStyle({ highlight: !curSelected?.style?.highlight })} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-amber-100 shrink-0 ${curSelected?.style?.highlight ? 'bg-amber-400' : ''}`}><Highlighter size={16} /></button>
-              </div>
-              <div className="flex items-center gap-1 pr-3 border-r shrink-0">
-                <button onClick={() => selectedBlock && updateSelectedStyle({ align: 'left' })} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.align === 'left' ? 'bg-slate-200' : ''}`}><AlignLeft size={16} /></button>
-                <button onClick={() => selectedBlock && updateSelectedStyle({ align: 'center' })} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.align === 'center' ? 'bg-slate-200' : ''}`}><AlignCenter size={16} /></button>
-                <button onClick={() => selectedBlock && updateSelectedStyle({ align: 'right' })} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.align === 'right' ? 'bg-slate-200' : ''}`}><AlignRight size={16} /></button>
-                <button onClick={() => selectedBlock && updateSelectedStyle({ bullet: !curSelected?.style?.bullet })} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.bullet ? 'bg-indigo-200' : ''}`}><List size={16} /></button>
-                <button onClick={() => selectedBlock && updateSelectedStyle({ numbered: !curSelected?.style?.numbered })} className={`p-2.5 min-h-[44px] min-w-[44px] max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-slate-100 shrink-0 ${curSelected?.style?.numbered ? 'bg-indigo-200' : ''}`}><ListOrdered size={16} /></button>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <input type="color" value={curSelected?.style?.color || '#1e293b'} onChange={e => selectedBlock && updateSelectedStyle({ color: e.target.value })} className="w-10 h-10 max-lg:w-9 max-lg:h-9 rounded border shrink-0" title="Цвет текста" />
-                <input type="color" value={curSelected?.style?.highlight ? '#fef08a' : '#ffffff'} onChange={e => selectedBlock && updateSelectedStyle({ highlight: true, highlightColor: e.target.value })} className="w-10 h-10 max-lg:w-9 max-lg:h-9 rounded border shrink-0" title="Маркер" />
-                <select value={curSelected?.style?.fontSize || runStyleOf(curSelected).fontSize || 18} onChange={e => selectedBlock && updateSelectedStyle({ fontSize: parseInt(e.target.value) })} className="px-2 py-2 rounded border bg-white text-sm shrink-0">
-                  {[10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 44, 54].map(s => <option key={s} value={s}>{s}pt</option>)}
+                <select value={curSelected?.style?.fontSize || runStyleOf(curSelected).fontSize || 18} onChange={e => selectedBlock && updateSelectedStyle({ fontSize: parseInt(e.target.value) })} className="px-1.5 h-9 rounded-lg border dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white text-xs shrink-0">
+                  {[10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 44, 54, 64, 72].map(s => <option key={s} value={s}>{s}pt</option>)}
                 </select>
+                <button type="button" onClick={() => selectedBlock && updateSelectedStyle({ bold: !curSelected?.style?.bold })} className={`h-9 w-9 rounded-lg flex items-center justify-center ${curSelected?.style?.bold ? 'bg-slate-900 dark:bg-indigo-600 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}><Bold size={15} /></button>
+                <button type="button" onClick={() => selectedBlock && updateSelectedStyle({ italic: !curSelected?.style?.italic })} className={`h-9 w-9 rounded-lg flex items-center justify-center ${curSelected?.style?.italic ? 'bg-slate-900 dark:bg-indigo-600 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}><Italic size={15} /></button>
+                <button type="button" onClick={() => selectedBlock && updateSelectedStyle({ underline: !curSelected?.style?.underline })} className={`h-9 w-9 rounded-lg flex items-center justify-center ${curSelected?.style?.underline ? 'bg-slate-900 dark:bg-indigo-600 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}><Underline size={15} /></button>
+                <button type="button" onClick={() => selectedBlock && updateSelectedStyle({ highlight: !curSelected?.style?.highlight })} className={`h-9 w-9 rounded-lg flex items-center justify-center ${curSelected?.style?.highlight ? 'bg-amber-400 text-slate-950' : 'hover:bg-amber-100 dark:hover:bg-slate-800'}`}><Highlighter size={15} /></button>
+                <input type="color" value={curSelected?.style?.color || '#1e293b'} onChange={e => selectedBlock && updateSelectedStyle({ color: e.target.value })} className="w-8 h-9 rounded-lg border dark:border-slate-700 shrink-0 cursor-pointer bg-transparent" title="Цвет текста" />
+              </div>
+
+              <div className="flex items-center gap-1 pr-2.5 border-r dark:border-slate-700 shrink-0">
+                <button type="button" onClick={() => selectedBlock && updateSelectedStyle({ align: 'left' })} className={`h-9 w-9 rounded-lg flex items-center justify-center ${curSelected?.style?.align === 'left' ? 'bg-slate-200 dark:bg-slate-700' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}><AlignLeft size={15} /></button>
+                <button type="button" onClick={() => selectedBlock && updateSelectedStyle({ align: 'center' })} className={`h-9 w-9 rounded-lg flex items-center justify-center ${curSelected?.style?.align === 'center' ? 'bg-slate-200 dark:bg-slate-700' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}><AlignCenter size={15} /></button>
+                <button type="button" onClick={() => selectedBlock && updateSelectedStyle({ align: 'right' })} className={`h-9 w-9 rounded-lg flex items-center justify-center ${curSelected?.style?.align === 'right' ? 'bg-slate-200 dark:bg-slate-700' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}><AlignRight size={15} /></button>
+                <button type="button" onClick={() => selectedBlock && updateSelectedStyle({ bullet: !curSelected?.style?.bullet, numbered: false })} className={`h-9 w-9 rounded-lg flex items-center justify-center ${curSelected?.style?.bullet ? 'bg-indigo-200 dark:bg-indigo-800' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}><List size={15} /></button>
+                <button type="button" onClick={() => selectedBlock && updateSelectedStyle({ numbered: !curSelected?.style?.numbered, bullet: false })} className={`h-9 w-9 rounded-lg flex items-center justify-center ${curSelected?.style?.numbered ? 'bg-indigo-200 dark:bg-indigo-800' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}><ListOrdered size={15} /></button>
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
+                <button type="button" onClick={() => addBlock('text')} title="Добавить текст" className="px-2.5 h-9 rounded-lg border dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold flex items-center gap-1"><Type size={13} /> Текст</button>
+                <button type="button" onClick={() => { setRibbonTab('insert'); setOpenMenu('shapes') }} title="Вставить фигуру" className="px-2.5 h-9 rounded-lg border dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold flex items-center gap-1"><Shapes size={13} /> Фигуры</button>
+                <button type="button" onClick={duplicateBlock} disabled={!selectedBlock} title="Дублировать (Ctrl+D)" className="h-9 w-9 rounded-lg border dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-center disabled:opacity-35"><Copy size={14} /></button>
+                <button type="button" onClick={bringForward} disabled={!selectedBlock} title="На передний план" className="h-9 w-9 rounded-lg border dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-center disabled:opacity-35"><BringToFront size={14} /></button>
+                <button type="button" onClick={sendBackward} disabled={!selectedBlock} title="На задний план" className="h-9 w-9 rounded-lg border dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-center disabled:opacity-35"><SendToBack size={14} /></button>
               </div>
             </>
           )}
+
           {ribbonTab === 'insert' && (
-            <div className="flex gap-1.5 flex-wrap max-lg:flex-nowrap max-lg:shrink-0">
-              <button onClick={() => addBlock('text')} className="px-3 py-2.5 min-h-[44px] max-lg:min-h-[40px] rounded-lg bg-slate-900 text-white flex items-center gap-1.5 text-sm shrink-0"><Type size={14} /> Текст</button>
-              <button onClick={() => fileInputRef.current?.click()} className="px-3 py-2.5 min-h-[44px] max-lg:min-h-[40px] rounded-lg bg-white border flex items-center gap-1.5 text-sm shrink-0"><ImgIcon size={14} /> Картинка</button>
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-              <div className="flex gap-1 p-1 rounded-lg bg-slate-100 shrink-0">
-                {SHAPES.slice(0, 8).map(s => (
-                  <button key={s.k} onClick={() => addBlock('shape', { shape: s.k })} className="p-2.5 min-h-[44px] min-w-[44px] max-lg:p-2 max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-white border border-transparent hover:border-slate-300 shrink-0" title={s.label}><s.icon size={16} /></button>
-                ))}
-                <div className="w-px bg-slate-300 mx-1" />
-                {SHAPES.slice(8).map(s => (
-                  <button key={s.k} onClick={() => addBlock('shape', { shape: s.k })} className="p-2.5 min-h-[44px] min-w-[44px] max-lg:p-2 max-lg:min-h-[40px] max-lg:min-w-[40px] rounded hover:bg-white border border-transparent hover:border-slate-300 shrink-0" title={s.label}><s.icon size={16} /></button>
-                ))}
+            <div className="flex gap-2 flex-wrap items-center">
+              <div className="relative flex">
+                <button type="button" onClick={() => addBlock('text')} className="px-3 h-9 rounded-l-lg bg-[#b7472a] hover:bg-[#9c3a20] text-white font-bold flex items-center gap-1.5 text-xs">
+                  <Type size={14} /> Текст
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={e => e.stopPropagation()}
+                  onClick={() => setOpenMenu(m => m === 'text' ? null : 'text')}
+                  className="px-1.5 h-9 rounded-r-lg bg-[#9c3a20] hover:bg-[#822f19] text-white border-l border-white/20 flex items-center"
+                  title="Стили текстовых блоков"
+                >
+                  <ChevronDown size={13} />
+                </button>
+                {openMenu === 'text' && (
+                  <TextPresetPopover
+                    onSelect={(p: typeof TEXT_PRESETS[number]) => addBlock('text', { content: p.content, style: p.style })}
+                    onClose={() => setOpenMenu(null)}
+                  />
+                )}
               </div>
-              <button onClick={() => addBlock('table')} className="px-3 py-2.5 min-h-[44px] max-lg:min-h-[40px] rounded-lg bg-white border flex items-center gap-1.5 text-sm shrink-0"><Table size={14} /> Таблица</button>
-              <button onClick={() => addBlock('chart')} className="px-3 py-2.5 min-h-[44px] max-lg:min-h-[40px] rounded-lg bg-white border flex items-center gap-1.5 text-sm shrink-0"><BarChart3 size={14} /> Диаграмма</button>
-              <button onClick={addVideo} className="px-3 py-2.5 min-h-[44px] max-lg:min-h-[40px] rounded-lg bg-white border flex items-center gap-1.5 text-sm shrink-0"><Video size={14} /> Видео</button>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onMouseDown={e => e.stopPropagation()}
+                  onClick={() => setOpenMenu(m => m === 'shapes' ? null : 'shapes')}
+                  className={`px-3 h-9 rounded-lg border font-bold flex items-center gap-1.5 text-xs transition ${
+                    openMenu === 'shapes'
+                      ? 'bg-[#b7472a] text-white border-[#b7472a]'
+                      : 'bg-white dark:bg-slate-800 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <Shapes size={14} /> Фигуры <ChevronDown size={13} />
+                </button>
+                {openMenu === 'shapes' && (
+                  <ShapePickerPopover
+                    onSelect={sh => addBlock('shape', { shape: sh })}
+                    onClose={() => setOpenMenu(null)}
+                  />
+                )}
+              </div>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onMouseDown={e => e.stopPropagation()}
+                  onClick={() => setOpenMenu(m => m === 'table' ? null : 'table')}
+                  className={`px-3 h-9 rounded-lg border font-bold flex items-center gap-1.5 text-xs transition ${
+                    openMenu === 'table'
+                      ? 'bg-[#b7472a] text-white border-[#b7472a]'
+                      : 'bg-white dark:bg-slate-800 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <Table size={14} /> Таблица <ChevronDown size={13} />
+                </button>
+                {openMenu === 'table' && (
+                  <TableSizePickerPopover
+                    onSelect={(rows, cols, theme) => addBlock('table', { rows, cols, theme })}
+                    onClose={() => setOpenMenu(null)}
+                  />
+                )}
+              </div>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onMouseDown={e => e.stopPropagation()}
+                  onClick={() => setOpenMenu(m => m === 'chart' ? null : 'chart')}
+                  className={`px-3 h-9 rounded-lg border font-bold flex items-center gap-1.5 text-xs transition ${
+                    openMenu === 'chart'
+                      ? 'bg-[#b7472a] text-white border-[#b7472a]'
+                      : 'bg-white dark:bg-slate-800 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <BarChart3 size={14} /> Диаграмма <ChevronDown size={13} />
+                </button>
+                {openMenu === 'chart' && (
+                  <ChartPickerPopover
+                    onSelect={kind => addBlock('chart', { chartType: kind })}
+                    onClose={() => setOpenMenu(null)}
+                  />
+                )}
+              </div>
+
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="px-3 h-9 rounded-lg bg-white dark:bg-slate-800 border dark:border-slate-700 font-bold flex items-center gap-1.5 text-xs hover:bg-slate-50 dark:hover:bg-slate-700">
+                <ImgIcon size={14} /> Картинка
+              </button>
+
+              <button type="button" onClick={addVideo} className="px-3 h-9 rounded-lg bg-white dark:bg-slate-800 border dark:border-slate-700 font-bold flex items-center gap-1.5 text-xs hover:bg-slate-50 dark:hover:bg-slate-700">
+                <Video size={14} /> Видео
+              </button>
+
+              <button
+                type="button"
+                onClick={() => addBlock('shape', { shape: 'callout' })}
+                className="px-3 h-9 rounded-lg bg-white dark:bg-slate-800 border dark:border-slate-700 font-bold flex items-center gap-1.5 text-xs hover:bg-slate-50 dark:hover:bg-slate-700"
+              >
+                <MessageSquare size={14} /> Выноска
+              </button>
             </div>
           )}
+
           {ribbonTab === 'design' && (
-            <div className="flex max-lg:flex-nowrap items-center gap-2 shrink-0">
-              <span className="text-sm font-medium shrink-0">Фон:</span>
-              {['#ffffff', '#f8fafc', '#fef3c7', '#dbeafe', '#fde68a', '#fecaca', '#dcfce7', '#e0e7ff', '#ddd6fe', '#fce7f3'].map(c => (
-                <button key={c} onClick={() => setSlides(sl => sl.map((s, i) => i === active ? { ...s, background: c, backgroundType: 'solid' } : s))} className={`w-9 h-9 max-lg:w-8 max-lg:h-8 rounded-full border-2 shrink-0 ${cur.background === c && cur.backgroundType === 'solid' ? 'border-indigo-600' : 'border-white shadow'}`} style={{ background: c }} />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowTemplates(true)}
+                className="px-3 h-9 rounded-lg bg-[#b7472a] hover:bg-[#9c3a20] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs"
+              >
+                <LayoutTemplate size={14} /> Готовые шаблоны
+              </button>
+              <div className="w-px h-6 bg-slate-300 dark:bg-slate-700" />
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Темы:</span>
+              {PPT_THEMES.map(th => (
+                <button
+                  key={th.id}
+                  type="button"
+                  onClick={() => applyTheme(th, false)}
+                  onDoubleClick={() => applyTheme(th, true)}
+                  title={`Тема «${th.name}» (клик — на слайд, двойной клик — на все слайды)`}
+                  className="px-2.5 h-9 rounded-lg border-2 border-white/60 dark:border-slate-600 shadow-xs text-[11px] font-extrabold transition hover:scale-105"
+                  style={{ background: th.grad || th.bg, color: th.titleColor }}
+                >
+                  {th.name}
+                </button>
               ))}
-              <button onClick={() => setSlides(sl => sl.map((s, i) => i === active ? { ...s, backgroundType: 'gradient', gradient: 'linear-gradient(135deg,#667eea 0%,#764ba2 100%)' } : s))} className="px-2 py-1 rounded bg-gradient-to-r from-indigo-500 to-cyan-500 text-white text-xs">Градиент</button>
-              <label className="px-2 py-1 rounded bg-white border text-xs cursor-pointer">Картинка <input ref={bgImageRef} type="file" accept="image/*" className="hidden" onChange={handleBgImage} /></label>
-              <input type="color" value={cur.background.startsWith('#') ? cur.background : '#ffffff'} onChange={e => setSlides(sl => sl.map((s, i) => i === active ? { ...s, background: e.target.value, backgroundType: 'solid' } : s))} className="w-8 h-8 rounded-full border" />
+              <button
+                type="button"
+                onClick={() => {
+                  const matched = PPT_THEMES.find(th => th.bg === cur.background || (th.grad && th.grad === cur.gradient))
+                  if (matched) applyTheme(matched, true)
+                  else {
+                    pushHistory()
+                    setSlides(sl => sl.map(s => ({ ...s, background: cur.background, backgroundType: cur.backgroundType, gradient: cur.gradient, bgImage: cur.bgImage })))
+                    toast('Фон применён ко всем слайдам', 'success')
+                  }
+                }}
+                className="px-2.5 h-9 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1"
+              >
+                <CheckCircle2 size={13} /> Ко всем слайдам
+              </button>
+              <div className="w-px h-6 bg-slate-300 dark:bg-slate-700" />
+              <button type="button" onClick={() => bgImageRef.current?.click()} className="px-2.5 h-9 rounded-lg bg-white dark:bg-slate-800 border dark:border-slate-700 text-xs font-bold flex items-center gap-1">
+                <ImgIcon size={13} /> Фон-фото
+              </button>
+              <input type="color" value={cur.background?.startsWith('#') ? cur.background : '#ffffff'} onChange={e => updateSlide({ background: e.target.value, backgroundType: 'solid', gradient: undefined })} className="w-9 h-9 rounded-lg border dark:border-slate-700 cursor-pointer" title="Цвет фона" />
             </div>
           )}
+
           {ribbonTab === 'transitions' && (
-            <div className="flex max-lg:flex-nowrap items-center gap-2 shrink-0">
-              <span className="text-sm font-medium shrink-0">Переход слайда:</span>
-              {TRANSITIONS.map(t => (
-                <button key={t} onClick={() => setSlides(sl => sl.map((s, i) => i === active ? { ...s, transition: t } : s))} className={`px-3 py-2 min-h-[44px] max-lg:min-h-[40px] rounded-lg border text-sm capitalize shrink-0 ${cur.transition === t ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white hover:bg-slate-50'}`}>{t}</button>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Переход:</span>
+              {TRANSITIONS.map(tr => (
+                <button key={tr} type="button" onClick={() => updateSlide({ transition: tr })} className={`px-3 h-9 rounded-lg border text-xs font-bold capitalize ${cur.transition === tr ? 'bg-[#b7472a] text-white border-[#b7472a]' : 'bg-white dark:bg-slate-800 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>{tr}</button>
               ))}
+              <button type="button" onClick={() => applyTransitionAll(cur.transition || 'fade')} className="ml-2 px-3 h-9 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1">
+                <CheckCircle2 size={13} /> Ко всем слайдам
+              </button>
             </div>
           )}
+
           {ribbonTab === 'animations' && (
-            <div className="flex max-lg:flex-nowrap items-center gap-2 shrink-0">
-              <span className="text-sm font-medium shrink-0">Анимация блока:</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1"><Sparkles size={13} /> Анимация блока:</span>
               {ANIMATIONS.map(a => (
-                <button key={a} onClick={() => selectedBlock && updateSelected({ animation: a })} className={`px-3 py-2 min-h-[44px] max-lg:min-h-[40px] rounded-lg border text-sm capitalize shrink-0 ${curSelected?.animation === a ? 'bg-indigo-600 text-white' : 'bg-white'}`}>{a}</button>
+                <button key={a} type="button" onClick={() => selectedBlock ? updateSelected({ animation: a }) : toast('Сначала выдели блок на слайде', 'info')} className={`px-3 h-9 rounded-lg border text-xs font-bold capitalize ${curSelected?.animation === a ? 'bg-[#b7472a] text-white border-[#b7472a]' : 'bg-white dark:bg-slate-800 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>{a}</button>
               ))}
             </div>
           )}
         </div>
       </div>
 
-      <div className="flex-1 order-2 lg:order-3 flex flex-col-reverse lg:flex-row min-h-0 bg-[#e9e9e9]">
-        <div className="lg:w-[200px] bg-[#f5f5f5] border-r border-t lg:border-t-0 p-2 flex flex-col gap-2 overflow-auto max-h-[185px] lg:max-h-none shrink-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* 4. РАБОЧАЯ ОБЛАСТЬ */}
+      <div className="flex-1 order-2 lg:order-3 flex flex-col-reverse lg:flex-row min-h-0 bg-slate-200 dark:bg-slate-950">
+        {/* Левая панель слайдов */}
+        <div className="lg:w-[220px] bg-slate-50 dark:bg-slate-900 border-r dark:border-slate-800 border-t lg:border-t-0 p-2 flex flex-col gap-2 overflow-auto max-h-[168px] lg:max-h-none shrink-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex items-center justify-between px-1">
-            <span className="text-xs font-bold tracking-widest text-slate-500">СЛАЙДЫ {slides.length}</span>
-            <button onClick={() => addSlide('blank')} className="p-2 rounded bg-white border" aria-label="Новый слайд"><Plus size={14} /></button>
+            <span className="text-[11px] font-extrabold tracking-widest text-slate-500 dark:text-slate-400">СЛАЙДЫ ({slides.length})</span>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => moveSlide(-1)} disabled={active === 0} title="Выше" className="p-1 rounded bg-white dark:bg-slate-800 border dark:border-slate-700 dark:text-slate-200 disabled:opacity-35"><ArrowUp size={12} /></button>
+              <button type="button" onClick={() => moveSlide(1)} disabled={active >= slides.length - 1} title="Ниже" className="p-1 rounded bg-white dark:bg-slate-800 border dark:border-slate-700 dark:text-slate-200 disabled:opacity-35"><ArrowDown size={12} /></button>
+              <button type="button" onClick={() => addSlide('content')} className="p-1 rounded bg-[#b7472a] text-white" title="Новый слайд"><Plus size={13} /></button>
+            </div>
           </div>
+
           <div ref={slideListRef} className="flex gap-2 overflow-x-auto lg:grid lg:gap-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {slides.map((s, i) => {
-              const hasG = (s.content.blocks || []).some((b: any) => b.style?.x !== undefined)
-              const sBg = (s as any).background || '#ffffff'
-              const isDark = isDarkColor(sBg)
-              return (
-                <div key={i} data-slide-index={i} role="button" tabIndex={0} aria-label={`Слайд ${i + 1}`} aria-current={i === active ? 'true' : undefined}
-                  onClick={() => selectSlide(i)}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectSlide(i) } }}
-                  className={`text-left rounded-lg border-2 overflow-hidden bg-white relative cursor-pointer group w-[112px] shrink-0 lg:w-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${i === active ? 'border-[#d24726] shadow' : 'border-slate-200 hover:border-slate-300'}`}>
-                  <div className="aspect-video shrink-0 overflow-hidden relative" style={{ ...getSlideBgStyle(s), ...slideAspectStyle(s) }}>
-                    {hasG ? (
-                      <div className="absolute inset-0 scale-[0.22] origin-top-left w-[454%] h-[454%]">
-                        {s.content.blocks.slice(0, 8).map((b: any) => {
-                          const L = `${b.style?.x ?? 2}%`, T = `${b.style?.y ?? 2}%`, W = `${b.style?.w ?? 40}%`
-                          if (b.type === 'image' && b.src) return <img key={b.id} src={resolveSrc(b.src)} alt="" style={{ position: 'absolute', left: L, top: T, width: W, height: `${b.style?.h ?? 30}%`, objectFit: 'contain' }} />
-                          if (b.type !== 'text') return <div key={b.id} style={{ position: 'absolute', left: L, top: T, width: W, height: `${b.style?.h ?? 30}%`, background: b.style?.fill || 'rgba(120,130,150,0.35)', borderRadius: 4 }} />
-                          const paras = (b.paragraphs && b.paragraphs.length) ? b.paragraphs : [{ runs: (b.content ? [{ text: String(b.content) }] : []), text: b.content }]
-                          const firstTxt = String((paras[0]?.runs ? paras[0].runs.map((r: any) => r.text || '').join('') : paras[0]?.text) || '')
-                          const pcolor = (paras[0]?.runs?.[0]?.style?.color) || b.style?.color || (isDark ? '#e2e8f0' : '#334155')
-                          const big = (b.style?.fontSize || 16) >= 22 && firstTxt.length <= 48
-                          return (
-                            <div key={b.id} style={{ position: 'absolute', left: L, top: T, width: W, height: `${b.style?.h ?? 20}%`, overflow: 'hidden' }}>
-                              {big ? (
-                                <div style={{ fontSize: Math.max(9, (b.style?.fontSize || 18) * 0.62), fontWeight: 700, color: pcolor, lineHeight: 1.1, textAlign: b.style?.align || 'left' }} className="truncate">{firstTxt}</div>
-                              ) : paras.slice(0, 4).map((p: any, pi: number) => {
-                                const t = String((p.runs ? p.runs.map((r: any) => r.text || '').join('') : p.text) || '')
-                                if (!t.trim()) return null
-                                return <div key={pi} style={{ height: 4, marginBottom: 3, width: `${Math.min(100, 24 + t.length * 1.6)}%`, background: pcolor, opacity: 0.75, borderRadius: 2 }} />
-                              })}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    ) : (
-                      <div className="p-1.5 flex flex-col gap-0.5 overflow-hidden h-full">
-                        {s.content.blocks.slice(0, 3).map((b: any, bi: number) => (
-                          <div key={bi} className="truncate text-[9px] leading-tight" style={{ fontWeight: b.style?.bold ? '700' : '400', color: b.style?.color || (isDark ? '#fff' : '#1e293b') }}>
-                            {b.type === 'text' ? b.content?.slice(0, 32) : b.type === 'image' ? '🖼' : '⬜'}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="px-2 py-1 flex items-center justify-between bg-slate-50 border-t">
-                    <span className="text-[11px] font-medium">{i + 1} {s.transition !== 'нет' && s.transition ? `• ${s.transition}` : ''}</span>
-                    <span className="text-[10px] text-slate-500">{s.layout}</span>
-                  </div>
-                  <button onClick={(e) => { e.stopPropagation(); if (slides.length <= 1) { alert('Должен остаться хотя бы один слайд'); return; } if (!confirm(`Удалить слайд ${i + 1}?`)) return; pushHistory(); setSlides(s => s.filter((_, idx) => idx !== i)); setActive(prev => i <= prev ? Math.max(0, prev - 1) : prev); if (active === i) setSelectedBlock(null) }} disabled={slides.length <= 1} title={slides.length <= 1 ? 'Минимум один слайд' : 'Удалить слайд'} className={`absolute top-0.5 right-0.5 w-7 h-7 sm:w-6 sm:h-6 rounded-full bg-white border shadow flex items-center justify-center ${slides.length <= 1 ? 'opacity-30 cursor-not-allowed' : (i === active ? 'opacity-90 max-lg:opacity-100' : 'opacity-0') + ' lg:opacity-0 lg:group-hover:opacity-100 hover:bg-red-50 hover:border-red-200 hover:text-red-600'} transition-opacity`}><Trash2 size={13} /></button>
-                </div>
-              )
-            })}
+            {slides.map((s, i) => (
+              <SlideThumbItem
+                key={i}
+                slide={s}
+                index={i}
+                isActive={i === active}
+                canDelete={slides.length > 1}
+                onSelect={selectSlide}
+                onDelete={deleteSlideAt}
+              />
+            ))}
           </div>
-          {/* Мобильная панель управления слайдами (< lg) */}
-          <div className="flex lg:hidden items-center gap-1.5 pt-1 overflow-x-auto shrink-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <select
-              value={newLayout}
-              onChange={e => { setNewLayout(e.target.value); addSlide(e.target.value) }}
-              className="py-1.5 px-2 rounded-lg border bg-white text-xs text-slate-700 min-w-0 max-w-[120px] truncate shrink-0"
-              title="Макет нового слайда"
-              aria-label="Макет нового слайда"
-            >
-              <option value="blank">Пустой</option>
-              <option value="title">Титул</option>
-              <option value="content">Список</option>
-              <option value="image">Картинка</option>
-              <option value="table">Таблица</option>
-              <option value="chart">Диаграмма</option>
-            </select>
-            <button
-              onClick={() => addSlide(newLayout)}
-              className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center justify-center gap-1 text-xs shrink-0 whitespace-nowrap min-h-[36px]"
-              aria-label="Добавить слайд"
-            >
-              <Plus size={14} /> <span>+ Слайд</span>
+
+          <div className="relative flex gap-1 mt-auto pt-1">
+            <button onClick={() => addSlide('content')} className="flex-1 py-2 rounded-l-xl bg-[#b7472a] hover:bg-[#9c3a20] text-white font-bold flex items-center justify-center gap-1 text-xs">
+              <Plus size={14} /> Новый слайд
             </button>
             <button
-              onClick={duplicateSlide}
-              title="Дублировать текущий слайд"
-              aria-label="Дублировать текущий слайд"
-              className="px-2.5 py-1.5 rounded-lg border bg-white hover:bg-slate-50 font-bold flex items-center justify-center gap-1 text-xs text-slate-700 shrink-0 whitespace-nowrap min-h-[36px]"
+              type="button"
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => setOpenMenu(m => m === 'layout' ? null : 'layout')}
+              className="px-2 py-2 rounded-r-xl bg-[#9c3a20] hover:bg-[#822f19] text-white border-l border-white/20 flex items-center"
+              title="Выбрать макет слайда"
             >
-              <Copy size={14} /> <span>Дублировать</span>
+              <ChevronDown size={13} />
             </button>
-            <button
-              onClick={deleteSlide}
-              disabled={slides.length <= 1}
-              title={slides.length <= 1 ? 'Минимум один слайд' : 'Удалить текущий слайд'}
-              aria-label="Удалить текущий слайд"
-              className={`px-2.5 py-1.5 rounded-lg border font-bold flex items-center justify-center gap-1 text-xs shrink-0 whitespace-nowrap min-h-[36px] ${slides.length <= 1 ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-white text-red-600 border-red-200 hover:bg-red-50'}`}
-            >
-              <Trash2 size={14} /> <span>Удалить</span>
-            </button>
-          </div>
-          <div className="hidden lg:flex gap-1 mt-2">
-            <select value={newLayout} onChange={e => { setNewLayout(e.target.value); addSlide(e.target.value) }} className="w-full py-2 rounded-xl border bg-white text-sm text-slate-700" title="Макет нового слайда">
-              <option value="blank">Макет: пустой</option>
-              <option value="title">Макет: титул</option>
-              <option value="content">Макет: заголовок + список</option>
-              <option value="image">Макет: картинка</option>
-              <option value="table">Макет: таблица</option>
-              <option value="chart">Макет: диаграмма</option>
-            </select>
-          </div>
-          <div className="hidden lg:flex gap-1 mt-1">
-            <button onClick={() => addSlide(newLayout)} className="flex-1 py-2 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center gap-2 text-sm"><Plus size={14} /> Новый слайд</button>
-            <button onClick={duplicateSlide} title="Дублировать текущий слайд" className="px-3 py-2 rounded-xl border bg-white hover:bg-slate-50 font-bold flex items-center justify-center gap-1 text-sm text-slate-700"><Copy size={14} /></button>
-            <button onClick={deleteSlide} disabled={slides.length <= 1} title={slides.length <= 1 ? 'Минимум один слайд' : 'Удалить текущий слайд'} className={`px-3 py-2 rounded-xl border font-bold flex items-center justify-center gap-1 text-sm ${slides.length <= 1 ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-white text-red-600 border-red-200 hover:bg-red-50'}`}><Trash2 size={14} /></button>
+            <button onClick={duplicateSlide} title="Дублировать слайд" className="px-2.5 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"><Copy size={14} /></button>
+            <button onClick={deleteSlide} disabled={slides.length <= 1} title="Удалить слайд" className="px-2.5 py-2 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-800 text-red-600 dark:text-red-400 disabled:opacity-40"><Trash2 size={14} /></button>
           </div>
         </div>
 
-        <div className="flex-1 p-2 sm:p-4 lg:p-6 flex flex-col items-center overflow-auto bg-[#e9e9e9]">
-          <div className="hidden sm:flex items-center gap-2 mb-3 text-xs text-slate-600">
-            <Layers size={14} /> Слайд {active + 1} из {slides.length} • {cur.layout} • {cur.transition} • <span className="px-2 py-0.5 rounded bg-white border">{zoom}%</span>
-            <button onClick={() => setZoom(z => Math.max(60, z - 10))} className="p-1 rounded bg-white border"><ZoomOut size={12} /></button>
-            <button onClick={() => setZoom(z => Math.min(140, z + 10))} className="p-1 rounded bg-white border"><ZoomIn size={12} /></button>
-            <button onClick={undo} className="ml-2 p-1 rounded bg-white border text-xs flex items-center gap-1"><Undo2 size={12} /> Отменить</button>
-            <button onClick={() => setShowGrid(v => !v)} className={`ml-2 p-1 rounded border text-xs flex items-center gap-1 ${showGrid ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white'}`}>{showGrid ? '⊞ Сетка вкл' : '⊞ Сетка'}</button>
+        {/* Центральный холст */}
+        <div
+          ref={stageRef}
+          className="flex-1 p-2 sm:p-4 lg:p-6 flex flex-col items-center overflow-auto bg-slate-200 dark:bg-slate-950"
+          onMouseDown={() => { setSelectedBlock(null); setActiveCell(null); setEditingText(null); setEditingShape(null) }}
+        >
+          <div className="hidden sm:flex items-center gap-2 mb-3 text-xs text-slate-600 dark:text-slate-300" onMouseDown={e => e.stopPropagation()}>
+            <Layers size={14} /> Слайд {active + 1} из {slides.length} · {cur.layout || 'slide'} · {cur.transition || 'нет'}
+            <button onClick={() => setZoom(z => Math.max(50, z - 10))} className="p-1 rounded bg-white dark:bg-slate-800 border dark:border-slate-700"><ZoomOut size={12} /></button>
+            <button onClick={() => { setZoom(100); recalcFit() }} className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border dark:border-slate-700 font-mono font-bold" title="Сбросить масштаб 100%">{zoom}%</button>
+            <button onClick={() => setZoom(z => Math.min(150, z + 10))} className="p-1 rounded bg-white dark:bg-slate-800 border dark:border-slate-700"><ZoomIn size={12} /></button>
+            <button onClick={() => setShowGrid(v => !v)} className={`ml-1 px-2 py-1 rounded border text-xs font-semibold ${showGrid ? 'bg-[#b7472a] text-white border-[#b7472a]' : 'bg-white dark:bg-slate-800 dark:border-slate-700'}`}>
+              ⊞ Сетка {showGrid ? 'вкл' : 'выкл'}
+            </button>
           </div>
 
           {isAbsolute ? (
-            <div ref={canvasWrapRef} className="w-full max-w-[960px] shrink-0" style={{ height: baseSlideH * canvasScale }}>
-              <div className="w-[960px] rounded-lg shadow-xl border overflow-hidden relative flex flex-col pe-canvas" style={{ ...getSlideBgStyle(cur), width: baseSlideW, height: baseSlideH, transform: `scale(${canvasScale})`, transformOrigin: 'top left', ['--pe-inv' as any]: 1 / canvasScale }} onMouseMove={handleDragMove} onMouseUp={handleDragEnd} onMouseLeave={handleDragEnd}>
-                <div className="flex-1 relative overflow-hidden" onMouseMove={handleDragMove} onMouseUp={handleDragEnd} onMouseLeave={handleDragEnd}>
-                  <div ref={canvasRef} className="absolute inset-0" onMouseMove={handleDragMove} onMouseUp={handleDragEnd}>
-                    {showGrid && <div className="absolute inset-0 pointer-events-none opacity-[0.15]" style={{ backgroundImage: 'radial-gradient(circle, #94a3b8 1.5px, transparent 1.5px)', backgroundSize: '24px 24px' }}></div>}
+            <div
+              ref={canvasWrapRef}
+              className="w-full max-w-[960px] shrink-0 flex justify-center"
+              style={{ height: Math.round(baseSlideH * canvasScale) + 28 }}
+            >
+              <div
+                style={{
+                  width: Math.round(baseSlideW * canvasScale),
+                  height: Math.round(baseSlideH * canvasScale),
+                  position: 'relative',
+                }}
+              >
+                <div
+                  className="rounded-lg shadow-2xl border border-slate-300/80 dark:border-slate-700 relative flex flex-col pe-canvas"
+                  style={{
+                    ...getSlideBgStyle(cur),
+                    width: baseSlideW,
+                    height: baseSlideH,
+                    transform: `scale(${canvasScale})`,
+                    transformOrigin: 'top left',
+                    ['--pe-inv' as any]: 1 / canvasScale,
+                  }}
+                >
+                  <div ref={canvasRef} className="flex-1 relative">
+                    {showGrid && (
+                      <div
+                        className="absolute inset-0 pointer-events-none opacity-[0.18]"
+                        style={{ backgroundImage: 'radial-gradient(circle, #64748b 1.2px, transparent 1.2px)', backgroundSize: '24px 24px' }}
+                      />
+                    )}
+
+                    {guides.v != null && (
+                      <div className="absolute top-0 bottom-0 pointer-events-none z-40 border-l-2 border-dashed border-[#d24726]" style={{ left: `${guides.v}%` }} />
+                    )}
+                    {guides.h != null && (
+                      <div className="absolute left-0 right-0 pointer-events-none z-40 border-t-2 border-dashed border-[#d24726]" style={{ top: `${guides.h}%` }} />
+                    )}
+
                     {(() => {
                       const hasShape = cur.content.blocks.some((x: any) => x.type === 'shape')
                       const isCardBg = (cur.background || '').toUpperCase() === '#F8F9FA'
                       return cur.content.blocks.map((b: any) => {
                         const s = b.style || {}
+                        const lt = liveTransform?.id === b.id ? liveTransform : null
+                        const bx = lt ? lt.x : s.x
+                        const by = lt ? lt.y : s.y
+                        const bw = lt ? lt.w : s.w
+                        const bh = lt ? lt.h : s.h
+                        const brot = lt ? lt.rotation : (s.rotation || 0)
                         const isSelected = selectedBlock === b.id
                         const needCard = !hasShape && isCardBg && !s.background && (s.fontSize || 16) < 24 && (cur.content.blocks.length || 0) > 12 && (s.w || 0) < 60
-                        const common: any = {
-                          position: 'absolute' as any,
-                          left: s.x != null ? `${s.x}%` : '0%',
-                          top: s.y != null ? `${s.y}%` : '0%',
-                          width: s.w != null ? `${s.w}%` : '90%',
-                          height: s.h != null ? `${s.h}%` : 'auto',
-                          transform: s.rotation ? `rotate(${s.rotation}deg)` : undefined,
-                          zIndex: s.z || 0,
-                          overflow: 'hidden' as any,
-                          cursor: 'pointer' as any,
-                          touchAction: 'none' as any,
+                        const common: React.CSSProperties = {
+                          position: 'absolute',
+                          left: bx != null ? `${bx}%` : '0%',
+                          top: by != null ? `${by}%` : '0%',
+                          width: bw != null ? `${bw}%` : '90%',
+                          height: bh != null ? `${bh}%` : 'auto',
+                          transform: brot ? `rotate(${brot}deg)` : undefined,
+                          zIndex: isSelected ? Math.max(s.z || 1, 20) : (s.z || 0),
+                          opacity: s.opacity ?? 1,
+                          overflow: 'visible',
+                          touchAction: 'none',
+                          willChange: lt ? 'left, top, width, height, transform' : undefined,
+                        }
+                        const openBlockMenu = (e: React.MouseEvent) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setSelectedBlock(b.id)
+                          const mx = Math.min(e.clientX, window.innerWidth - 220)
+                          const my = Math.min(e.clientY, window.innerHeight - 320)
+                          setCtxMenu({ x: Math.max(8, mx), y: Math.max(8, my), blockId: b.id })
                         }
                         const animCls = getAnimationClass(b.animation || 'нет')
-                        const selCls = isSelected ? 'border-[#d24726] bg-orange-50/20 shadow-[0_0_0_2px_rgba(211,71,38,0.15)]' : 'border-transparent hover:border-white/40'
+                        const selCls = isSelected
+                          ? 'ring-2 ring-[#d24726] ring-offset-1 ring-offset-transparent'
+                          : 'hover:ring-1 hover:ring-blue-400/70'
+
                         if (b.type === 'text') {
                           const edParas = (b.paragraphs && b.paragraphs.length) || 1
                           const isEdit = editingText === b.id
                           return (
-                            <FitBox key={b.id} onClick={() => setSelectedBlock(b.id)}
-                              onMouseDown={(e: any) => { if (isEdit) { e.stopPropagation(); return } handleDragStart(e, b.id) }}
-                              onPointerDown={(e: any) => { if (isEdit) { e.stopPropagation(); return } handleDragStart(e, b.id) }} boxStyle={{ ...common, height: s.h != null ? `${s.h}%` : 'auto', overflow: 'visible', display: 'block', padding: needCard ? '8px 10px' : s.background ? '6px 8px' : '2px 7px', background: needCard ? '#ffffff' : s.background && !['#FFE66D', '#FF8C69', '#FFE600'].includes(s.background) ? s.background : 'transparent', borderRadius: needCard ? '8px' : s.background ? '6px' : 0, boxShadow: needCard ? '0 2px 10px rgba(0,0,0,0.06)' as any : undefined, border: needCard ? '1px solid #f1f5f9' as any : (s.stroke ? `${s.strokeWidth || 1}px ${s.dash || 'solid'} ${s.stroke}` as any : undefined), cursor: 'move', touchAction: 'none' }} innerStyle={anchoredInner(s)} hasH={s.h != null} paras={edParas} fit={false} className={`group p-1 border-2 ${selCls} rounded-lg ${animCls}`}
-                              overlay={<>
-                                <button data-pe-overlay onClick={(e) => { e.stopPropagation(); setSelectedBlock(b.id); deleteBlock(b.id) }} className={`absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}><Trash2 size={9} /></button>
-                                <button data-pe-overlay onClick={(e) => { e.stopPropagation(); setSelectedBlock(b.id); setEditingText(b.id) }}
-                                  title="Править текст (двойной клик)" aria-label="Править текст"
-                                  className={`absolute -top-2 -right-9 w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}><Pencil size={9} /></button>
-                                {isSelected && ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((h: any) => (
-                                  <div key={h} className="absolute z-10" style={{ left: h.includes('w') ? 0 : h.includes('e') ? undefined : '50%', right: h.includes('e') ? 0 : undefined, top: h.includes('n') ? 0 : h.includes('s') ? undefined : '50%', bottom: h.includes('s') ? 0 : undefined, transform: (h === 'n' || h === 's') ? 'translateX(-50%)' : (h === 'e' || h === 'w') ? 'translateY(-50%)' : undefined, width: 0, height: 0 }}>
-                                    <span data-resize-handle={h} onMouseDown={(e) => handleResizeStart(e, b.id, h)} onPointerDown={(e: any) => handleResizeStart(e, b.id, h)} className="absolute block w-6 h-6 touch-none" style={{ left: -12, top: -12, cursor: h === 'nw' || h === 'se' ? 'nwse-resize' : h === 'ne' || h === 'sw' ? 'nesw-resize' : h === 'n' || h === 's' ? 'ns-resize' : 'ew-resize' }}>
-                                      <span className="resize-dot pointer-events-none absolute block bg-white border border-slate-500 rounded-[3px]" style={{ width: 13, height: 13, left: 5.5, top: 5.5 }} />
-                                    </span>
-                                  </div>
-                                ))}
-                              </>}>
+                            <FitBox
+                              key={b.id}
+                              onMouseDown={(e: any) => e.stopPropagation()}
+                              onPointerDown={(e: any) => { e.stopPropagation(); if (isEdit) return; handleDragStart(e, b.id) }}
+                              onContextMenu={openBlockMenu}
+                              boxStyle={{
+                                ...common,
+                                height: bh != null ? `${bh}%` : 'auto',
+                                display: 'block',
+                                padding: needCard ? '8px 10px' : s.background ? '6px 8px' : '2px 7px',
+                                background: needCard ? '#ffffff' : s.background && !['#FFE66D', '#FF8C69', '#FFE600'].includes(s.background) ? s.background : 'transparent',
+                                borderRadius: needCard ? '8px' : s.borderRadius ? `${s.borderRadius}px` : (s.background ? '6px' : 0),
+                                boxShadow: needCard ? '0 2px 10px rgba(0,0,0,0.06)' : s.shadow ? '0 6px 18px rgba(15,23,42,0.12)' : undefined,
+                                border: needCard ? '1px solid #f1f5f9' : (s.stroke ? `${s.strokeWidth || 1}px ${s.dash || 'solid'} ${s.stroke}` : undefined),
+                                cursor: s.locked ? 'default' : 'move',
+                              }}
+                              innerStyle={anchoredInner(s)}
+                              hasH={bh != null}
+                              paras={edParas}
+                              fit={false}
+                              className={`group rounded-md ${selCls} ${animCls}`}
+                              overlay={renderBlockOverlay(b, isSelected)}
+                            >
                               {isEdit ? (
-                                <div key={'e' + b.id} contentEditable suppressContentEditableWarning data-editing="1"
+                                <div
+                                  key={'e' + b.id}
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  data-editing="1"
                                   data-orig={blockOrigText(b)}
                                   style={editInline(b, s) as any}
                                   onBlur={e => { try { commitText(b.id, (e.target as HTMLElement).innerText) } finally { setEditingText(null) } }}
                                   onKeyDown={e => { if (e.key === 'Escape') { (e.target as HTMLElement).blur() } }}
                                   onDoubleClick={e => e.stopPropagation()}
-                                  onMouseDown={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}
-                                  className="w-full bg-transparent focus:outline-none min-h-[1em] whitespace-pre-wrap outline-none cursor-text" />
+                                  onMouseDown={e => e.stopPropagation()}
+                                  onPointerDown={e => e.stopPropagation()}
+                                  className="w-full bg-transparent focus:outline-none min-h-[1em] whitespace-pre-wrap outline-none cursor-text"
+                                />
                               ) : (
-                                <div key={'v' + b.id} onDoubleClick={(e: any) => { e.stopPropagation(); setEditingText(b.id); setSelectedBlock(b.id) }} className="w-full cursor-move">
-                                  {b.paragraphs ? b.paragraphs.map((p: any, pi: number) => <div key={pi} style={{ textAlign: p.align || s.align || 'left', marginBottom: '0.2em', paddingLeft: p.level ? '1em' : 0, position: 'relative', fontSize: s.fontSize || 16, fontFamily: fontStack(s.fontFamily), lineHeight: p.lineHeight || textLineHeight(s), color: s.color || '#1e293b' }}>{(p.level || s.bullet) && <span style={{ position: 'absolute', left: 0, color: '#e11d48' }}>•</span>}{p.runs ? p.runs.map((r: any, ri: number) => <span key={ri} style={{ fontSize: r.style?.fontSize, fontFamily: fontStack(r.style?.fontFamily), fontWeight: r.style?.bold ? '700' : undefined, fontStyle: r.style?.italic ? 'italic' : undefined, textDecoration: r.style?.underline ? 'underline' : undefined, color: r.style?.color, background: r.style?.highlight ? '#fef08a' : undefined, textShadow: r.style?.textShadow || undefined }}>{r.text}</span>) : p.text}</div>) : <div style={{ fontSize: s.fontSize || 18, fontFamily: fontStack(s.fontFamily), lineHeight: textLineHeight(s), fontWeight: s.bold ? '700' : '400', color: s.color || '#1e293b', textAlign: s.align || 'left' }}>{b.content}</div>}
+                                <div
+                                  key={'v' + b.id}
+                                  onDoubleClick={(e: any) => { e.stopPropagation(); setEditingText(b.id); setSelectedBlock(b.id) }}
+                                  className="w-full cursor-move"
+                                >
+                                  {b.paragraphs ? b.paragraphs.map((p: any, pi: number) => (
+                                    <div key={pi} style={{ textAlign: p.align || s.align || 'left', marginBottom: '0.2em', paddingLeft: p.level ? '1em' : 0, position: 'relative', fontSize: s.fontSize || 16, fontFamily: fontStack(s.fontFamily), lineHeight: p.lineHeight || textLineHeight(s), color: s.color || '#1e293b' }}>
+                                      {(p.level || s.bullet) && <span style={{ position: 'absolute', left: 0, color: '#e11d48' }}>•</span>}
+                                      {p.runs ? p.runs.map((r: any, ri: number) => (
+                                        <span key={ri} style={{ fontSize: r.style?.fontSize, fontFamily: fontStack(r.style?.fontFamily), fontWeight: r.style?.bold ? 700 : undefined, fontStyle: r.style?.italic ? 'italic' : undefined, textDecoration: r.style?.underline ? 'underline' : undefined, color: r.style?.color, background: r.style?.highlight ? '#fef08a' : undefined }}>{r.text}</span>
+                                      )) : p.text}
+                                    </div>
+                                  )) : (
+                                    <div style={{ fontSize: s.fontSize || 18, fontFamily: fontStack(s.fontFamily), lineHeight: textLineHeight(s), fontWeight: s.bold ? 700 : 400, fontStyle: s.italic ? 'italic' : 'normal', textDecoration: s.underline ? 'underline' : 'none', color: s.color || '#1e293b', textAlign: s.align || 'left', whiteSpace: 'pre-wrap' }}>
+                                      {s.bullet
+                                        ? String(b.content || '').split('\n').map((ln, idx) => <div key={idx}>• {ln}</div>)
+                                        : s.numbered
+                                          ? String(b.content || '').split('\n').map((ln, idx) => <div key={idx}>{idx + 1}. {ln}</div>)
+                                          : b.content}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </FitBox>
                           )
                         }
+
                         if (b.type === 'image') {
                           return (
-                            <div key={b.id} onClick={() => setSelectedBlock(b.id)} onMouseDown={(e) => handleDragStart(e, b.id)} onPointerDown={(e: any) => handleDragStart(e, b.id)} style={{ ...common, cursor: 'move', touchAction: 'none' }} className={`group border-2 ${selCls} rounded-lg overflow-hidden bg-transparent ${animCls}`}>
-                              {b.unrenderable ? <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 border border-dashed border-slate-300 text-slate-500 text-xs p-2 text-center">{b.brokenLink ? '🖼 Картинка повреждена в исходном файле' : <>🖼 Картинка .{b.origExt || 'emf'} не поддерживается браузером</>}</div> : <img onError={imgMissing} src={resolveSrc(b.src)} style={{ width: '100%', height: '100%', objectFit: (b.style?.objectFit) || 'contain' }} alt="" />}
-                              <button data-pe-overlay onClick={(e) => { e.stopPropagation(); deleteBlock(b.id) }} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-600 text-white hidden group-hover:flex items-center justify-center"><Trash2 size={9} /></button>
-                              {isSelected && ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((h: any) => (
-                                <div key={h} className="absolute z-10" style={{ left: h.includes('w') ? 0 : h.includes('e') ? undefined : '50%', right: h.includes('e') ? 0 : undefined, top: h.includes('n') ? 0 : h.includes('s') ? undefined : '50%', bottom: h.includes('s') ? 0 : undefined, transform: (h === 'n' || h === 's') ? 'translateX(-50%)' : (h === 'e' || h === 'w') ? 'translateY(-50%)' : undefined, width: 0, height: 0 }}>
-                                  <span data-resize-handle={h} onMouseDown={(e) => handleResizeStart(e, b.id, h)} onPointerDown={(e: any) => handleResizeStart(e, b.id, h)} className="absolute block w-6 h-6 touch-none" style={{ left: -12, top: -12, cursor: h === 'nw' || h === 'se' ? 'nwse-resize' : h === 'ne' || h === 'sw' ? 'nesw-resize' : h === 'n' || h === 's' ? 'ns-resize' : 'ew-resize' }}>
-                                    <span className="resize-dot pointer-events-none absolute block bg-white border border-slate-500 rounded-[3px]" style={{ width: 13, height: 13, left: 5.5, top: 5.5 }} />
-                                  </span>
-                                </div>
-                              ))}
+                            <div
+                              key={b.id}
+                              onMouseDown={e => e.stopPropagation()}
+                              onPointerDown={e => { e.stopPropagation(); handleDragStart(e, b.id) }}
+                              onContextMenu={openBlockMenu}
+                              style={{ ...common, cursor: s.locked ? 'default' : 'move' }}
+                              className={`group rounded-lg ${selCls} ${animCls}`}
+                            >
+                              <div className="w-full h-full overflow-hidden" style={{ borderRadius: s.borderRadius ? `${s.borderRadius}px` : undefined, boxShadow: s.shadow ? '0 8px 24px rgba(15,23,42,0.18)' : undefined }}>
+                                {b.unrenderable ? (
+                                  <div className="w-full h-full flex items-center justify-center bg-slate-100 border border-dashed border-slate-300 text-slate-500 text-xs p-2 text-center">Картинка недоступна</div>
+                                ) : (
+                                  <img onError={imgMissing} src={resolveSrc(b.src)} style={{ width: '100%', height: '100%', objectFit: s.objectFit || 'contain', pointerEvents: 'none' }} alt="" />
+                                )}
+                              </div>
+                              {renderBlockOverlay(b, isSelected)}
                             </div>
                           )
                         }
+
                         if (b.type === 'shape') {
-                          const shapeStyle: any = { background: s.fill || '#3B82F6', borderColor: s.stroke || '#1e40af', borderWidth: s.strokeWidth || 2, opacity: s.opacity || 1, cursor: 'move', boxShadow: s.shadow ? '0 2px 10px rgba(0,0,0,0.07)' : undefined, border: s.shadow ? '1px solid #f1f5f9' as any : undefined }
-                          if (s.svgPath) { shapeStyle.background = 'transparent'; shapeStyle.border = 'none'; shapeStyle.boxShadow = 'none' }
-                          else if (b.shape === 'circle' || b.shape === 'ellipse') shapeStyle.borderRadius = '50%'
-                          else if (b.shape === 'triangle') shapeStyle.clipPath = 'polygon(50% 0%, 0% 100%, 100% 100%)'
-                          else if (b.shape === 'rightTriangle') shapeStyle.clipPath = 'polygon(0 0, 0 100%, 100% 100%)'
-                          else if (b.shape === 'diamond') shapeStyle.transform = (shapeStyle.transform ? shapeStyle.transform + ' ' : '') + 'rotate(45deg) scale(0.7)'
-                          else if (b.shape === 'pentagon') shapeStyle.clipPath = 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)'
-                          else if (b.shape === 'hexagon') shapeStyle.clipPath = 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)'
-                          else if (b.shape === 'star') shapeStyle.clipPath = 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)'
-                          else if (b.shape === 'arrow') shapeStyle.clipPath = 'polygon(0% 20%, 60% 20%, 60% 0%, 100% 50%, 60% 100%, 60% 80%, 0% 80%)'
-                          else if (b.shape === 'line') { shapeStyle.height = '4px'; shapeStyle.borderWidth = 0; }
-                          else if (b.shape === 'parallelogram') shapeStyle.transform = (shapeStyle.transform ? shapeStyle.transform + ' ' : '') + 'skew(-12deg)'
-                          else if (b.shape === 'trapezoid') shapeStyle.clipPath = 'polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)'
-                          else if (b.shape === 'rounded') shapeStyle.borderRadius = '12px'
-                          return <div key={b.id} onClick={() => setSelectedBlock(b.id)} onMouseDown={(e) => handleDragStart(e, b.id)} onPointerDown={(e: any) => handleDragStart(e, b.id)} style={{ ...common, ...shapeStyle }} className={`group flex items-center justify-center border-2 ${selCls} ${animCls}`}>
-                            {s.svgPath ? (<SvgShape st={s} gid={`ed-canvas-${b.id}`} svgStyle={{ pointerEvents: 'none' }} />) : null}
-                            {isSelected && ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((h: any) => (
-                              <div key={h} className="absolute z-10" style={{ left: h.includes('w') ? 0 : h.includes('e') ? undefined : '50%', right: h.includes('e') ? 0 : undefined, top: h.includes('n') ? 0 : h.includes('s') ? undefined : '50%', bottom: h.includes('s') ? 0 : undefined, transform: (h === 'n' || h === 's') ? 'translateX(-50%)' : (h === 'e' || h === 'w') ? 'translateY(-50%)' : undefined, width: 0, height: 0 }}>
-                                <span onMouseDown={(e) => handleResizeStart(e, b.id, h)} onPointerDown={(e: any) => handleResizeStart(e, b.id, h)} className="absolute block w-6 h-6 touch-none" style={{ left: -12, top: -12, cursor: h === 'nw' || h === 'se' ? 'nwse-resize' : h === 'ne' || h === 'sw' ? 'nesw-resize' : h === 'n' || h === 's' ? 'ns-resize' : 'ew-resize' }}>
-                                  <span className="pointer-events-none absolute block bg-white border border-slate-500 rounded-[3px]" style={{ width: 13, height: 13, left: 5.5, top: 5.5 }} />
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        }
-                        if (b.type === 'table') {
-                          const rows = b.table?.rows || 3, cols = b.table?.cols || 3, cells = b.table?.cells
-                          const updateCell = (r: number, c: number, val: string) => {
-                            const newCells = (cells ? JSON.parse(JSON.stringify(cells)) : Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ text: '', style: {} })))) as any[][]
-                            if (!newCells[r]) newCells[r] = []
-                            newCells[r][c] = { text: val, style: newCells[r][c]?.style || {} }
-                            const newRows = Math.max(rows, r + 1), newCols = Math.max(cols, c + 1)
-                            setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: s.content.blocks.map(bb => bb.id === b.id ? { ...bb, table: { rows: newRows, cols: newCols, cells: newCells } } : bb) } }))
-                          }
+                          const isEditingThisShape = editingShape === b.id
                           return (
-                            <div key={b.id} onClick={() => setSelectedBlock(b.id)} onMouseDown={(e) => handleDragStart(e, b.id)} onPointerDown={(e: any) => handleDragStart(e, b.id)} style={{ ...common, borderRadius: 8, overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'move', touchAction: 'none' }} className={`group border-2 ${selCls} ${getAnimationClass(b.animation || 'нет')}`}>
-                              <div className={`grid gap-px w-full h-full ${((cells || []).some((row: any) => row.some((c: any) => c?.style?.background))) ? 'bg-slate-200' : 'bg-transparent'}`} style={{ gridTemplateColumns: `repeat(${cols},1fr)`, gridTemplateRows: `repeat(${rows},1fr)` }}>
-                                {(cells || []).flatMap((row: any[], ri: number) => row.filter((cell: any) => !cell?.merged).map((cell: any, ki: number) => {
-                                  const k = `${ri}-${ki}`
-                                  return <div key={k} contentEditable suppressContentEditableWarning onBlur={e => updateCell(ri, ki, (e.target as HTMLElement).innerText)} onMouseDown={e => e.stopPropagation()} className="p-1 text-[11px] leading-tight flex items-center overflow-hidden outline-none focus:bg-indigo-50 min-h-[24px]" style={{ gridColumn: `span ${cell?.colspan || 1}`, gridRow: `span ${cell?.rowspan || 1}`, background: cell?.style?.background || 'transparent', color: cell?.style?.color || '#1e293b' }}>{cell?.text || ''}</div>
-                                }))}
-                              </div>
-                              <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 hidden group-hover:flex gap-1 bg-white border rounded-full shadow px-1 py-1">
-                                <button onMouseDown={e => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); const nr = rows + 1; const newCells = cells ? [...cells, Array.from({ length: cols }, () => ({ text: '', style: {} }))] : Array.from({ length: nr }, () => Array.from({ length: cols }, () => ({ text: '', style: {} }))); setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: s.content.blocks.map(bb => bb.id === b.id ? { ...bb, table: { rows: nr, cols, cells: newCells } } : bb) } })) }} className="px-3 py-2 text-sm bg-slate-100 rounded-full hover:bg-slate-200 touch-none">+ Строка</button>
-                                <button onMouseDown={e => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); const nc = cols + 1; const newCells = (cells || Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ text: '', style: {} })))).map((row: any) => [...row, { text: '', style: {} }]); setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: s.content.blocks.map(bb => bb.id === b.id ? { ...bb, table: { rows, cols: nc, cells: newCells } } : bb) } })) }} className="px-3 py-2 text-sm bg-slate-100 rounded-full hover:bg-slate-200 touch-none">+ Столбец</button>
-                                <button onMouseDown={e => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); if (rows <= 1) return; const newCells = cells?.slice(0, rows - 1); setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: s.content.blocks.map(bb => bb.id === b.id ? { ...bb, table: { rows: rows - 1, cols, cells: newCells } } : bb) } })) }} className="px-3 py-2 text-sm bg-red-50 text-red-600 rounded-full touch-none">- Строка</button>
-                              </div>
+                            <div
+                              key={b.id}
+                              onMouseDown={e => e.stopPropagation()}
+                              onPointerDown={e => { e.stopPropagation(); if (isEditingThisShape) return; handleDragStart(e, b.id) }}
+                              onContextMenu={openBlockMenu}
+                              style={{ ...common, cursor: s.locked ? 'default' : 'move' }}
+                              className={`group ${selCls} ${animCls}`}
+                            >
+                              <SlideShape
+                                block={b}
+                                gid={`ed-sh-${b.id}`}
+                                editable
+                                editing={isEditingThisShape}
+                                onStartEdit={() => { setSelectedBlock(b.id); setEditingShape(b.id) }}
+                                onStopEdit={() => setEditingShape(null)}
+                                onCommitText={val => { pushHistory(); updateSelected({ content: val }) }}
+                              />
+                              {renderBlockOverlay(b, isSelected)}
                             </div>
                           )
                         }
+
+                        if (b.type === 'table') {
+                          return (
+                            <div
+                              key={b.id}
+                              onMouseDown={e => e.stopPropagation()}
+                              onPointerDown={e => {
+                                e.stopPropagation()
+                                if (!isSelected) { handleDragStart(e, b.id); setActiveCell({ r: 0, c: 0 }) }
+                              }}
+                              onContextMenu={openBlockMenu}
+                              style={{ ...common, cursor: isSelected ? 'default' : 'move' }}
+                              className={`group rounded-lg ${selCls} ${animCls}`}
+                            >
+                              <SlideTable
+                                block={b}
+                                editable
+                                selected={isSelected}
+                                activeCell={isSelected ? activeCell : null}
+                                onSelectCell={(r, c) => { setSelectedBlock(b.id); setActiveCell({ r, c }) }}
+                                onUpdateCell={(r, c, txt) => updateTableCell(b.id, r, c, txt)}
+                                onResizeColumns={widths => updateTableColWidths(b.id, widths)}
+                              />
+                              {renderBlockOverlay(b, isSelected)}
+                            </div>
+                          )
+                        }
+
                         if (b.type === 'chart') {
-                          const chartType = b.style?.chartType || 'bar'
-                          // данные из поля ввода, а не захардкоженные — иначе введённое игнорится
-                          const vals = (b as any).chartData?.values?.length ? (b as any).chartData.values : [40, 70, 50, 80, 60]
-                          const maxV = Math.max(...vals, 1)
-                          const pieStops = vals.length ? (() => { const total = vals.reduce((x: number, y: number) => x + y, 0) || 1; let acc = 0; return vals.map((v: number, i: number) => { const start = acc / total * 100; acc += v; const end = acc / total * 100; const colors = ['#8b5cf6', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#ec4899', '#14b8a6']; return `${colors[i % colors.length]} ${start}% ${end}%` }).join(', ') })() : 'conic-gradient(#8b5cf6 0% 100%)'
-                          const linePts = vals.map((v: number, i: number) => `${(i / Math.max(vals.length - 1, 1)) * 100},${40 - (v / maxV) * 36}`).join(' ')
-                          return <div key={b.id} onClick={() => setSelectedBlock(b.id)} onMouseDown={(e) => handleDragStart(e, b.id)} onPointerDown={(e: any) => handleDragStart(e, b.id)} style={{ ...common, cursor: 'move', touchAction: 'none' }} className={`group border-2 ${selCls} rounded-lg bg-white flex flex-col items-center justify-center p-2 overflow-hidden ${getAnimationClass(b.animation || 'нет')}`}>
-                            <div className="flex items-center gap-1 text-xs font-bold text-indigo-700"><BarChart3 size={14} /> {chartType}</div>
-                            <div className="mt-1 w-full flex-1 flex items-end justify-center gap-1 min-h-[60px]">
-                              {chartType === 'pie' ? (
-                                <div className="w-16 h-16 rounded-full border-4 border-blue-500 relative overflow-hidden" style={{ background: `conic-gradient(${pieStops})` }}><div className="absolute inset-2 bg-white rounded-full flex items-center justify-center text-xs font-bold">pie</div></div>
-                              ) : chartType === 'line' ? (
-                                <svg className="w-full h-12" viewBox="0 0 100 40" preserveAspectRatio="none"><polyline points={linePts} fill="none" stroke="#8b5cf6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                              ) : (
-                                vals.map((h: number, i: number) => <div key={i} className="flex-1 bg-indigo-500 rounded-t" style={{ height: `${Math.max(4, h / maxV * 100)}%`, background: '#8b5cf6' }}></div>)
-                              )}
+                          return (
+                            <div
+                              key={b.id}
+                              onMouseDown={e => e.stopPropagation()}
+                              onPointerDown={e => { e.stopPropagation(); handleDragStart(e, b.id) }}
+                              onDoubleClick={e => { e.stopPropagation(); setSelectedBlock(b.id); setChartModalBlockId(b.id) }}
+                              onContextMenu={openBlockMenu}
+                              title="Двойной клик — изменить данные диаграммы"
+                              style={{ ...common, cursor: s.locked ? 'default' : 'move' }}
+                              className={`group rounded-xl ${selCls} ${animCls}`}
+                            >
+                              <SlideChart block={b} gid={`ed-ch-${b.id}`} />
+                              {renderBlockOverlay(b, isSelected)}
                             </div>
-                            <select value={chartType} onChange={e => { e.stopPropagation(); setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: s.content.blocks.map(bb => bb.id === b.id ? { ...bb, style: { ...bb.style, chartType: e.target.value } } : bb) } })) }} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} className="mt-1 text-xs border rounded px-1 py-0.5 bg-white">
-                              <option value="bar">Столбцы</option><option value="pie">Круг</option><option value="line">Линия</option>
-                            </select>
-                            <div className="mt-1 w-full">
-                              <div className="text-xs font-medium text-slate-600">Данные (через запятую):</div>
-                              <input value={(b as any).chartData?.values?.join(',') || '40,70,50,80,60'} onChange={e => {
-                                const vals = e.target.value.split(',').map(v => parseInt(v.trim()) || 0)
-                                setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: s.content.blocks.map(bb => bb.id === b.id ? { ...bb, chartData: { labels: vals.map((_, i) => 'A' + (i + 1)), values: vals } } : bb) } }))
-                              }} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} className="w-full mt-1 px-2 py-1 rounded border text-xs" placeholder="40,70,50,80,60" />
-                            </div>
-                            {isSelected && ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((h: any) => (<div key={h} className="absolute z-10" style={{ left: h.includes('w') ? 0 : h.includes('e') ? undefined : '50%', right: h.includes('e') ? 0 : undefined, top: h.includes('n') ? 0 : h.includes('s') ? undefined : '50%', bottom: h.includes('s') ? 0 : undefined, transform: (h === 'n' || h === 's') ? 'translateX(-50%)' : (h === 'e' || h === 'w') ? 'translateY(-50%)' : undefined, width: 0, height: 0 }}><span data-resize-handle={h} onMouseDown={(e) => handleResizeStart(e, b.id, h)} onPointerDown={(e: any) => handleResizeStart(e, b.id, h)} className="absolute block w-6 h-6 touch-none" style={{ left: -12, top: -12, cursor: h === 'nw' || h === 'se' ? 'nwse-resize' : h === 'ne' || h === 'sw' ? 'nesw-resize' : h === 'n' || h === 's' ? 'ns-resize' : 'ew-resize' }}><span className="resize-dot pointer-events-none absolute block bg-white border border-slate-500 rounded-[3px]" style={{ width: 13, height: 13, left: 5.5, top: 5.5 }} /></span></div>))}
-                          </div>
+                          )
                         }
+
                         if (b.type === 'video') {
-                          return <div key={b.id} onClick={() => setSelectedBlock(b.id)} onMouseDown={(e) => handleDragStart(e, b.id)} onPointerDown={(e: any) => handleDragStart(e, b.id)} style={{ ...common, cursor: 'move', touchAction: 'none' }} className={`group border-2 ${selCls} rounded-lg overflow-hidden bg-black`}>
-                            <iframe src={videoEmbedUrl(b.content || '')} title="video" className="w-full h-full pointer-events-none" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups" />
-                          </div>
+                          return (
+                            <div
+                              key={b.id}
+                              onMouseDown={e => e.stopPropagation()}
+                              onPointerDown={e => { e.stopPropagation(); handleDragStart(e, b.id) }}
+                              onContextMenu={openBlockMenu}
+                              style={{ ...common, cursor: 'move' }}
+                              className={`group rounded-lg ${selCls} bg-black`}
+                            >
+                              <iframe src={videoEmbedUrl(b.content || '')} title="video" className="w-full h-full pointer-events-none rounded-lg" allowFullScreen sandbox="allow-scripts allow-presentation allow-popups" />
+                              {renderBlockOverlay(b, isSelected)}
+                            </div>
+                          )
                         }
-                        return <div key={b.id} onClick={() => setSelectedBlock(b.id)} onMouseDown={(e) => handleDragStart(e, b.id)} onPointerDown={(e: any) => handleDragStart(e, b.id)} style={{ ...common, cursor: 'move', touchAction: 'none' }} className={`group border-2 ${selCls} p-1`}>{b.content || ''}</div>
+
+                        return (
+                          <div
+                            key={b.id}
+                            onMouseDown={e => e.stopPropagation()}
+                            onPointerDown={e => { e.stopPropagation(); handleDragStart(e, b.id) }}
+                            onContextMenu={openBlockMenu}
+                            style={{ ...common, cursor: 'move', fontSize: s.fontSize || 36, textAlign: 'center' }}
+                            className={`group ${selCls}`}
+                          >
+                            {b.content || ''}
+                            {renderBlockOverlay(b, isSelected)}
+                          </div>
+                        )
                       })
                     })()}
-                    {cur.content.blocks.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-slate-400 border-2 border-dashed m-4 rounded-xl">Пустой слайд</div>}
+
+                    {cur.content.blocks.length === 0 && (
+                      <div className="absolute inset-0 flex items-center justify-center text-slate-400 border-2 border-dashed m-4 rounded-xl pointer-events-none">
+                        Пустой слайд — добавьте текст, фигуру, таблицу или диаграмму из вкладки «Вставка»
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div className="h-7 bg-slate-50 border-t hidden sm:flex items-center justify-between px-3 text-[11px] text-slate-500 shrink-0">
-                  <span className="flex items-center gap-2"><FileImage size={12} /> Заметки: <input value={cur.notes || ''} onChange={e => setSlides(sl => sl.map((s, i) => i === active ? { ...s, notes: e.target.value } : s))} placeholder="Подсказки докладчику..." className="bg-transparent border-none focus:outline-none w-[300px]" /></span>
-                  <span className="flex items-center gap-1"><Palette size={12} /> Фон: <input type="color" value={cur.background.startsWith('#') ? cur.background : '#ffffff'} onChange={e => setSlides(sl => sl.map((s, i) => i === active ? { ...s, background: e.target.value, backgroundType: 'solid' } : s))} className="w-5 h-5 rounded border ml-1 align-middle" /></span>
+
+                  <div
+                    className="h-7 bg-slate-50 border-t hidden sm:flex items-center justify-between px-3 text-[11px] text-slate-500 shrink-0 rounded-b-lg"
+                    onMouseDown={e => e.stopPropagation()}
+                  >
+                    <span className="flex items-center gap-2">
+                      <FileImage size={12} /> Заметки:
+                      <input
+                        value={cur.notes || ''}
+                        onChange={e => updateSlide({ notes: e.target.value })}
+                        placeholder="Подсказки докладчику…"
+                        className="bg-transparent border-none focus:outline-none w-44 md:w-[320px] max-w-full"
+                      />
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Palette size={12} /> Фон:
+                      <input
+                        type="color"
+                        value={cur.background?.startsWith('#') ? cur.background : '#ffffff'}
+                        onChange={e => updateSlide({ background: e.target.value, backgroundType: 'solid', gradient: undefined })}
+                        className="w-5 h-5 rounded border ml-1 align-middle cursor-pointer"
+                      />
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="w-full max-w-[960px] aspect-video shrink-0 bg-white rounded-lg shadow-xl border flex flex-col overflow-hidden" style={{ ...getSlideBgStyle(cur), ...slideAspectStyle(cur), zoom: `${zoom}%` as any }}>
-              <div className="flex-1 p-6 lg:p-8 flex flex-col gap-3 overflow-auto">
-                {cur.content.blocks.map((b: any) => (
-                  <div key={b.id} onClick={() => setSelectedBlock(b.id)} className={`group relative p-1 rounded-lg border-2 cursor-pointer ${selectedBlock === b.id ? 'border-[#d24726] bg-orange-50/30' : 'border-transparent hover:border-slate-200'}`}>
-                    {b.type === 'text' && (() => {
-                      const isEdit = editingText === b.id; return isEdit ? (
-                        <div key={'e' + b.id} contentEditable suppressContentEditableWarning data-editing="1"
-                          data-orig={blockOrigText(b)}
-                          style={editInline(b, b.style || { fontSize: 20, color: '#1e293b' }) as any}
-                          onBlur={e => { try { commitText(b.id, (e.target as HTMLElement).innerText) } finally { setEditingText(null) } }}
-                          onKeyDown={e => { if (e.key === 'Escape') { (e.target as HTMLElement).blur() } }}
-                          className="w-full bg-transparent border-none focus:outline-none min-h-[1.5em] whitespace-pre-wrap cursor-text" />
-                      ) : (
-                        <div key={'v' + b.id} onDoubleClick={e => { e.stopPropagation(); setEditingText(b.id); setSelectedBlock(b.id) }} className="cursor-move w-full bg-transparent border-none min-h-[1.5em]" style={{ fontSize: b.style?.fontSize || 20, fontFamily: b.style?.fontFamily || 'Inter', fontWeight: b.style?.bold ? '700' : b.style?.italic ? '400' : '400', fontStyle: b.style?.italic ? 'italic' : 'normal', textDecoration: b.style?.underline ? 'underline' : b.style?.highlight ? 'none' : 'none', textAlign: b.style?.align || 'left', color: b.style?.color || '#1e293b', lineHeight: b.style?.lineHeight || 1.4 }} >{b.paragraphs ? b.paragraphs.map((p: any, pi: number) => <div key={pi}>{p.text}</div>) : b.content}</div>
-                      )
-                    })()}
-                    {b.type === 'image' && (
-                      <div className="relative">
-                        <img onError={imgMissing} src={resolveSrc(b.src)} className="rounded-lg max-h-[260px] w-full object-contain border" style={{ borderRadius: b.style?.borderRadius || 8 }} alt="" />
-                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100">
-                          <label className="px-2 py-1 rounded bg-white border text-xs cursor-pointer shadow">Замени <input type="file" accept="image/*" className="hidden" onChange={e => {
-                            const f = e.target.files?.[0]; if (!f) return
-                            const r = new FileReader(); r.onload = () => setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: s.content.blocks.map(x => x.id === b.id ? { ...x, src: r.result as string } : x) } })); r.readAsDataURL(f)
-                          }} /></label>
-                        </div>
-                      </div>
-                    )}
-                    {b.type === 'shape' && (
-                      <div className="h-20 rounded-lg border-2 flex items-center justify-center text-sm font-bold" style={{ background: b.style?.fill || '#3B82F6', borderColor: b.style?.stroke || '#1e40af', borderWidth: b.style?.strokeWidth || 2, borderRadius: b.shape === 'circle' || b.shape === 'ellipse' ? '50%' : b.shape === 'rounded' ? '16px' : '8px' }}>{b.shape || 'rect'}</div>
-                    )}
-                    {b.type === 'table' && (
-                      <div className="border rounded-lg overflow-hidden">
-                        <div className="grid gap-px bg-slate-300" style={{ gridTemplateColumns: `repeat(${b.table?.cols || 3},1fr)` }}>
-                          {Array.from({ length: (b.table?.rows || 3) * (b.table?.cols || 3) }).map((_, k) => {
-                            const r = Math.floor(k / (b.table?.cols || 3)), c = k % (b.table?.cols || 3)
-                            const cell = b.table?.cells?.[r]?.[c]
-                            return <div key={k} contentEditable suppressContentEditableWarning onBlur={e => {
-                              const val = (e.target as HTMLElement).innerText
-                              const rows = b.table?.rows || 3, cols = b.table?.cols || 3
-                              const cells = b.table?.cells ? JSON.parse(JSON.stringify(b.table.cells)) : Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ text: '', style: {} })))
-                              if (!cells[r]) cells[r] = []
-                              cells[r][c] = { text: val, style: cells[r][c]?.style || {} }
-                              setSlides(sl => sl.map((s, i) => i !== active ? s : { ...s, content: { ...s.content, blocks: s.content.blocks.map(x => x.id === b.id ? { ...x, table: { rows, cols, cells } } : x) } }))
-                            }} onFocus={() => setSelectedBlock(b.id)} className="bg-white p-2 text-sm min-h-[32px] outline-none focus:bg-indigo-50" style={{ background: cell?.style?.background || '#fff' }}>{cell?.text || 'Ячейка'}</div>
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    {b.type === 'chart' && (
-                      <div className="h-28 rounded-xl border-2 bg-white flex flex-col items-center justify-center gap-1 p-2">
-                        <div className="flex items-center gap-1 text-xs font-bold text-indigo-700"><BarChart3 size={14} /> {b.style?.chartType || 'bar'}</div>
-                        <div className="w-full h-12 flex items-end justify-center gap-1 mt-1">
-                          {(b as any).chartData?.values?.length ? (b as any).chartData.values.map((v: any, i: number) => <div key={i} className="flex-1 bg-indigo-500 rounded-t" style={{ height: `${Math.max(10, Math.min(100, v))}%` }}></div>) : [40, 70, 50, 80, 60].map((h, i) => <div key={i} className="flex-1 bg-indigo-500 rounded-t" style={{ height: `${h}%` }}></div>)}
-                        </div>
-                        <div className="text-xs text-slate-400 mt-1">Данные в Свойствах →</div>
-                      </div>
-                    )}
-                    {b.type === 'video' && (
-                      <div className="aspect-video rounded-xl overflow-hidden bg-black">
-                        <iframe src={videoEmbedUrl(b.content || '')} title="video" className="w-full h-full" allowFullScreen
-                          sandbox="allow-scripts allow-presentation allow-popups" />
-                      </div>
-                    )}
-                    {b.type === 'icon' && <div className="text-4xl text-center" style={{ fontSize: b.style?.fontSize || 32 }}>{b.content}</div>}
-                    <button onClick={(e) => { e.stopPropagation(); deleteBlock(b.id) }} className="absolute -top-2 -right-2 w-9 h-9 sm:w-6 sm:h-6 rounded-full bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100"><Trash2 size={14} /></button>
-                  </div>
-                ))}
-                {cur.content.blocks.length === 0 && <div className="flex-1 flex items-center justify-center text-slate-400 border-2 border-dashed rounded-xl p-12">Пустой слайд — добавь блок из ленты Вставка</div>}
-              </div>
-              <div className="h-7 bg-slate-50 border-t hidden sm:flex items-center justify-between px-3 text-[11px] text-slate-500 shrink-0">
-                <span className="flex items-center gap-2"><FileImage size={12} /> Заметки: <input value={cur.notes || ''} onChange={e => setSlides(sl => sl.map((s, i) => i === active ? { ...s, notes: e.target.value } : s))} placeholder="Подсказки докладчику..." className="bg-transparent border-none focus:outline-none w-[300px]" /></span>
-                <span className="flex items-center gap-1"><Palette size={12} /> Фон: <input type="color" value={cur.background.startsWith('#') ? cur.background : '#ffffff'} onChange={e => setSlides(sl => sl.map((s, i) => i === active ? { ...s, background: e.target.value, backgroundType: 'solid' } : s))} className="w-5 h-5 rounded border ml-1 align-middle" /></span>
-              </div>
+            <div className="w-full max-w-[960px] aspect-video shrink-0 bg-white rounded-lg shadow-xl border flex flex-col overflow-hidden p-8 gap-3" style={getSlideBgStyle(cur)} onMouseDown={e => e.stopPropagation()}>
+              {cur.content.blocks.map((b: any) => (
+                <div key={b.id} onClick={() => setSelectedBlock(b.id)} className={`p-2 rounded-lg border-2 cursor-pointer ${selectedBlock === b.id ? 'border-[#d24726]' : 'border-transparent hover:border-slate-200'}`}>
+                  {b.type === 'text' && <div style={{ fontSize: b.style?.fontSize || 20, color: b.style?.color || '#1e293b' }}>{b.content}</div>}
+                  {b.type === 'image' && <img onError={imgMissing} src={resolveSrc(b.src)} className="rounded-lg max-h-[260px] w-full object-contain" alt="" />}
+                  {b.type === 'shape' && <div className="h-24"><SlideShape block={b} gid={`leg-sh-${b.id}`} /></div>}
+                  {b.type === 'table' && <div className="h-44"><SlideTable block={b} editable selected={selectedBlock === b.id} onUpdateCell={(r, c, txt) => updateTableCell(b.id, r, c, txt)} /></div>}
+                  {b.type === 'chart' && <div className="h-52"><SlideChart block={b} gid={`leg-ch-${b.id}`} /></div>}
+                </div>
+              ))}
             </div>
           )}
 
-          <div className="mt-3 w-full max-w-[960px] flex items-center justify-between gap-1.5 sm:gap-2">
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <button onClick={() => selectSlide(Math.max(0, active - 1))} disabled={active === 0} aria-label="Предыдущий слайд" className="px-3 py-2 min-h-[40px] sm:min-h-[44px] shrink-0 rounded-lg bg-white border text-sm disabled:opacity-50"><span aria-hidden>‹</span><span className="hidden sm:inline"> Назад</span></button>
-              <button onClick={() => selectSlide(Math.min(slides.length - 1, active + 1))} disabled={active === slides.length - 1} aria-label="Следующий слайд" className="px-3 py-2 min-h-[40px] sm:min-h-[44px] shrink-0 rounded-lg bg-white border text-sm disabled:opacity-50"><span aria-hidden>›</span><span className="hidden sm:inline"> Вперед</span></button>
+          <div className="mt-3 w-full max-w-[960px] flex items-center justify-between gap-2" onMouseDown={e => e.stopPropagation()}>
+            <div className="flex items-center gap-1.5">
+              <button onClick={() => selectSlide(Math.max(0, active - 1))} disabled={active === 0} className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 dark:text-white border dark:border-slate-700 text-sm font-semibold disabled:opacity-40">‹ Назад</button>
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-400 px-1.5 font-mono">{active + 1}/{slides.length}</span>
+              <button onClick={() => selectSlide(Math.min(slides.length - 1, active + 1))} disabled={active === slides.length - 1} className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 dark:text-white border dark:border-slate-700 text-sm font-semibold disabled:opacity-40">Вперед ›</button>
             </div>
-            <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
-              <button onClick={() => setSlideshow(true)} className="px-3 sm:px-4 py-2 min-h-[40px] sm:min-h-[44px] shrink-0 rounded-lg bg-[#d24726] hover:bg-[#b83b1d] text-white text-sm flex items-center gap-1"><Maximize2 size={16} /> <span className="hidden sm:inline">Слайд-шоу</span><span className="sm:hidden" aria-hidden>Шоу</span></button>
-              <button onClick={() => setPropsOpen(true)} aria-label="Свойства" className="xl:hidden px-3 py-2 min-h-[40px] sm:min-h-[44px] shrink-0 rounded-lg bg-slate-900 text-white text-sm flex items-center gap-1" data-testid="pe-props-open"><Wand2 size={16} /> <span className="hidden sm:inline">Свойства</span></button>
+            <div className="flex items-center gap-2 ml-auto">
+              <button onClick={() => setSlideshow(true)} className="px-3.5 py-2 rounded-lg bg-[#b7472a] hover:bg-[#9c3a20] text-white font-bold text-xs sm:text-sm flex items-center gap-1.5">
+                <Play size={14} className="fill-white" /> Слайд-шоу
+              </button>
+              <button onClick={() => setPropsOpen(true)} className="xl:hidden px-3 py-2 rounded-lg bg-slate-900 dark:bg-indigo-600 text-white font-bold text-xs flex items-center gap-1" data-testid="pe-props-open">
+                <Wand2 size={14} /> Свойства
+              </button>
             </div>
           </div>
         </div>
 
-        <div className="w-[300px] bg-white border-l hidden xl:flex flex-col">
-          {renderPropsContent()}
+        <div className="w-[300px] bg-white dark:bg-slate-900 border-l dark:border-slate-800 hidden xl:flex flex-col shrink-0">
+          {propsPanelNode}
         </div>
       </div>
+
       {propsOpen && (
         <div className="fixed inset-0 z-50 xl:hidden" data-testid="pe-props-sheet">
           <div className="absolute inset-0 bg-black/40" onClick={() => setPropsOpen(false)} />
-          <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl animate-enterUp flex flex-col max-h-[62dvh]">
+          <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-slate-900 rounded-t-2xl shadow-2xl animate-enterUp flex flex-col max-h-[70dvh]">
             <div className="p-3 border-b dark:border-slate-700 flex items-center justify-between shrink-0">
-              <span className="font-bold text-sm dark:text-white flex items-center gap-1"><Wand2 size={14} /> Свойства</span>
-              <button onClick={() => setPropsOpen(false)} aria-label="Скрыть свойства" className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-700 dark:text-white text-lg font-bold">✕</button>
+              <span className="font-bold text-sm dark:text-white flex items-center gap-1.5"><Wand2 size={14} /> Свойства</span>
+              <button onClick={() => setPropsOpen(false)} className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 dark:text-white font-bold">✕</button>
             </div>
-            <div className="overflow-y-auto modal-safe dark:text-white">
-              {renderPropsContent()}
+            <div className="overflow-y-auto flex-1 flex flex-col dark:text-white">
+              {propsPanelNode}
             </div>
           </div>
         </div>
       )}
+
+      {/* ОВЕРЛЕЙ: ПРЕДПРОСМОТР (НЕ РАЗМОНТИРУЕТ ХОЛСТ!) */}
+      {showPreview && (
+        <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col">
+          <div className="h-12 bg-slate-800 flex items-center justify-between px-4 text-white shrink-0">
+            <span className="font-bold text-sm">{title} — предпросмотр · {slides.length} слайдов</span>
+            <div className="flex items-center gap-2">
+              {pdfUrl && (
+                <div className="flex rounded-lg overflow-hidden text-xs">
+                  <button onClick={() => setPvMode('orig')} className={`px-3 py-1.5 ${pvMode === 'orig' ? 'bg-white text-slate-900 font-bold' : 'bg-slate-700 text-slate-200'}`}>Оригинал</button>
+                  <button onClick={() => setPvMode('blocks')} className={`px-3 py-1.5 ${pvMode === 'blocks' ? 'bg-white text-slate-900 font-bold' : 'bg-slate-700 text-slate-200'}`}>Конструктор</button>
+                </div>
+              )}
+              <button onClick={() => setShowPreview(false)} className="px-4 py-1.5 rounded-lg bg-white text-slate-900 text-xs font-bold">✕ Закрыть</button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-6 sm:p-8 bg-slate-800 flex flex-col items-center gap-6">
+            {slides.map((s, i) => {
+              if (pvMode === 'orig' && pdfUrl) {
+                return (
+                  <div key={i} className="w-[900px] max-w-[92vw] aspect-video shrink-0 rounded-xl border-4 border-white shadow-2xl overflow-hidden relative flex items-center justify-center bg-black">
+                    <PdfPage url={pdfUrl} page={i + 1} scale={1.5} className="w-full h-full object-contain" onError={() => setPvMode('blocks')} />
+                  </div>
+                )
+              }
+              return (
+                <div
+                  key={`${i}-${s.transition}`}
+                  className={`w-[960px] max-w-[92vw] shrink-0 rounded-xl border-4 border-white shadow-2xl overflow-hidden relative ${getTransitionClass(s.transition || 'нет')} ${slideDotsCls(s.background)}`}
+                  style={{ ...getSlideBgStyle(s), ...slideAspectStyle(s) }}
+                >
+                  <div className="absolute inset-0">
+                    {(s.content.blocks || []).slice().sort((a: any, b: any) => (a.style?.z || 0) - (b.style?.z || 0)).map((b: any) => renderStaticBlock(b, `pv-${i}`, 1))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ОВЕРЛЕЙ: СЛАЙД-ШОУ (НЕ РАЗМОНТИРУЕТ ХОЛСТ!) */}
+      {slideshow && (() => {
+        const s = slides[showIdx] || slides[0]
+        const pct = slides.length > 1 ? ((showIdx + 1) / slides.length) * 100 : 100
+        return (
+          <div className="fixed inset-0 z-50 bg-black flex flex-col select-none">
+            <div
+              className="flex-1 flex items-center justify-center p-4 sm:p-8 cursor-pointer overflow-hidden"
+              onClick={() => { if (showIdx < slides.length - 1) setShowIdx(i => i + 1) }}
+              title="Нажмите по слайду для перехода к следующему"
+            >
+              <div
+                key={`${showIdx}-${s.transition}`}
+                className={`w-[1060px] max-w-[95vw] max-h-[82vh] shrink-0 rounded-xl overflow-hidden shadow-2xl relative ${getTransitionClass(s.transition || 'нет')} ${slideDotsCls(s.background)}`}
+                style={{ ...getSlideBgStyle(s), ...slideAspectStyle(s) }}
+              >
+                <div className="absolute inset-0">
+                  {(s.content.blocks || [])
+                    .slice()
+                    .sort((a: any, b: any) => (a.style?.z || 0) - (b.style?.z || 0))
+                    .map((b: any) => renderStaticBlock(b, `show-${showIdx}`, 1.08))}
+                </div>
+              </div>
+            </div>
+
+            {showSpeakerNotes && (
+              <div className="mx-auto mb-2 w-[900px] max-w-[92vw] rounded-xl bg-slate-900/95 border border-white/15 px-4 py-2.5 text-slate-200 text-xs">
+                <div className="text-[10px] uppercase tracking-wider text-orange-400 font-bold mb-0.5">Заметки докладчика</div>
+                <div>{s.notes?.trim() || 'Для этого слайда заметок нет.'}</div>
+              </div>
+            )}
+
+            <div className="h-1 bg-white/10 w-full">
+              <div className="h-full bg-[#d24726] transition-all duration-300" style={{ width: `${pct}%` }} />
+            </div>
+
+            <div className="h-14 bg-slate-950/90 backdrop-blur border-t border-white/10 flex items-center justify-center gap-2 sm:gap-3 px-4 text-white shrink-0">
+              <button onClick={() => setShowIdx(i => Math.max(0, i - 1))} disabled={showIdx === 0} className="px-3.5 py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-35 text-xs sm:text-sm font-semibold">‹ Назад</button>
+              <span className="font-mono text-xs sm:text-sm font-bold px-2">{showIdx + 1} / {slides.length}</span>
+              <button onClick={() => setShowIdx(i => Math.min(slides.length - 1, i + 1))} disabled={showIdx >= slides.length - 1} className="px-3.5 py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-35 text-xs sm:text-sm font-semibold">Вперед ›</button>
+              <button onClick={() => setShowSpeakerNotes(v => !v)} className={`ml-2 px-3 py-2 rounded-lg text-xs font-semibold ${showSpeakerNotes ? 'bg-amber-500 text-slate-950' : 'bg-white/10 hover:bg-white/20'}`}>Заметки</button>
+              <button onClick={() => setSlideshow(false)} className="ml-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-xs sm:text-sm font-bold">Выйти (Esc)</button>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* МОДАЛКА: РЕДАКТОР ДАННЫХ ДИАГРАММЫ (КАК В EXCEL / POWERPOINT) */}
+      {chartModalBlockId && (() => {
+        const blk = cur?.content.blocks.find(b => b.id === chartModalBlockId)
+        if (!blk || blk.type !== 'chart') return null
+        return (
+          <ChartDataModal
+            block={blk}
+            onChange={patch => updateBlockById(blk.id, patch)}
+            onClose={() => setChartModalBlockId(null)}
+          />
+        )
+      })()}
+
+      {/* МОДАЛКА: ГОТОВЫЕ ШАБЛОНЫ ПРЕЗЕНТАЦИЙ */}
+      {showTemplates && (
+        <PresentationTemplatesModal
+          onApply={(tplSlides, mode, tplName) => applyTemplate(tplSlides as Slide[], mode, tplName)}
+          onClose={() => setShowTemplates(false)}
+        />
+      )}
+
+      {/* КОНТЕКСТНОЕ МЕНЮ ПО ПРАВОЙ КНОПКЕ МЫШИ */}
+      {ctxMenu && (() => {
+        const blk = cur?.content.blocks.find(b => b.id === ctxMenu.blockId)
+        if (!blk) return null
+        const locked = !!blk.style?.locked
+        const itemCls = 'w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 rounded-lg'
+        return (
+          <div
+            onMouseDown={e => e.stopPropagation()}
+            style={{ left: ctxMenu.x, top: ctxMenu.y }}
+            className="fixed z-50 w-52 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-1.5 space-y-0.5"
+          >
+            {(blk.type === 'text' || (blk.type === 'shape' && blk.shape !== 'line' && blk.shape !== 'lineArrow')) && (
+              <button type="button" onClick={() => { blk.type === 'text' ? setEditingText(blk.id) : setEditingShape(blk.id); setCtxMenu(null) }} className={itemCls}>
+                <Pencil size={13} /> Редактировать текст
+              </button>
+            )}
+            {blk.type === 'chart' && (
+              <button type="button" onClick={() => { setChartModalBlockId(blk.id); setCtxMenu(null) }} className={`${itemCls} text-[#b7472a] dark:text-orange-400 font-bold`}>
+                <BarChart3 size={13} /> Изменить данные…
+              </button>
+            )}
+            {blk.type === 'table' && (
+              <>
+                <button type="button" onClick={() => { editTableSize('addRow', blk.id); setCtxMenu(null) }} className={itemCls}><Plus size={13} /> Добавить строку</button>
+                <button type="button" onClick={() => { editTableSize('addCol', blk.id); setCtxMenu(null) }} className={itemCls}><Plus size={13} /> Добавить столбец</button>
+              </>
+            )}
+            <button type="button" onClick={() => { setClipboardBlock(JSON.parse(JSON.stringify(blk))); toast('Скопировано (Ctrl+V)', 'info'); setCtxMenu(null) }} className={itemCls}>
+              <Copy size={13} /> Копировать <span className="ml-auto text-[10px] text-slate-400">Ctrl+C</span>
+            </button>
+            <button type="button" onClick={() => { pasteBlock(blk); setCtxMenu(null) }} className={itemCls}>
+              <Copy size={13} /> Дублировать <span className="ml-auto text-[10px] text-slate-400">Ctrl+D</span>
+            </button>
+            <div className="my-1 border-t dark:border-slate-800" />
+            <button type="button" onClick={() => { bringForward(); setCtxMenu(null) }} className={itemCls}><BringToFront size={13} /> На передний план</button>
+            <button type="button" onClick={() => { sendBackward(); setCtxMenu(null) }} className={itemCls}><SendToBack size={13} /> На задний план</button>
+            <button type="button" onClick={() => { centerBlock('h'); setCtxMenu(null) }} className={itemCls}><AlignHorizontalJustifyCenter size={13} /> По центру (гориз.)</button>
+            <button type="button" onClick={() => { centerBlock('v'); setCtxMenu(null) }} className={itemCls}><AlignVerticalJustifyCenter size={13} /> По центру (верт.)</button>
+            <button type="button" onClick={() => { updateSelectedStyle({ locked: !locked }); setCtxMenu(null) }} className={itemCls}>
+              {locked ? <Unlock size={13} /> : <Lock size={13} />} {locked ? 'Разблокировать' : 'Заблокировать'}
+            </button>
+            <div className="my-1 border-t dark:border-slate-800" />
+            <button type="button" onClick={() => { deleteBlock(blk.id); setCtxMenu(null) }} className="w-full px-3 py-1.5 text-left text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 flex items-center gap-2 rounded-lg">
+              <Trash2 size={13} /> Удалить <span className="ml-auto text-[10px] opacity-60">Del</span>
+            </button>
+          </div>
+        )
+      })()}
     </div>
   )
 }

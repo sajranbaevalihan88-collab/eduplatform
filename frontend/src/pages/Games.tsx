@@ -39,9 +39,15 @@ export default function Games() {
   const mbBest = best('edu-mathbattle-best')
   const smBest = best('edu-soundmem-best')
   const c4Best = best('edu-c4-best')
+  const blocadeBest = best('edu-blocade-best')
   const isHost = canTeach()
 
   const cards = [
+    {
+      to: '/games/blocade', icon: '🧱', title: t('games_blocade'),
+      desc: t('games_blocade_desc'),
+      best: blocadeBest ? `🏆 ${blocadeBest}` : null, ready: true,
+    },
     {
       to: '/games/arkan', icon: '🤼', title: 'Аркан тартыш',
       desc: t('games_arkan_desc'),

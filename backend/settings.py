@@ -359,8 +359,8 @@ SECURE_HSTS_PRELOAD = not DEBUG
 FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 # Allowed extensions
-ALLOWED_UPLOAD_EXTENSIONS = ['.pptx','.ppt','.docx','.doc','.pdf','.png','.jpg','.jpeg','.gif','.webp']
-ALLOWED_UPLOAD_MIMES = ['application/vnd.openxmlformats-officedocument.presentationml.presentation','application/vnd.ms-powerpoint','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/msword','application/pdf','image/png','image/jpeg','image/gif','image/webp']
+ALLOWED_UPLOAD_EXTENSIONS = ['.pptx','.ppt','.docx','.doc','.pdf','.png','.jpg','.jpeg','.gif','.webp','.txt','.md','.csv']
+ALLOWED_UPLOAD_MIMES = ['application/vnd.openxmlformats-officedocument.presentationml.presentation','application/vnd.ms-powerpoint','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/msword','application/pdf','image/png','image/jpeg','image/gif','image/webp','text/plain','text/markdown','text/csv']
 
 LOGGING = {
     'version': 1,

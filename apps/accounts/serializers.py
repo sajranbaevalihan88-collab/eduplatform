@@ -8,10 +8,29 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     is_staff = serializers.BooleanField(read_only=True)
     is_superuser = serializers.BooleanField(read_only=True)
+    avatar = serializers.SerializerMethodField()
+    banner = serializers.SerializerMethodField()
+
+    def get_avatar(self, obj):
+        try:
+            return obj.avatar.url if obj.avatar else ''
+        except Exception:
+            return ''
+
+    def get_banner(self, obj):
+        try:
+            return obj.banner.url if obj.banner else ''
+        except Exception:
+            return ''
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'bio', 'is_staff', 'is_superuser']
-        read_only_fields = ['id', 'role', 'username', 'is_staff', 'is_superuser']
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name', 'role', 'bio',
+            'avatar', 'banner', 'banner_preset', 'banner_position', 'date_joined',
+            'is_staff', 'is_superuser',
+        ]
+        read_only_fields = ['id', 'role', 'username', 'date_joined', 'is_staff', 'is_superuser']
 
 class MeUpdateSerializer(serializers.ModelSerializer):
     # ник можно менять, но со всеми проверками как при регистрации
@@ -19,9 +38,11 @@ class MeUpdateSerializer(serializers.ModelSerializer):
         min_length=3,
         validators=[UniqueValidator(User.objects.all(), message='Этот ник уже занят — придумай другой')]
     )
+    banner_position = serializers.IntegerField(min_value=0, max_value=100, required=False)
+
     class Meta:
         model = User
-        fields = ['username', 'email', 'first_name', 'last_name', 'bio']
+        fields = ['username', 'email', 'first_name', 'last_name', 'bio', 'banner_preset', 'banner_position']
 
     def validate_username(self, value):
         value = value.strip()

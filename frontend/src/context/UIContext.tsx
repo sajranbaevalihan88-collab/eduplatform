@@ -50,10 +50,50 @@ export function ThemeProvider({children}:{children:React.ReactNode}){
 export const useTheme=()=> useContext(ThemeCtx)
 
 // Accessibility
-const AccCtx=createContext<{poor:boolean, toggle:()=>void, fontScale:number, setFont:(n:number)=>void, speech:boolean, toggleSpeech:()=>void, speak:(t:string)=>void, stopSpeak:()=>void, rate:number, setRate:(n:number)=>void, volume:number, setVolume:(n:number)=>void, voiceLang:string, setLang:(l:string)=>void, autoRead:boolean, toggleAutoRead:()=>void}>({poor:false, toggle:()=>{}, fontScale:100, setFont:()=>{}, speech:false, toggleSpeech:()=>{}, speak:()=>{}, stopSpeak:()=>{}, rate:1, setRate:()=>{}, volume:1, setVolume:()=>{}, voiceLang:'ru', setLang:()=>{}, autoRead:false, toggleAutoRead:()=>{}})
+export type ContrastScheme = 'wb' | 'bw' | 'yb' | 'blue'
+export type LetterSpacingMode = 'normal' | 'wide' | 'xwide'
+export type LineHeightMode = 'normal' | 'large'
+
+const AccCtx=createContext<{
+  poor:boolean, toggle:()=>void, fontScale:number, setFont:(n:number)=>void,
+  contrastScheme:ContrastScheme, setContrastScheme:(s:ContrastScheme)=>void,
+  letterSpacing:LetterSpacingMode, setLetterSpacing:(s:LetterSpacingMode)=>void,
+  lineHeightMode:LineHeightMode, setLineHeightMode:(m:LineHeightMode)=>void,
+  hideImages:boolean, toggleHideImages:()=>void,
+  underlineLinks:boolean, toggleUnderlineLinks:()=>void,
+  resetA11y:()=>void,
+  speech:boolean, toggleSpeech:()=>void, speak:(t:string)=>void, stopSpeak:()=>void,
+  rate:number, setRate:(n:number)=>void, volume:number, setVolume:(n:number)=>void,
+  voiceLang:string, setLang:(l:string)=>void, autoRead:boolean, toggleAutoRead:()=>void
+}>({
+  poor:false, toggle:()=>{}, fontScale:100, setFont:()=>{},
+  contrastScheme:'wb', setContrastScheme:()=>{},
+  letterSpacing:'normal', setLetterSpacing:()=>{},
+  lineHeightMode:'normal', setLineHeightMode:()=>{},
+  hideImages:false, toggleHideImages:()=>{},
+  underlineLinks:true, toggleUnderlineLinks:()=>{},
+  resetA11y:()=>{},
+  speech:false, toggleSpeech:()=>{}, speak:()=>{}, stopSpeak:()=>{},
+  rate:1, setRate:()=>{}, volume:1, setVolume:()=>{},
+  voiceLang:'ru', setLang:()=>{}, autoRead:false, toggleAutoRead:()=>{}
+})
+
 export function AccessibilityProvider({children}:{children:React.ReactNode}){
   const [poor,setPoor]=useState(()=> localStorage.getItem('poor-mode')==='1')
   const [fontScale,setFontScale]=useState(()=> parseInt(localStorage.getItem('font-scale')||'100'))
+  const [contrastScheme,setContrastSchemeState]=useState<ContrastScheme>(()=> {
+    const v = localStorage.getItem('a11y-scheme') as ContrastScheme | null
+    return v && ['wb','bw','yb','blue'].includes(v) ? v : 'wb'
+  })
+  const [letterSpacing,setLetterSpacingState]=useState<LetterSpacingMode>(()=> {
+    const v = localStorage.getItem('a11y-spacing') as LetterSpacingMode | null
+    return v && ['normal','wide','xwide'].includes(v) ? v : 'normal'
+  })
+  const [lineHeightMode,setLineHeightModeState]=useState<LineHeightMode>(()=> {
+    return localStorage.getItem('a11y-lh')==='large' ? 'large' : 'normal'
+  })
+  const [hideImages,setHideImages]=useState(()=> localStorage.getItem('a11y-noimg')==='1')
+  const [underlineLinks,setUnderlineLinks]=useState(()=> localStorage.getItem('a11y-links')!=='0')
   const [speech,setSpeech]=useState(()=> localStorage.getItem('speech-mode')==='1')
   const [rate,setRateState]=useState(()=> {
     const v=parseFloat(localStorage.getItem('speech-rate')||'1')
@@ -73,11 +113,27 @@ export function AccessibilityProvider({children}:{children:React.ReactNode}){
     })
   }
   useEffect(()=>{
-    document.documentElement.classList.toggle('poor-vision', poor)
+    const root = document.documentElement
+    root.classList.toggle('poor-vision', poor)
     localStorage.setItem('poor-mode', poor?'1':'0')
-    document.documentElement.style.fontSize = poor ? `${fontScale}%` : ''
-    if(poor) document.documentElement.style.setProperty('--poor-contrast','1')
-  },[poor, fontScale])
+    root.style.fontSize = poor ? `${fontScale}%` : ''
+    if(poor){
+      root.style.setProperty('--poor-contrast','1')
+      root.setAttribute('data-a11y-scheme', contrastScheme)
+      root.setAttribute('data-a11y-spacing', letterSpacing)
+      root.setAttribute('data-a11y-lh', lineHeightMode)
+      if(hideImages) root.setAttribute('data-a11y-noimg','1')
+      else root.removeAttribute('data-a11y-noimg')
+      if(underlineLinks) root.setAttribute('data-a11y-links','1')
+      else root.removeAttribute('data-a11y-links')
+    } else {
+      root.removeAttribute('data-a11y-scheme')
+      root.removeAttribute('data-a11y-spacing')
+      root.removeAttribute('data-a11y-lh')
+      root.removeAttribute('data-a11y-noimg')
+      root.removeAttribute('data-a11y-links')
+    }
+  },[poor, fontScale, contrastScheme, letterSpacing, lineHeightMode, hideImages, underlineLinks])
   useEffect(()=>{ localStorage.setItem('speech-mode', speech?'1':'0'); if(!speech) try{ window.speechSynthesis?.cancel() }catch{} },[speech])
   const toggle=()=>{
     // при первом включении шрифт 100% — глазом не видно, что режим заработал.
@@ -91,7 +147,58 @@ export function AccessibilityProvider({children}:{children:React.ReactNode}){
     const v=Math.max(100, Math.min(200, n))
     setFontScale(v)
     localStorage.setItem('font-scale', String(v))
+    if(!poor) setPoor(true)
     document.documentElement.style.fontSize=`${v}%`
+  }
+  const setContrastScheme=(s:ContrastScheme)=>{
+    setContrastSchemeState(s)
+    try{ localStorage.setItem('a11y-scheme', s) }catch{}
+    if(!poor) setPoor(true)
+  }
+  const setLetterSpacing=(s:LetterSpacingMode)=>{
+    setLetterSpacingState(s)
+    try{ localStorage.setItem('a11y-spacing', s) }catch{}
+    if(!poor) setPoor(true)
+  }
+  const setLineHeightMode=(m:LineHeightMode)=>{
+    setLineHeightModeState(m)
+    try{ localStorage.setItem('a11y-lh', m) }catch{}
+    if(!poor) setPoor(true)
+  }
+  const toggleHideImages=()=>{
+    setHideImages(v=>{
+      const next=!v
+      try{ localStorage.setItem('a11y-noimg', next?'1':'0') }catch{}
+      return next
+    })
+    if(!poor) setPoor(true)
+  }
+  const toggleUnderlineLinks=()=>{
+    setUnderlineLinks(v=>{
+      const next=!v
+      try{ localStorage.setItem('a11y-links', next?'1':'0') }catch{}
+      return next
+    })
+    if(!poor) setPoor(true)
+  }
+  const resetA11y=()=>{
+    setPoor(false)
+    setFontScale(100)
+    setContrastSchemeState('wb')
+    setLetterSpacingState('normal')
+    setLineHeightModeState('normal')
+    setHideImages(false)
+    setUnderlineLinks(true)
+    try{
+      localStorage.setItem('poor-mode','0')
+      localStorage.setItem('font-scale','100')
+      localStorage.setItem('a11y-scheme','wb')
+      localStorage.setItem('a11y-spacing','normal')
+      localStorage.setItem('a11y-lh','normal')
+      localStorage.setItem('a11y-noimg','0')
+      localStorage.setItem('a11y-links','1')
+      window.speechSynthesis?.cancel()
+    }catch{}
   }
   const toggleSpeech=()=>{
     const next=!speech
@@ -266,6 +373,16 @@ export function AccessibilityProvider({children}:{children:React.ReactNode}){
     document.addEventListener('visibilitychange',onVis)
     return ()=>{ window.removeEventListener('keydown',onKey); document.removeEventListener('visibilitychange',onVis); clearInterval(keepAlive) }
   },[])
-  return <AccCtx.Provider value={{poor,toggle,fontScale,setFont,speech,toggleSpeech,speak,stopSpeak,rate,setRate,volume,setVolume,voiceLang,setLang,autoRead,toggleAutoRead}}>{children}</AccCtx.Provider>
+  return <AccCtx.Provider value={{
+    poor, toggle, fontScale, setFont,
+    contrastScheme, setContrastScheme,
+    letterSpacing, setLetterSpacing,
+    lineHeightMode, setLineHeightMode,
+    hideImages, toggleHideImages,
+    underlineLinks, toggleUnderlineLinks,
+    resetA11y,
+    speech, toggleSpeech, speak, stopSpeak,
+    rate, setRate, volume, setVolume, voiceLang, setLang, autoRead, toggleAutoRead
+  }}>{children}</AccCtx.Provider>
 }
 export const useAccessibility=()=> useContext(AccCtx)

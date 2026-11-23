@@ -11,7 +11,12 @@ import re
 from django.http import HttpResponse, FileResponse, Http404
 
 _MEDIA_MIME = {'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif',
-               '.webp':'image/webp','.svg':'image/svg+xml','.pdf':'application/pdf'}
+               '.webp':'image/webp','.svg':'image/svg+xml','.pdf':'application/pdf',
+               '.txt':'text/plain; charset=utf-8','.md':'text/plain; charset=utf-8','.csv':'text/csv; charset=utf-8',
+               '.doc':'application/msword',
+               '.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+               '.ppt':'application/vnd.ms-powerpoint',
+               '.pptx':'application/vnd.openxmlformats-officedocument.presentationml.presentation'}
 
 def store_media_blob(rel_path, data):
     """Сохранить байты в MediaBlob (upsert). Не роняет вызывающий код."""
@@ -181,17 +186,21 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         title = self.request.data.get('title') or (file_obj.name if file_obj else 'Без названия')
         # санитизация title: убираем html, ограничиваем длину
         title = re.sub(r'<[^>]*>', '', title)[:200]
-        # Книги (pdf/word) добавляет только администратор — учителям и ученикам нельзя
-        if file_obj is not None:
-            import os as _os
-            ext = _os.path.splitext(file_obj.name)[1].lower()
-            u = self.request.user
-            is_admin = u.is_authenticated and (u.is_staff or getattr(u, 'role', None) == 'admin')
-            if ext in ('.pdf', '.doc', '.docx') and not is_admin:
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied('Книги добавляет только администратор')
+        # Учителя и администраторы могут загружать учебные материалы (PDF, Word, фото, презентации)
+        u = self.request.user
+        can_upload = u.is_authenticated and (u.is_staff or getattr(u, 'role', None) in ('teacher', 'admin'))
+        if not can_upload:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Загружать файлы может только учитель или администратор')
         mime = file_obj.content_type if file_obj else ''
-        instance = serializer.save(owner=self.request.user if self.request.user.is_authenticated else None, title=title, mime_type=mime)
+        is_pub_raw = str(self.request.data.get('is_public', 'true')).lower()
+        is_pub = is_pub_raw not in ('false', '0', 'no')
+        instance = serializer.save(
+            owner=self.request.user if self.request.user.is_authenticated else None,
+            title=title,
+            mime_type=mime,
+            is_public=is_pub,
+        )
         # Копия байтов в MediaBlob: на Render free диск эфемерный — файл должен пережить редеплой
         try:
             if instance.file:
@@ -204,6 +213,312 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         except Exception:
             pass
         return instance
+
+    def _read_file_bytes(self, instance):
+        if not instance.file or not instance.file.name:
+            return None
+        rel = instance.file.name.replace('\\', '/').lstrip('/')
+        disk_path = os.path.join(str(getattr(settings, 'MEDIA_ROOT', 'media')), rel.replace('/', os.sep))
+        if os.path.isfile(disk_path):
+            with open(disk_path, 'rb') as fh:
+                return fh.read()
+        blob = MediaBlob.objects.filter(key=rel).first()
+        if blob and blob.data:
+            try:
+                os.makedirs(os.path.dirname(disk_path), exist_ok=True)
+                with open(disk_path, 'wb') as fh:
+                    fh.write(bytes(blob.data))
+            except Exception:
+                pass
+            return bytes(blob.data)
+        return None
+
+    @action(detail=True, methods=['get'], permission_classes=[permissions.AllowAny])
+    def raw(self, request, pk=None):
+        """GET /api/files/<id>/raw/ — чтение/скачивание файла прямо в уроке (PDF, фото, документы)."""
+        from urllib.parse import quote
+        uf = UploadedFile.objects.filter(pk=pk).first()
+        if not uf:
+            raise Http404('Файл не найден')
+        u = request.user
+        is_admin = u.is_authenticated and (u.is_staff or getattr(u, 'role', None) == 'admin')
+        if not uf.is_public and not is_admin and (not u.is_authenticated or uf.owner_id != u.id):
+            # Если пользователь авторизован (например ученик открывает урок с этим файлом) — разрешаем чтение
+            if not u.is_authenticated:
+                raise Http404('Нет доступа')
+        data = self._read_file_bytes(uf)
+        if data is None:
+            raise Http404('Содержимое файла не найдено')
+        rel = (uf.file.name or '').replace('\\', '/')
+        ext = os.path.splitext(rel)[1].lower()
+        ctype = _MEDIA_MIME.get(ext, 'application/octet-stream')
+        fname = os.path.basename(rel) or f'file_{uf.id}{ext}'
+        download = request.query_params.get('download') in ('1', 'true', 'yes')
+        disp = 'attachment' if download else 'inline'
+        resp = HttpResponse(data, content_type=ctype)
+        resp['Content-Disposition'] = f"{disp}; filename*=UTF-8''{quote(fname)}"
+        resp['X-Content-Type-Options'] = 'nosniff'
+        resp['Cache-Control'] = 'private, max-age=3600'
+        return resp
+
+    @action(detail=True, methods=['get'], permission_classes=[permissions.AllowAny])
+    def preview_text(self, request, pk=None):
+        """GET /api/files/<id>/preview_text/ — извлекает красиво оформленный HTML и текст для .docx/.txt/.md/.csv прямо в уроке."""
+        import base64
+        import csv as _csv
+        import html as _html
+        import io as _io
+        import zipfile
+        import xml.etree.ElementTree as ET
+        uf = UploadedFile.objects.filter(pk=pk).first()
+        if not uf:
+            return Response({'error': 'Файл не найден'}, status=404)
+        u = request.user
+        is_admin = u.is_authenticated and (u.is_staff or getattr(u, 'role', None) == 'admin')
+        if not uf.is_public and not is_admin and not u.is_authenticated:
+            return Response({'error': 'Нет доступа'}, status=403)
+        data = self._read_file_bytes(uf)
+        if data is None:
+            return Response({'error': 'Файл недоступен на сервере'}, status=404)
+        rel = (uf.file.name or '').replace('\\', '/')
+        ext = os.path.splitext(rel)[1].lower()
+        fname = os.path.basename(rel) or uf.title
+        text_out = ''
+        html_out = ''
+
+        if ext in ('.txt', '.md', '.csv', '.py', '.json', '.xml', '.html', '.css', '.js'):
+            for enc in ('utf-8-sig', 'utf-8', 'cp1251', 'latin-1'):
+                try:
+                    text_out = data.decode(enc)
+                    break
+                except Exception:
+                    continue
+            if ext == '.csv' and text_out.strip():
+                try:
+                    rows = list(_csv.reader(_io.StringIO(text_out)))[:200]
+                    if rows:
+                        parts = ['<table class="docx-table">']
+                        for ri, row in enumerate(rows):
+                            tag = 'th' if ri == 0 else 'td'
+                            cells = ''.join(f'<{tag}>{_html.escape(c)}</{tag}>' for c in row)
+                            parts.append(f'<tr>{cells}</tr>')
+                        parts.append('</table>')
+                        html_out = ''.join(parts)
+                except Exception:
+                    html_out = ''
+        elif ext == '.docx':
+            try:
+                W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+                R = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
+                A = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
+                with zipfile.ZipFile(_io.BytesIO(data)) as zf:
+                    names = set(zf.namelist())
+                    # Карта rId -> base64 data URI для встроенных картинок документа
+                    img_map = {}
+                    rels_path = 'word/_rels/document.xml.rels'
+                    if rels_path in names:
+                        try:
+                            rels_root = ET.fromstring(zf.read(rels_path))
+                            for rel_el in rels_root:
+                                rid = rel_el.attrib.get('Id', '')
+                                target = rel_el.attrib.get('Target', '').lstrip('/')
+                                full_t = target if target.startswith('word/') else f'word/{target}'
+                                img_ext = os.path.splitext(full_t)[1].lower()
+                                if rid and full_t in names and img_ext in ('.png', '.jpg', '.jpeg', '.gif', '.webp'):
+                                    raw_img = zf.read(full_t)
+                                    if len(raw_img) <= 2 * 1024 * 1024:
+                                        mime_i = _MEDIA_MIME.get(img_ext, 'image/png')
+                                        b64 = base64.b64encode(raw_img).decode('ascii')
+                                        img_map[rid] = f'data:{mime_i};base64,{b64}'
+                        except Exception:
+                            pass
+
+                    def _is_on(el):
+                        if el is None:
+                            return False
+                        v = el.attrib.get(f'{W}val')
+                        return v is None or str(v).lower() not in ('0', 'false', 'none')
+
+                    def _render_para(p_el, in_cell=False):
+                        ppr = p_el.find(f'{W}pPr')
+                        style_id = ''
+                        align = ''
+                        is_list = False
+                        if ppr is not None:
+                            ps = ppr.find(f'{W}pStyle')
+                            if ps is not None:
+                                style_id = str(ps.attrib.get(f'{W}val', '')).lower()
+                            jc = ppr.find(f'{W}jc')
+                            if jc is not None:
+                                jv = str(jc.attrib.get(f'{W}val', '')).lower()
+                                if jv in ('center', 'right', 'left'):
+                                    align = jv
+                                elif jv == 'both':
+                                    align = 'justify'
+                            if ppr.find(f'{W}numPr') is not None:
+                                is_list = True
+
+                        inline_html = []
+                        plain_chunks = []
+                        for child in p_el:
+                            ctag = child.tag
+                            if ctag == f'{W}r':
+                                rpr = child.find(f'{W}rPr')
+                                bold = _is_on(rpr.find(f'{W}b')) if rpr is not None else False
+                                ital = _is_on(rpr.find(f'{W}i')) if rpr is not None else False
+                                under = _is_on(rpr.find(f'{W}u')) if rpr is not None else False
+                                strike = _is_on(rpr.find(f'{W}strike')) if rpr is not None else False
+                                color_hex = ''
+                                vert = ''
+                                if rpr is not None:
+                                    col_el = rpr.find(f'{W}color')
+                                    if col_el is not None:
+                                        cv = str(col_el.attrib.get(f'{W}val', ''))
+                                        if len(cv) == 6 and all(c in '0123456789abcdefABCDEF' for c in cv) and cv.lower() not in ('000000', 'ffffff'):
+                                            color_hex = f'#{cv}'
+                                    va_el = rpr.find(f'{W}vertAlign')
+                                    if va_el is not None:
+                                        vert = str(va_el.attrib.get(f'{W}val', '')).lower()
+
+                                # Картинки внутри run
+                                for blip in child.findall(f'.//{A}blip'):
+                                    rid = blip.attrib.get(f'{R}embed', '')
+                                    if rid in img_map:
+                                        inline_html.append(f'<img src="{img_map[rid]}" alt="" class="docx-img" />')
+
+                                buf = []
+                                for sub in child:
+                                    if sub.tag == f'{W}t' and sub.text:
+                                        buf.append(_html.escape(sub.text))
+                                        plain_chunks.append(sub.text)
+                                    elif sub.tag == f'{W}br':
+                                        buf.append('<br/>')
+                                        plain_chunks.append('\n')
+                                    elif sub.tag == f'{W}tab':
+                                        buf.append('&emsp;')
+                                        plain_chunks.append('  ')
+                                seg = ''.join(buf)
+                                if seg:
+                                    if vert == 'superscript':
+                                        seg = f'<sup>{seg}</sup>'
+                                    elif vert == 'subscript':
+                                        seg = f'<sub>{seg}</sub>'
+                                    if bold:
+                                        seg = f'<strong>{seg}</strong>'
+                                    if ital:
+                                        seg = f'<em>{seg}</em>'
+                                    if under:
+                                        seg = f'<u>{seg}</u>'
+                                    if strike:
+                                        seg = f'<s>{seg}</s>'
+                                    if color_hex:
+                                        seg = f'<span style="color:{color_hex}">{seg}</span>'
+                                    inline_html.append(seg)
+                            elif ctag == f'{W}hyperlink':
+                                h_txt = ''.join(t.text for t in child.findall(f'.//{W}t') if t.text)
+                                if h_txt:
+                                    plain_chunks.append(h_txt)
+                                    inline_html.append(f'<span class="docx-link">{_html.escape(h_txt)}</span>')
+
+                        inner = ''.join(inline_html).strip()
+                        plain = ''.join(plain_chunks).strip()
+                        if not inner:
+                            return '', ''
+                        st_attr = f' style="text-align:{align}"' if align else ''
+                        if not in_cell:
+                            if 'title' in style_id or style_id in ('heading1', '1'):
+                                return f'<h1{st_attr}>{inner}</h1>', plain
+                            if 'subtitle' in style_id or style_id in ('heading2', '2'):
+                                return f'<h2{st_attr}>{inner}</h2>', plain
+                            if style_id in ('heading3', 'heading4', '3', '4'):
+                                return f'<h3{st_attr}>{inner}</h3>', plain
+                            if is_list:
+                                return f'<li{st_attr}>{inner}</li>', f'• {plain}'
+                        return f'<p{st_attr}>{inner}</p>', plain
+
+                    if 'word/document.xml' in names:
+                        root = ET.fromstring(zf.read('word/document.xml'))
+                        body = root.find(f'{W}body')
+                        html_blocks = []
+                        plain_blocks = []
+                        in_ul = False
+                        if body is not None:
+                            for el in body:
+                                if el.tag == f'{W}p':
+                                    h_p, pl_p = _render_para(el, in_cell=False)
+                                    if not h_p:
+                                        continue
+                                    if h_p.startswith('<li'):
+                                        if not in_ul:
+                                            html_blocks.append('<ul>')
+                                            in_ul = True
+                                        html_blocks.append(h_p)
+                                    else:
+                                        if in_ul:
+                                            html_blocks.append('</ul>')
+                                            in_ul = False
+                                        html_blocks.append(h_p)
+                                    if pl_p:
+                                        plain_blocks.append(pl_p)
+                                elif el.tag == f'{W}tbl':
+                                    if in_ul:
+                                        html_blocks.append('</ul>')
+                                        in_ul = False
+                                    tbl_rows = []
+                                    for r_idx, tr in enumerate(el.findall(f'{W}tr')):
+                                        cells_html = []
+                                        row_plain = []
+                                        for tc in tr.findall(f'{W}tc'):
+                                            tc_pr = tc.find(f'{W}tcPr')
+                                            colspan = 1
+                                            bg_hex = ''
+                                            if tc_pr is not None:
+                                                gs = tc_pr.find(f'{W}gridSpan')
+                                                if gs is not None:
+                                                    try:
+                                                        colspan = max(1, int(gs.attrib.get(f'{W}val', '1')))
+                                                    except Exception:
+                                                        colspan = 1
+                                                shd = tc_pr.find(f'{W}shd')
+                                                if shd is not None:
+                                                    fv = str(shd.attrib.get(f'{W}fill', ''))
+                                                    if len(fv) == 6 and all(c in '0123456789abcdefABCDEF' for c in fv) and fv.lower() != 'auto':
+                                                        bg_hex = f'#{fv}'
+                                            c_parts = []
+                                            c_plain = []
+                                            for cp in tc.findall(f'{W}p'):
+                                                ch, cpl = _render_para(cp, in_cell=True)
+                                                if ch:
+                                                    c_parts.append(ch)
+                                                if cpl:
+                                                    c_plain.append(cpl)
+                                            tag = 'th' if r_idx == 0 else 'td'
+                                            cs_attr = f' colspan="{colspan}"' if colspan > 1 else ''
+                                            bg_attr = f' style="background:{bg_hex}"' if bg_hex else ''
+                                            cells_html.append(f'<{tag}{cs_attr}{bg_attr}>{"".join(c_parts) or "&nbsp;"}</{tag}>')
+                                            row_plain.append(' '.join(c_plain))
+                                        if cells_html:
+                                            tbl_rows.append(f'<tr>{"".join(cells_html)}</tr>')
+                                            plain_blocks.append(' | '.join(row_plain))
+                                    if tbl_rows:
+                                        html_blocks.append(f'<div class="docx-table-wrap"><table class="docx-table">{"".join(tbl_rows)}</table></div>')
+                            if in_ul:
+                                html_blocks.append('</ul>')
+                        html_out = ''.join(html_blocks)
+                        text_out = '\n\n'.join(plain_blocks)
+            except Exception:
+                text_out = ''
+                html_out = ''
+
+        return Response({
+            'id': uf.id,
+            'title': uf.title,
+            'filename': fname,
+            'ext': ext,
+            'text': text_out[:60000],
+            'html': html_out[:250000],
+            'has_text': bool(text_out.strip() or html_out.strip()),
+        })
 
     def perform_destroy(self, instance):
         is_admin = self.request.user.is_staff or getattr(self.request.user, 'role', None) == 'admin'

@@ -5,13 +5,14 @@ import { READY_TOPICS } from '../data/readyTopics'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
 import { sfx, startBgMusic, stopBgMusic } from '../utils/sfx'
+import LiveAvatar from '../components/LiveAvatar'
 import {
   Zap, Users, Play, Trophy, Mountain, Shield, Copy, Check, ExternalLink,
   Bot, ArrowRight, RotateCcw, Flame, AlertTriangle, Sparkles, Plus, Trash2,
-  Edit3, Save, Wand2, FileText, Volume2, VolumeX, CheckCircle2
+  Edit3, Save, Wand2, FileText, Volume2, VolumeX, CheckCircle2, Coins
 } from 'lucide-react'
 
-type QuizMode = 'classic' | 'race' | 'boss'
+type QuizMode = 'gold' | 'classic' | 'race' | 'boss'
 
 export type CustomQ = {
   text: string
@@ -134,7 +135,7 @@ export default function LiveQuizHost() {
   const [builtinId, setBuiltinId] = useState('erudition')
   const [dbTests, setDbTests] = useState<any[]>([])
   const [selTestId, setSelTestId] = useState(preTestId)
-  const [mode, setMode] = useState<QuizMode>('classic')
+  const [mode, setMode] = useState<QuizMode>('gold')
   const [tpq, setTpq] = useState(20)
   const [doubleLast, setDoubleLast] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -175,8 +176,15 @@ export default function LiveQuizHost() {
   const [podiumData, setPodiumData] = useState<any>(null)
   const [boss, setBoss] = useState<any>({ name: 'Дракон Пробелов', hp: 1000, max_hp: 1000, shield: 100 })
   const [copied, setCopied] = useState(false)
+  const [reactions, setReactions] = useState<Array<{ id: number; emoji: string; name: string; avatar: string; left: number }>>([])
+  const [goldEvents, setGoldEvents] = useState<Array<{ id: number; text: string; emoji: string; tone?: string; player_name: string; player_avatar: string }>>([])
+  const [liveLeaderboard, setLiveLeaderboard] = useState<any[]>([])
+  const [introBanner, setIntroBanner] = useState<null | { num: number; total: number; isDouble: boolean }>(null)
+  const [podiumStep, setPodiumStep] = useState(3)
 
   const wsRef = useRef<WebSocket | null>(null)
+  const reactionIdRef = useRef(0)
+  const goldEventIdRef = useRef(0)
 
   const loadDbTests = () => {
     client.get('/tests/?page_size=50').then(r => {
@@ -503,29 +511,65 @@ export default function LiveQuizHost() {
         } else if (m.type === 'players_update') {
           setPlayers(m.players || [])
           sfx('lq.join')
+        } else if (m.type === 'reaction') {
+          const rid = ++reactionIdRef.current
+          const left = 10 + Math.floor(Math.random() * 75)
+          setReactions(prev => [...prev.slice(-18), { id: rid, emoji: m.emoji || '🔥', name: m.name || '', avatar: m.avatar || '', left }])
+          sfx('ui.click', 0.3)
+          window.setTimeout(() => {
+            setReactions(prev => prev.filter(r => r.id !== rid))
+          }, 3100)
+        } else if (m.type === 'gold_event') {
+          const gid = ++goldEventIdRef.current
+          setGoldEvents(prev => [
+            {
+              id: gid,
+              text: m.text || '',
+              emoji: m.emoji || '🪙',
+              tone: m.tone || 'good',
+              player_name: m.player_name || '',
+              player_avatar: m.player_avatar || '',
+            },
+            ...prev.slice(0, 5),
+          ])
+          if (Array.isArray(m.leaderboard)) {
+            setLiveLeaderboard(m.leaderboard)
+            setRevealData((prev: any) => (prev ? { ...prev, leaderboard: m.leaderboard } : prev))
+          }
+          if (m.tone === 'steal' || m.tone === 'swap' || m.tone === 'legend') sfx('ui.notify', 0.6)
         } else if (m.type === 'question') {
           setCurQ(m)
           setRemSec(m.time_limit || tpq)
           setAnsweredCnt({ answered: 0, total: m.total_players || 0 })
           setRevealData(null)
+          setGoldEvents([])
           if (m.boss) setBoss(m.boss)
+          setIntroBanner({ num: (m.q_index ?? 0) + 1, total: m.total || 1, isDouble: !!m.is_double })
+          window.setTimeout(() => setIntroBanner(null), 1150)
           setPhase('question')
           sfx('ws.go')
         } else if (m.type === 'answer_count') {
           setAnsweredCnt({ answered: m.answered || 0, total: m.total_players || 0 })
           sfx('ui.click', 0.5)
         } else if (m.type === 'reveal') {
+          setIntroBanner(null)
           setRevealData(m)
+          if (Array.isArray(m.leaderboard)) setLiveLeaderboard(m.leaderboard)
           if (m.boss) setBoss(m.boss)
           setPhase('reveal')
           sfx('lq.reveal')
         } else if (m.type === 'podium') {
           stopBgMusic()
           setMusicOn(false)
+          setIntroBanner(null)
           setPodiumData(m)
           if (m.boss) setBoss(m.boss)
+          setPodiumStep(0)
           setPhase('podium')
           sfx('lq.podium')
+          window.setTimeout(() => setPodiumStep(1), 250)
+          window.setTimeout(() => setPodiumStep(2), 950)
+          window.setTimeout(() => { setPodiumStep(3); sfx('ui.win') }, 1750)
         } else if (m.type === 'error') {
           toast(m.message || 'Ошибка комнаты', 'error')
         }
@@ -551,16 +595,68 @@ export default function LiveQuizHost() {
     setMusicOn(false)
     try { wsRef.current?.close() } catch {}
     wsRef.current = null
-    setRoomInfo(null); setPlayers([]); setCurQ(null); setRevealData(null); setPodiumData(null)
+    setRoomInfo(null); setPlayers([]); setCurQ(null); setRevealData(null); setPodiumData(null); setGoldEvents([]); setLiveLeaderboard([])
     setPhase('setup')
   }
 
   const bossPct = boss?.max_hp ? Math.max(0, Math.round((boss.hp / boss.max_hp) * 100)) : 100
   const maxRaceScore = Math.max(1000, (roomInfo?.questions_count || 5) * 1000)
+  const qTimePct = curQ?.time_limit ? Math.max(0, Math.min(100, (remSec / curQ.time_limit) * 100)) : 100
 
   return (
-    <div className="min-h-[calc(100vh-64px)] w-full bg-gradient-to-b from-indigo-950 via-violet-950 to-slate-950 px-3 py-5 sm:px-6 text-white" data-testid="live-host-page">
-      <div className="max-w-5xl mx-auto space-y-5">
+    <div className="relative min-h-[calc(100vh-64px)] w-full bg-gradient-to-b from-indigo-950 via-violet-950 to-slate-950 px-3 py-5 sm:px-6 text-white overflow-hidden" data-testid="live-host-page">
+      <style>{`
+        @keyframes lqFloatUp {
+          0% { transform: translateY(20px) scale(0.7); opacity: 0; }
+          15% { opacity: 1; transform: translateY(-20px) scale(1.08); }
+          85% { opacity: 1; }
+          100% { transform: translateY(-420px) scale(0.95); opacity: 0; }
+        }
+        @keyframes lqPopIn {
+          0% { transform: scale(0.65) translateY(18px); opacity: 0; }
+          70% { transform: scale(1.06) translateY(-4px); opacity: 1; }
+          100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        .lq-float-reaction { animation: lqFloatUp 3s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+        .lq-pop-in { animation: lqPopIn 0.48s cubic-bezier(0.22, 1, 0.36, 1) both; }
+      `}</style>
+
+      {/* Живые всплывающие реакции учеников на проекторе */}
+      {reactions.length > 0 && (
+        <div className="fixed inset-x-0 bottom-4 top-20 pointer-events-none z-40 overflow-hidden" aria-hidden="true">
+          {reactions.map(r => (
+            <div
+              key={r.id}
+              className="lq-float-reaction absolute bottom-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/85 border border-white/20 shadow-2xl backdrop-blur-md"
+              style={{ left: `${r.left}%` }}
+            >
+              <LiveAvatar code={r.avatar} size="xs" />
+              <span className="text-xs font-extrabold text-indigo-100 max-w-[90px] truncate">{r.name}</span>
+              <span className="text-2xl leading-none">{r.emoji}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Краткая заставка нового вопроса в стиле шоу Kahoot */}
+      {introBanner && phase === 'question' && (
+        <div
+          onClick={() => setIntroBanner(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-indigo-950/85 backdrop-blur-md cursor-pointer"
+        >
+          <div className="lq-pop-in text-center space-y-3 px-6">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/15 border border-white/25 text-amber-300 font-black text-sm uppercase tracking-widest">
+              {introBanner.isDouble ? '⚡ ФИНАЛЬНЫЙ РАУНД · ×2 ОЧКОВ!' : '🎯 ПРИГОТОВЬТЕСЬ!'}
+            </div>
+            <div className="text-5xl sm:text-7xl font-display font-black drop-shadow-2xl">
+              ВОПРОС {introBanner.num} <span className="text-indigo-300 text-3xl sm:text-5xl">/ {introBanner.total}</span>
+            </div>
+            <div className="text-sm text-indigo-200 font-semibold">Смотрите на экран и нажимайте ответ на телефоне!</div>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-5xl mx-auto space-y-5 relative z-10">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Link to="/games" className="text-sm font-bold text-indigo-300 hover:text-white">{t('hm_to_games')}</Link>
           <div className="flex items-center gap-2">
@@ -583,7 +679,7 @@ export default function LiveQuizHost() {
           <div className="max-w-4xl mx-auto space-y-5">
             <div className="text-center space-y-1">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-300 text-xs font-extrabold">
-                <Sparkles size={13} /> СОЗДАВАЙ СВОИ ИГРЫ И ЗАПУСКАЙ НА ВЕСЬ КЛАСС · АНАЛОГ KAHOOT
+                <Sparkles size={13} /> СОЗДАВАЙ СВОИ ИГРЫ И ЗАПУСКАЙ НА ВЕСЬ КЛАСС · АНАЛОГ BLOOKET И KAHOOT
               </div>
               <h1 className="text-3xl sm:text-4xl font-display font-black">⚡ {t('games_livequiz')}</h1>
               <p className="text-sm text-indigo-200/80">Преподаватель может сам собрать свою игру в конструкторе, сгенерировать с ИИ или выбрать готовый тест!</p>
@@ -593,17 +689,23 @@ export default function LiveQuizHost() {
               {/* 1. Выбор режима отображения на проекторе */}
               <div className="space-y-2">
                 <div className="text-xs font-bold uppercase tracking-wider text-indigo-300">1. Режим шоу на проекторе</div>
-                <div className="grid sm:grid-cols-3 gap-2.5">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                   {([
+                    ['gold', '💰 Золотая лихорадка', 'В стиле Blooket: за верный ответ открой 1 из 3 сундуков (×2, Кража 25%, Обмен!)', Coins],
                     ['classic', '🏆 Классика Kahoot', 'Гистограмма, лидерборд Топ-5 и пьедестал 1–2–3', Trophy],
-                    ['race', '🏔️ Гонка на Ала-Тоо', 'Персонажи класса мчатся к вершине Пика Победы!', Mountain],
+                    ['race', '🏔️ Гонка на Ала-Тоо', 'Блуки класса мчатся к вершине Пика Победы!', Mountain],
                     ['boss', '🏰 Босс-рейд', 'Весь класс объединяется против Дракона Пробелов!', Shield],
                   ] as [QuizMode, string, string, any][]).map(([k, title, sub]) => (
                     <button key={k} type="button" onClick={() => { setMode(k); sfx('ui.click') }}
                       data-testid={`lq-mode-${k}`}
-                      className={`p-3.5 rounded-2xl border-2 text-left transition ${
+                      className={`p-3.5 rounded-2xl border-2 text-left transition relative ${
                         mode === k ? 'bg-indigo-600 border-amber-400 shadow-lg' : 'bg-white/5 border-white/10 hover:bg-white/10'
                       }`}>
+                      {k === 'gold' && (
+                        <span className="inline-block mb-1 px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black uppercase">
+                          Хит Blooket
+                        </span>
+                      )}
                       <div className="font-extrabold text-sm">{title}</div>
                       <div className="text-xs text-white/75 mt-0.5">{sub}</div>
                     </button>
@@ -912,7 +1014,7 @@ export default function LiveQuizHost() {
             <div className="grid md:grid-cols-3 gap-4 items-center bg-slate-900/90 border-2 border-indigo-400/40 rounded-3xl p-5 sm:p-6 shadow-2xl">
               <div className="md:col-span-2 space-y-3">
                 <div className="text-xs font-bold uppercase tracking-wider text-amber-300">
-                  {roomInfo.title} · {roomInfo.questions_count} вопросов · {mode === 'classic' ? '🏆 Классика' : mode === 'race' ? '🏔️ Гонка на Ала-Тоо' : '🏰 Босс-рейд'}
+                  {roomInfo.title} · {roomInfo.questions_count} вопросов · {mode === 'gold' ? '💰 Золотая лихорадка (Blooket)' : mode === 'classic' ? '🏆 Классика' : mode === 'race' ? '🏔️ Гонка на Ала-Тоо' : '🏰 Босс-рейд'}
                 </div>
                 <div className="text-sm text-indigo-200">
                   Ученики открывают на телефоне <span className="font-mono font-bold text-white bg-white/10 px-2 py-0.5 rounded">{window.location.origin}/live</span> и вводят PIN:
@@ -963,20 +1065,28 @@ export default function LiveQuizHost() {
               </div>
 
               {players.length > 0 ? (
-                <div className="flex flex-wrap gap-2.5">
+                <div className="flex flex-wrap gap-3">
                   {players.map((p: any) => (
-                    <div key={p.id} className="group px-3.5 py-2 rounded-2xl bg-indigo-600/40 border border-indigo-400/40 font-bold text-sm flex items-center gap-2">
-                      <span className="text-xl">{p.avatar}</span>
-                      <span>{p.name}</span>
-                      {p.is_bot && <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/15">БОТ</span>}
+                    <div key={p.id} className="lq-pop-in group pl-2 pr-3.5 py-2 rounded-2xl bg-indigo-600/35 hover:bg-indigo-600/50 border border-indigo-400/40 font-bold text-sm flex items-center gap-2.5 shadow-lg transition">
+                      <LiveAvatar code={p.avatar} size="md" />
+                      <div className="min-w-0">
+                        <div className="font-extrabold leading-tight truncate max-w-[130px]">{p.name}</div>
+                        {p.is_bot ? (
+                          <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-white/15 text-indigo-200 mt-0.5">БОТ</span>
+                        ) : (
+                          <span className="text-[10px] text-emerald-300 font-semibold">Готов ✓</span>
+                        )}
+                      </div>
                       <button type="button" onClick={() => sendWs({ type: 'kick', player_id: p.id })}
-                        className="opacity-50 group-hover:opacity-100 text-xs text-rose-300 hover:text-rose-200 ml-1">✕</button>
+                        title="Удалить игрока из комнаты"
+                        className="opacity-50 group-hover:opacity-100 text-xs text-rose-300 hover:text-rose-200 ml-1 px-1">✕</button>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="py-10 text-center text-indigo-200/70 text-sm">
-                  Ждём подключения учеников… Сканируйте QR-код, введите PIN на <code className="font-mono">/live</code> или нажмите «+ Добавить 3 демо-бота»!
+                <div className="py-10 text-center text-indigo-200/70 text-sm space-y-1.5">
+                  <div>Ждём подключения учеников… Сканируйте QR-код, введите PIN на <code className="font-mono">/live</code> или нажмите «+ Добавить 3 демо-бота»!</div>
+                  <div className="text-xs text-amber-300/85">✨ Ученики выбирают одного из 18 милых Блуков в стиле Blooket и кидают реакции 🔥👏🚀 на экран!</div>
                 </div>
               )}
             </div>
@@ -986,24 +1096,38 @@ export default function LiveQuizHost() {
         {/* ═══════════════ 3. АКТИВНЫЙ ВОПРОС (ПРОЕКТОР) ═══════════════ */}
         {phase === 'question' && curQ && (
           <div className="space-y-4" data-testid="lq-question">
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 border border-white/10 rounded-2xl px-4 py-3">
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-xl bg-indigo-600 font-black text-sm">Вопрос {curQ.q_index + 1} / {curQ.total}</span>
-                {curQ.is_double && <span className="px-3 py-1 rounded-xl bg-amber-400 text-slate-950 font-black text-xs animate-pulse">⚡ ×2 ОЧКОВ!</span>}
+            <div className="bg-slate-900/85 border border-white/10 rounded-2xl overflow-hidden shadow-xl">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-3 py-1 rounded-xl bg-indigo-600 font-black text-sm">Вопрос {curQ.q_index + 1} / {curQ.total}</span>
+                  {curQ.is_double && <span className="px-3 py-1 rounded-xl bg-amber-400 text-slate-950 font-black text-xs animate-pulse">⚡ ×2 ОЧКОВ!</span>}
+                  <span className="hidden md:inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/5 border border-white/10 text-[11px] text-indigo-200 font-semibold">
+                    Бустеры учеников: ✂️ 50/50 · 🔥 ×2 · 🛡️ Щит
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="px-3 py-1.5 rounded-xl bg-white/10 font-bold text-sm">
+                    Ответили: <b className="text-amber-300">{answeredCnt.answered}</b> / {answeredCnt.total}
+                  </span>
+                  <span className={`w-14 h-14 rounded-2xl flex items-center justify-center font-mono font-black text-2xl border-2 transition ${
+                    remSec <= 5 ? 'bg-rose-600 border-rose-300 animate-pulse scale-105' : 'bg-indigo-600 border-indigo-300'
+                  }`}>
+                    {remSec}
+                  </span>
+                  <button type="button" onClick={() => sendWs({ type: 'reveal' })}
+                    className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold">
+                    Показать ответ →
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="px-3 py-1.5 rounded-xl bg-white/10 font-bold text-sm">
-                  Ответили: <b className="text-amber-300">{answeredCnt.answered}</b> / {answeredCnt.total}
-                </span>
-                <span className={`w-14 h-14 rounded-2xl flex items-center justify-center font-mono font-black text-2xl border-2 ${
-                  remSec <= 5 ? 'bg-rose-600 border-rose-300 animate-pulse' : 'bg-indigo-600 border-indigo-300'
-                }`}>
-                  {remSec}
-                </span>
-                <button type="button" onClick={() => sendWs({ type: 'reveal' })}
-                  className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold">
-                  Показать ответ →
-                </button>
+              {/* Плавная шкала таймера */}
+              <div className="h-2 bg-slate-950 w-full">
+                <div
+                  className={`h-full transition-all duration-1000 ease-linear ${
+                    remSec <= 5 ? 'bg-gradient-to-r from-rose-500 to-amber-400' : 'bg-gradient-to-r from-indigo-500 via-sky-400 to-emerald-400'
+                  }`}
+                  style={{ width: `${qTimePct}%` }}
+                />
               </div>
             </div>
 
@@ -1022,6 +1146,33 @@ export default function LiveQuizHost() {
                 <div className="px-3 py-1.5 rounded-xl bg-sky-500/20 border border-sky-400/40 text-xs font-bold text-sky-200">
                   🛡️ Щит класса: {boss.shield}%
                 </div>
+              </div>
+            )}
+
+            {mode === 'gold' && (goldEvents.length > 0 || liveLeaderboard.length > 0) && (
+              <div className="bg-amber-950/55 border border-amber-400/40 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3" data-testid="lq-gold-ticker">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span className="px-2.5 py-1 rounded-xl bg-amber-400 text-slate-950 text-[11px] font-black shrink-0">💰 СУНДУКИ LIVE</span>
+                  {goldEvents[0] ? (
+                    <div className="flex items-center gap-2 min-w-0 lq-pop-in" key={goldEvents[0].id}>
+                      <LiveAvatar code={goldEvents[0].player_avatar} size="xs" />
+                      <span className="text-sm font-extrabold text-amber-100 truncate">{goldEvents[0].text}</span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-amber-200/80">Кто первым откроет сундук с сокровищами? 🧰</span>
+                  )}
+                </div>
+                {liveLeaderboard.length > 0 && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {liveLeaderboard.slice(0, 3).map((lp: any) => (
+                      <span key={lp.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/35 border border-white/10 text-xs font-extrabold">
+                        <span className="text-amber-300">#{lp.rank}</span>
+                        <span className="max-w-[70px] truncate">{lp.name}</span>
+                        <span className="font-mono text-amber-300">{lp.score}🪙</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1067,7 +1218,7 @@ export default function LiveQuizHost() {
                   const hPct = Math.max(14, Math.round((cnt / maxC) * 100))
                   const isRight = (revealData.correct || []).includes(idx)
                   return (
-                    <div key={idx} className={`rounded-2xl p-3 border-2 transition ${isRight ? 'border-emerald-400 bg-emerald-500/15' : 'border-white/10 bg-white/5 opacity-65'}`}>
+                    <div key={idx} className={`rounded-2xl p-3 border-2 transition ${isRight ? 'border-emerald-400 bg-emerald-500/15 shadow-lg' : 'border-white/10 bg-white/5 opacity-65'}`}>
                       <div className="h-24 flex items-end justify-center mb-2">
                         <div className={`w-14 rounded-t-xl ${st.bg} flex items-start justify-center pt-1.5 font-black text-lg transition-all duration-500`} style={{ height: `${hPct}%` }}>
                           {cnt}
@@ -1095,18 +1246,25 @@ export default function LiveQuizHost() {
                   <span>🏔️ Гонка к Пику Победы (Ала-Тоо)</span>
                   <span className="text-amber-300">🏁 Финиш</span>
                 </div>
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {(revealData.leaderboard || []).slice(0, 8).map((p: any) => {
-                    const pos = Math.min(96, Math.max(4, Math.round((p.score / maxRaceScore) * 96)))
+                    const pos = Math.min(94, Math.max(5, Math.round((p.score / maxRaceScore) * 94)))
                     return (
                       <div key={p.id} className="space-y-1">
-                        <div className="flex justify-between text-xs font-bold">
-                          <span>#{p.rank} {p.avatar} {p.name} {p.streak >= 2 ? `🔥×${p.streak}` : ''}</span>
-                          <span className="text-amber-300">{p.score} м</span>
+                        <div className="flex items-center justify-between text-xs font-bold">
+                          <span className="flex items-center gap-1.5">
+                            <span className="text-amber-300 font-black">#{p.rank}</span>
+                            <span>{p.name}</span>
+                            {p.streak >= 2 && <span className="text-amber-300">🔥×{p.streak}</span>}
+                            {p.last_points > 0 && <span className="text-emerald-300">+{p.last_points}</span>}
+                          </span>
+                          <span className="text-amber-300 font-mono">{p.score} м</span>
                         </div>
-                        <div className="relative h-7 rounded-full bg-slate-900/80 border border-white/10 overflow-hidden">
-                          <div className="h-full bg-gradient-to-r from-indigo-600 via-sky-500 to-emerald-400 transition-all duration-700" style={{ width: `${pos}%` }} />
-                          <span className="absolute top-1/2 -translate-y-1/2 text-lg transition-all duration-700" style={{ left: `calc(${pos}% - 14px)` }}>{p.avatar}</span>
+                        <div className="relative h-10 rounded-full bg-slate-900/85 border border-white/10 overflow-visible px-1 flex items-center">
+                          <div className="h-6 rounded-full bg-gradient-to-r from-indigo-600 via-sky-500 to-emerald-400 transition-all duration-700" style={{ width: `${pos}%` }} />
+                          <div className="absolute top-1/2 -translate-y-1/2 transition-all duration-700 z-10" style={{ left: `calc(${pos}% - 18px)` }}>
+                            <LiveAvatar code={p.avatar} size="sm" streak={p.streak} />
+                          </div>
                         </div>
                       </div>
                     )
@@ -1136,19 +1294,45 @@ export default function LiveQuizHost() {
               </div>
             )}
 
+            {mode === 'gold' && goldEvents.length > 0 && (
+              <div className="bg-gradient-to-r from-amber-950/75 via-slate-900/85 to-amber-950/75 border border-amber-400/40 rounded-3xl p-4 space-y-2">
+                <div className="text-xs font-black uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                  <Coins size={14} /> События сундуков в этом раунде
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {goldEvents.slice(0, 4).map(ev => (
+                    <div key={ev.id} className="lq-pop-in flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/35 border border-amber-300/25 text-xs font-bold text-amber-100">
+                      <LiveAvatar code={ev.player_avatar} size="xs" />
+                      <span>{ev.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {mode !== 'race' && (
               <div className="bg-slate-900/80 border border-white/10 rounded-3xl p-5 space-y-2">
-                <div className="font-extrabold text-sm text-amber-300 mb-2">🏆 Топ игроков прямо сейчас</div>
+                <div className="font-extrabold text-sm text-amber-300 mb-2">
+                  {mode === 'gold' ? '💰 Лидеры по золоту прямо сейчас' : '🏆 Топ игроков прямо сейчас'}
+                </div>
                 {(revealData.leaderboard || []).slice(0, 6).map((p: any) => (
-                  <div key={p.id} className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 border border-white/10">
-                    <span className={`w-8 h-8 rounded-xl font-black text-sm flex items-center justify-center ${
-                      p.rank === 1 ? 'bg-amber-400 text-slate-950' : p.rank === 2 ? 'bg-slate-300 text-slate-900' : p.rank === 3 ? 'bg-orange-400 text-slate-950' : 'bg-white/10'
+                  <div key={p.id} className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition">
+                    <span className={`w-8 h-8 rounded-xl font-black text-sm flex items-center justify-center shrink-0 ${
+                      p.rank === 1 ? 'bg-amber-400 text-slate-950 shadow' : p.rank === 2 ? 'bg-slate-300 text-slate-900' : p.rank === 3 ? 'bg-orange-400 text-slate-950' : 'bg-white/10'
                     }`}>{p.rank}</span>
-                    <span className="text-2xl">{p.avatar}</span>
+                    <LiveAvatar code={p.avatar} size="sm" streak={p.streak} />
                     <span className="font-bold flex-1 truncate">{p.name}</span>
                     {p.streak >= 2 && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-bold flex items-center gap-0.5"><Flame size={11} /> ×{p.streak}</span>}
-                    {p.last_points > 0 && <span className="text-xs font-bold text-emerald-400">+{p.last_points}</span>}
-                    <span className="font-mono font-black text-lg text-amber-300 min-w-[70px] text-right">{p.score}</span>
+                    {p.last_points !== 0 && (
+                      <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${
+                        p.last_points > 0 ? 'text-emerald-400 bg-emerald-500/15' : 'text-rose-300 bg-rose-500/15'
+                      }`}>
+                        {p.last_points > 0 ? `+${p.last_points}` : p.last_points}{mode === 'gold' ? ' 🪙' : ''}
+                      </span>
+                    )}
+                    <span className="font-mono font-black text-lg text-amber-300 min-w-[82px] text-right">
+                      {p.score}{mode === 'gold' ? ' 🪙' : ''}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -1158,7 +1342,31 @@ export default function LiveQuizHost() {
 
         {/* ═══════════════ 5. ФИНАЛЬНЫЙ ПЬЕДЕСТАЛ + АНАЛИТИКА УЧИТЕЛЯ ═══════════════ */}
         {phase === 'podium' && podiumData && (
-          <div className="space-y-6" data-testid="lq-podium">
+          <div className="space-y-6 relative" data-testid="lq-podium">
+            {/* Конфетти-салют при открытии 1 места */}
+            {podiumStep >= 3 && (
+              <div className="pointer-events-none fixed inset-0 overflow-hidden z-30" aria-hidden="true">
+                {Array.from({ length: 48 }, (_, i) => {
+                  const colors = ['#facc15', '#fb7185', '#38bdf8', '#34d399', '#a78bfa', '#fb923c']
+                  return (
+                    <span
+                      key={i}
+                      className="confetti-piece"
+                      style={{
+                        left: `${(i * 89) % 100}%`,
+                        width: 7 + (i % 6),
+                        height: i % 3 === 0 ? 7 + (i % 6) : 5,
+                        background: colors[i % colors.length],
+                        borderRadius: i % 3 === 0 ? '50%' : '2px',
+                        animationDelay: `${((i * 23) % 18) / 10}s`,
+                        animationDuration: `${2.4 + ((i * 41) % 18) / 10}s`,
+                      }}
+                    />
+                  )
+                })}
+              </div>
+            )}
+
             <div className="text-center space-y-2">
               <div className="text-5xl fb-hop">{mode === 'boss' ? (podiumData.boss?.defeated ? '🎉🐉💥' : '🛡️🐉') : '🏆'}</div>
               <h2 className="text-3xl sm:text-4xl font-display font-black">
@@ -1169,18 +1377,34 @@ export default function LiveQuizHost() {
             </div>
 
             {(podiumData.leaderboard || []).length > 0 && (
-              <div className="grid grid-cols-3 gap-3 items-end max-w-2xl mx-auto pt-4">
+              <div className="grid grid-cols-3 gap-3 items-end max-w-2xl mx-auto pt-6">
                 {[1, 0, 2].map(idx => {
                   const p = podiumData.leaderboard[idx]
                   if (!p) return <div key={idx} />
-                  const hCls = idx === 0 ? 'h-40 bg-gradient-to-b from-amber-400 to-amber-600 text-slate-950' : idx === 1 ? 'h-32 bg-gradient-to-b from-slate-200 to-slate-400 text-slate-950' : 'h-24 bg-gradient-to-b from-orange-400 to-orange-600 text-slate-950'
+                  // Поочерёдное открытие: 3 место (step >= 1) → 2 место (step >= 2) → 1 место (step >= 3)
+                  const requiredStep = idx === 2 ? 1 : idx === 1 ? 2 : 3
+                  const visible = podiumStep >= requiredStep
+                  const hCls =
+                    idx === 0
+                      ? 'h-44 bg-gradient-to-b from-amber-300 via-amber-400 to-amber-600 text-slate-950 ring-2 ring-amber-200'
+                      : idx === 1
+                        ? 'h-32 bg-gradient-to-b from-slate-200 to-slate-400 text-slate-950'
+                        : 'h-24 bg-gradient-to-b from-orange-400 to-orange-600 text-slate-950'
                   return (
-                    <div key={p.id} className="text-center space-y-2">
-                      <div className="text-4xl">{idx === 0 ? '👑' : ''}{p.avatar}</div>
-                      <div className="font-extrabold text-sm sm:text-base truncate">{p.name}</div>
+                    <div
+                      key={p.id}
+                      className={`text-center space-y-2 transition-all duration-700 ${
+                        visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-10 scale-90'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        {idx === 0 && <span className="text-3xl animate-bounce">👑</span>}
+                        <LiveAvatar code={p.avatar} size={idx === 0 ? 'xl' : 'lg'} streak={p.streak} />
+                      </div>
+                      <div className="font-extrabold text-sm sm:text-base truncate px-1">{p.name}</div>
                       <div className={`rounded-t-2xl p-3 flex flex-col items-center justify-center shadow-2xl ${hCls}`}>
-                        <div className="text-2xl font-black">#{idx + 1}</div>
-                        <div className="font-mono font-extrabold text-sm">{p.score}</div>
+                        <div className="text-2xl sm:text-3xl font-black">#{idx + 1}</div>
+                        <div className="font-mono font-extrabold text-sm">{p.score}{mode === 'gold' ? ' 🪙' : ''}</div>
                       </div>
                     </div>
                   )
@@ -1191,10 +1415,11 @@ export default function LiveQuizHost() {
             {(podiumData.mvps || []).length > 0 && (
               <div className="grid sm:grid-cols-3 gap-3">
                 {podiumData.mvps.map((m: any, i: number) => (
-                  <div key={i} className="p-4 rounded-2xl bg-white/10 border border-white/15 text-center">
+                  <div key={i} className="p-4 rounded-2xl bg-white/10 border border-white/15 text-center flex flex-col items-center gap-1.5">
                     <div className="text-xs font-extrabold text-amber-300">{m.badge}</div>
-                    <div className="text-2xl mt-1">{m.avatar} {m.name}</div>
-                    <div className="text-xs text-indigo-200 mt-0.5">{m.val}</div>
+                    <LiveAvatar code={m.avatar} size="md" />
+                    <div className="font-extrabold text-base">{m.name}</div>
+                    <div className="text-xs text-indigo-200">{m.val}</div>
                   </div>
                 ))}
               </div>
