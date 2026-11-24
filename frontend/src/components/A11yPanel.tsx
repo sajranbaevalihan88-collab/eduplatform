@@ -5,14 +5,22 @@ import { useLang } from '../context/LangContext'
 
 type NavItem = { to: string; label: string }
 
-const SCHEMES: { id: ContrastScheme; label: string; bg: string; fg: string; border: string }[] = [
-  { id: 'wb',   label: 'Белый',   bg: '#ffffff', fg: '#000000', border: '#000000' },
-  { id: 'bw',   label: 'Чёрный',  bg: '#000000', fg: '#ffffff', border: '#ffffff' },
-  { id: 'yb',   label: 'Жёлтый',  bg: '#000000', fg: '#ffea00', border: '#ffea00' },
-  { id: 'blue', label: 'Голубой', bg: '#d8efff', fg: '#06264d', border: '#06264d' },
+const SCHEMES: {
+  id: ContrastScheme
+  label: string
+  bg: string
+  card: string
+  fg: string
+  accent: string
+  border: string
+}[] = [
+  { id: 'wb',   label: 'Белый',   bg: '#ffffff', card: '#f1f5f9', fg: '#0f172a', accent: '#1e40af', border: '#cbd5e1' },
+  { id: 'bw',   label: 'Чёрный',  bg: '#151b26', card: '#1e2736', fg: '#f8fafc', accent: '#93c5fd', border: '#334155' },
+  { id: 'yb',   label: 'Жёлтый',  bg: '#1e1c14', card: '#29261b', fg: '#fde047', accent: '#facc15', border: '#6b5e22' },
+  { id: 'blue', label: 'Голубой', bg: '#eaf3fe', card: '#dcecfd', fg: '#0b2545', accent: '#0f3b75', border: '#93c5fd' },
 ]
 
-/** Панель доступности (ГОСТ Р 52872): крупный шрифт, 4 контрастные схемы, интервалы, озвучка. */
+/** Панель доступности (ГОСТ Р 52872 / WCAG AAA): крупный шрифт, 4 мягкие контрастные темы, интервалы, озвучка. */
 export default function A11yPanel({ open, onClose }: { open: boolean; onClose: () => void; items?: NavItem[] }) {
   const {
     poor, toggle, fontScale, setFont,
@@ -67,7 +75,7 @@ export default function A11yPanel({ open, onClose }: { open: boolean; onClose: (
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/55 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-[2px] flex items-end sm:items-center justify-center p-0 sm:p-[16px] transition-opacity duration-200"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -75,19 +83,23 @@ export default function A11yPanel({ open, onClose }: { open: boolean; onClose: (
     >
       <div
         ref={boxRef}
+        data-a11y-panel="1"
         tabIndex={-1}
         onClick={e => e.stopPropagation()}
-        className="w-full sm:w-[500px] max-w-full bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl border border-slate-200 dark:border-slate-700 p-4 sm:p-5 space-y-4 max-h-[90dvh] overflow-y-auto outline-none shadow-2xl"
+        className="w-full max-w-[min(560px,calc(100vw-16px))] bg-white dark:bg-slate-900 rounded-t-[16px] sm:rounded-[16px] border border-slate-200/90 dark:border-slate-700/80 p-[14px] sm:p-[18px] flex flex-col gap-[10px] max-h-[92dvh] overflow-y-auto overflow-x-hidden outline-none shadow-2xl scrollbar-thin"
       >
         {/* Заголовок */}
-        <div className="flex items-center justify-between gap-2 pb-1 border-b border-slate-200 dark:border-slate-800">
-          <h2 id="a11y-title" className="font-bold text-base sm:text-lg text-slate-900 dark:text-white flex items-center gap-2">
-            {poor ? <EyeOff size={18} /> : <Eye size={18} />}
-            <span>Версия для слабовидящих</span>
+        <div className="flex items-center justify-between gap-[8px] pb-[8px] border-b border-slate-200/80 dark:border-slate-800">
+          <h2 id="a11y-title" className="font-display font-bold text-[16px] leading-snug text-slate-900 dark:text-white flex items-center gap-[10px] min-w-0">
+            <span className="w-[30px] h-[30px] rounded-[9px] bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+              {poor ? <EyeOff size={16} /> : <Eye size={16} />}
+            </span>
+            <span className="truncate">Версия для слабовидящих</span>
           </h2>
           <button
+            type="button"
             onClick={onClose}
-            className="min-w-[44px] min-h-[44px] p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-white flex items-center justify-center"
+            className="min-w-[36px] min-h-[36px] p-[6px] rounded-[10px] hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-200 flex items-center justify-center shrink-0 transition-colors"
             aria-label={t('a11y_close')}
           >
             <X size={18} />
@@ -95,33 +107,48 @@ export default function A11yPanel({ open, onClose }: { open: boolean; onClose: (
         </div>
 
         {/* Главный тумблер */}
-        <div className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
-          <div>
-            <div className="font-bold text-sm text-slate-900 dark:text-white">{t('a11y_poor')}</div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">Высокий контраст, крупный текст и отключение анимаций</div>
+        <div className="flex items-center justify-between gap-[12px] p-[11px] rounded-[12px] bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80">
+          <div className="min-w-0">
+            <div className="font-bold text-[13.5px] text-slate-900 dark:text-white leading-snug">{t('a11y_poor')}</div>
+            <div className="text-[11.5px] text-slate-500 dark:text-slate-400 mt-[2px] leading-snug">
+              Высокий контраст, крупный текст и комфортные цвета
+            </div>
           </div>
           <button
             type="button"
+            data-a11y-switch="1"
             onClick={toggle}
             aria-label={t('a11y_poor')}
             aria-pressed={poor}
-            className={`w-14 min-h-[40px] rounded-full transition shrink-0 relative ${poor ? 'bg-amber-400' : 'bg-slate-300 dark:bg-slate-600'}`}
+            className={`w-[52px] h-[30px] rounded-full transition-colors duration-200 shrink-0 relative border ${
+              poor
+                ? 'bg-indigo-600 border-indigo-600'
+                : 'bg-slate-200 dark:bg-slate-700 border-slate-300 dark:border-slate-600'
+            }`}
           >
-            <span className={`absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white shadow transition-all ${poor ? 'left-7' : 'left-1'}`} />
+            <span
+              data-a11y-knob="1"
+              className={`absolute top-1/2 -translate-y-1/2 w-[22px] h-[22px] rounded-full bg-white shadow-sm transition-all duration-200 ${
+                poor ? 'left-[26px]' : 'left-[3px]'
+              }`}
+            />
           </button>
         </div>
 
-        {/* Размер шрифта */}
-        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2.5">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-200">
-            <span className="flex items-center gap-1.5"><Type size={14} /> {t('font_label')}</span>
-            <span className="font-mono text-sm">{poor ? `${fontScale}%` : '100%'}</span>
+        {/* Размер шрифта — px-геометрия: кнопки никогда не переполняются даже при 200% масштабе сайта */}
+        <div className="p-[11px] rounded-[12px] bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 flex flex-col gap-[8px]">
+          <div className="flex items-center justify-between gap-[8px] text-[12.5px] font-bold text-slate-700 dark:text-slate-200">
+            <span className="flex items-center gap-[6px]"><Type size={14} className="shrink-0" /> {t('font_label')}</span>
+            <span className="font-mono text-[12.5px] px-[8px] py-[2px] rounded-[6px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+              {poor ? `${fontScale}%` : '100%'}
+            </span>
           </div>
-          <div className="grid grid-cols-6 gap-1.5">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-[7px]">
             <button
               type="button"
+              data-a11y-nowrap="1"
               onClick={() => setFont(fontScale - 15)}
-              className="min-h-[44px] rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 font-bold text-sm text-slate-900 dark:text-white"
+              className="min-h-[38px] px-[6px] py-[5px] rounded-[10px] bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-600 font-bold text-[13px] text-slate-800 dark:text-white flex items-center justify-center whitespace-nowrap transition-colors"
               aria-label="Уменьшить шрифт"
             >
               A−
@@ -130,12 +157,13 @@ export default function A11yPanel({ open, onClose }: { open: boolean; onClose: (
               <button
                 key={v}
                 type="button"
+                data-a11y-nowrap="1"
                 onClick={() => setFont(v)}
                 aria-pressed={poor && fontScale === v}
-                className={`min-h-[44px] rounded-xl font-bold text-xs sm:text-sm border ${
+                className={`min-h-[38px] px-[6px] py-[5px] rounded-[10px] font-bold text-[13px] border flex items-center justify-center whitespace-nowrap transition-colors ${
                   poor && fontScale === v
-                    ? 'bg-slate-900 dark:bg-amber-400 text-white dark:text-slate-950 border-slate-900 dark:border-amber-500'
-                    : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-white border-slate-300 dark:border-slate-600'
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                    : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-white border-slate-200 dark:border-slate-600'
                 }`}
               >
                 {v}%
@@ -143,8 +171,9 @@ export default function A11yPanel({ open, onClose }: { open: boolean; onClose: (
             ))}
             <button
               type="button"
+              data-a11y-nowrap="1"
               onClick={() => setFont(fontScale + 15)}
-              className="min-h-[44px] rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 font-bold text-sm text-slate-900 dark:text-white"
+              className="min-h-[38px] px-[6px] py-[5px] rounded-[10px] bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-600 font-bold text-[13px] text-slate-800 dark:text-white flex items-center justify-center whitespace-nowrap transition-colors"
               aria-label="Увеличить шрифт"
             >
               A+
@@ -152,10 +181,10 @@ export default function A11yPanel({ open, onClose }: { open: boolean; onClose: (
           </div>
         </div>
 
-        {/* 4 цветовые схемы по ГОСТ */}
-        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2.5">
-          <div className="text-xs font-bold text-slate-700 dark:text-slate-200">Цветовая схема (контраст)</div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {/* 4 цветовые схемы (мягкий контраст, в стиле основного сайта) */}
+        <div className="p-[11px] rounded-[12px] bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 flex flex-col gap-[8px]">
+          <div className="text-[12.5px] font-bold text-slate-700 dark:text-slate-200">Цветовая схема (контраст)</div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-[8px]">
             {SCHEMES.map(sc => {
               const active = poor && contrastScheme === sc.id
               return (
@@ -165,13 +194,16 @@ export default function A11yPanel({ open, onClose }: { open: boolean; onClose: (
                   data-a11y-swatch={sc.id}
                   onClick={() => setContrastScheme(sc.id)}
                   aria-pressed={active}
-                  style={{ backgroundColor: sc.bg, color: sc.fg, borderColor: sc.border }}
-                  className={`min-h-[52px] px-2 py-2 rounded-xl border-2 font-bold flex flex-col items-center justify-center gap-0.5 transition ${
-                    active ? 'ring-2 ring-offset-2 ring-blue-500' : ''
+                  style={{ backgroundColor: sc.bg, color: sc.fg, borderColor: active ? sc.accent : sc.border }}
+                  className={`min-h-[52px] px-[8px] py-[6px] rounded-[11px] border-2 font-bold flex flex-col items-center justify-center gap-[3px] transition-all duration-200 ${
+                    active ? 'ring-2 ring-offset-2 ring-indigo-500 shadow-md' : 'hover:opacity-95 shadow-sm'
                   }`}
                 >
-                  <span className="text-base leading-none font-black">Аа</span>
-                  <span className="text-[11px]">{sc.label}</span>
+                  <span className="text-[16px] leading-none font-extrabold" style={{ color: sc.fg }}>Аа</span>
+                  <span className="text-[11px] font-semibold flex items-center gap-[5px] whitespace-nowrap" style={{ color: sc.fg }}>
+                    <span className="w-[7px] h-[7px] rounded-full inline-block shrink-0" style={{ backgroundColor: sc.accent }} />
+                    {sc.label}
+                  </span>
                 </button>
               )
             })}
@@ -179,10 +211,10 @@ export default function A11yPanel({ open, onClose }: { open: boolean; onClose: (
         </div>
 
         {/* Интервалы, картинки и ссылки */}
-        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-3">
+        <div className="p-[11px] rounded-[12px] bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 flex flex-col gap-[8px]">
           <div>
-            <div className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">Межбуквенный интервал</div>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="text-[12.5px] font-bold text-slate-700 dark:text-slate-200 mb-[6px]">Межбуквенный интервал</div>
+            <div className="grid grid-cols-3 gap-[7px]">
               {([
                 { id: 'normal', label: 'Обычный' },
                 { id: 'wide', label: 'Средний' },
@@ -193,10 +225,10 @@ export default function A11yPanel({ open, onClose }: { open: boolean; onClose: (
                   type="button"
                   onClick={() => setLetterSpacing(opt.id)}
                   aria-pressed={poor && letterSpacing === opt.id}
-                  className={`min-h-[42px] rounded-xl text-xs font-bold border ${
+                  className={`min-h-[36px] px-[8px] py-[5px] rounded-[10px] text-[12px] font-bold border flex items-center justify-center text-center transition-colors ${
                     poor && letterSpacing === opt.id
-                      ? 'bg-slate-900 dark:bg-amber-400 text-white dark:text-slate-950 border-slate-900'
-                      : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-white border-slate-300 dark:border-slate-600'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-white border-slate-200 dark:border-slate-600'
                   }`}
                 >
                   {opt.label}
@@ -205,15 +237,15 @@ export default function A11yPanel({ open, onClose }: { open: boolean; onClose: (
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-[7px]">
             <button
               type="button"
               onClick={() => setLineHeightMode(lineHeightMode === 'large' ? 'normal' : 'large')}
               aria-pressed={poor && lineHeightMode === 'large'}
-              className={`min-h-[44px] px-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 ${
+              className={`min-h-[38px] px-[10px] py-[5px] rounded-[10px] text-[12px] font-bold border flex items-center justify-center gap-[6px] transition-colors ${
                 poor && lineHeightMode === 'large'
-                  ? 'bg-slate-900 dark:bg-amber-400 text-white dark:text-slate-950 border-slate-900'
-                  : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-white border-slate-300 dark:border-slate-600'
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                  : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-white border-slate-200 dark:border-slate-600'
               }`}
             >
               Строки 2×
@@ -222,62 +254,63 @@ export default function A11yPanel({ open, onClose }: { open: boolean; onClose: (
               type="button"
               onClick={toggleUnderlineLinks}
               aria-pressed={poor && underlineLinks}
-              className={`min-h-[44px] px-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 ${
+              className={`min-h-[38px] px-[10px] py-[5px] rounded-[10px] text-[12px] font-bold border flex items-center justify-center gap-[6px] transition-colors ${
                 poor && underlineLinks
-                  ? 'bg-slate-900 dark:bg-amber-400 text-white dark:text-slate-950 border-slate-900'
-                  : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-white border-slate-300 dark:border-slate-600'
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                  : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-white border-slate-200 dark:border-slate-600'
               }`}
             >
-              <Underline size={14} /> Ссылки
+              <Underline size={14} className="shrink-0" /> Ссылки
             </button>
             <button
               type="button"
               onClick={toggleHideImages}
               aria-pressed={poor && hideImages}
-              className={`min-h-[44px] px-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 ${
+              className={`min-h-[38px] px-[10px] py-[5px] rounded-[10px] text-[12px] font-bold border flex items-center justify-center gap-[6px] transition-colors ${
                 poor && hideImages
-                  ? 'bg-slate-900 dark:bg-amber-400 text-white dark:text-slate-950 border-slate-900'
-                  : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-white border-slate-300 dark:border-slate-600'
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                  : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-white border-slate-200 dark:border-slate-600'
               }`}
             >
-              <ImageOff size={14} /> Без фото
+              <ImageOff size={14} className="shrink-0" /> Без фото
             </button>
           </div>
         </div>
 
         {/* Озвучивание страницы */}
-        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2.5">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-200">
-            <span className="flex items-center gap-1.5"><Volume2 size={14} /> Озвучивание текста</span>
-            <span className="font-mono text-[11px]">Скорость {rate}×</span>
+        <div className="p-[11px] rounded-[12px] bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 flex flex-col gap-[8px]">
+          <div className="flex items-center justify-between gap-[8px] text-[12.5px] font-bold text-slate-700 dark:text-slate-200">
+            <span className="flex items-center gap-[6px]"><Volume2 size={14} className="shrink-0" /> Озвучивание текста</span>
+            <span className="font-mono text-[12px] text-slate-500 dark:text-slate-400">Скорость {rate}×</span>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-[7px]">
             <button
               type="button"
               onClick={readCurrentPage}
-              className="flex-1 min-h-[44px] px-3 rounded-xl bg-slate-900 dark:bg-indigo-600 text-white font-bold text-xs flex items-center justify-center gap-1.5"
+              className="flex-1 min-w-[160px] min-h-[38px] px-[14px] rounded-[10px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[12.5px] flex items-center justify-center gap-[6px] transition-colors"
             >
-              <Volume2 size={14} /> Прочитать страницу
+              <Volume2 size={14} className="shrink-0" /> Прочитать страницу
             </button>
             <button
               type="button"
               onClick={stopSpeak}
-              className="min-h-[44px] px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white font-bold text-xs flex items-center gap-1"
+              className="min-h-[38px] px-[14px] rounded-[10px] bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-white font-bold text-[12.5px] flex items-center justify-center gap-[6px] transition-colors"
             >
-              <Square size={12} /> Стоп
+              <Square size={12} className="shrink-0" /> Стоп
             </button>
           </div>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-3 gap-[7px]">
             {([0.8, 1, 1.25] as const).map(sp => (
               <button
                 key={sp}
                 type="button"
+                data-a11y-nowrap="1"
                 onClick={() => setRate(sp)}
                 aria-pressed={Math.abs(rate - sp) < 0.05}
-                className={`min-h-[38px] rounded-lg text-xs font-bold border ${
+                className={`min-h-[34px] px-[8px] rounded-[9px] text-[12px] font-bold border flex items-center justify-center whitespace-nowrap transition-colors ${
                   Math.abs(rate - sp) < 0.05
-                    ? 'bg-slate-900 dark:bg-amber-400 text-white dark:text-slate-950 border-slate-900'
-                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600'
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                    : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-600'
                 }`}
               >
                 {sp}×
@@ -287,18 +320,18 @@ export default function A11yPanel({ open, onClose }: { open: boolean; onClose: (
         </div>
 
         {/* Сброс к обычной версии */}
-        <div className="flex items-center justify-between gap-2 pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-[8px] pt-[2px]">
           <button
             type="button"
             onClick={() => { resetA11y(); onClose() }}
-            className="min-h-[44px] px-4 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold flex items-center gap-1.5"
+            className="min-h-[38px] px-[14px] rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-[12.5px] font-bold flex items-center justify-center gap-[6px] transition-colors"
           >
-            <RotateCcw size={14} /> Обычная версия сайта
+            <RotateCcw size={14} className="shrink-0" /> Обычная версия сайта
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] px-5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold"
+            className="min-h-[38px] px-[20px] rounded-[10px] bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-bold transition-colors"
           >
             Готово
           </button>

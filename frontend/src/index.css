@@ -315,128 +315,321 @@ img, video, svg, canvas, iframe { max-width: 100%; }
 }
 
 /* ==================== РЕЖИМ ДЛЯ СЛАБОВИДЯЩИХ (ГОСТ Р 52872 / WCAG AAA) ==================== */
+/* Плавные переходы цветов и поверхностей при переключении обычной, тёмной и контрастных тем */
+body,
+header,
+aside,
+nav,
+main,
+[role="dialog"] > div,
+[class*="bg-white"],
+[class*="bg-slate-"],
+button,
+a,
+input,
+select,
+textarea {
+  transition-property: background-color, color, border-color, box-shadow;
+  transition-duration: 260ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 :root { --a11y-focus: #2563eb; }
 :focus-visible { outline: 3px solid var(--a11y-focus) !important; outline-offset: 3px; border-radius: 8px; }
 
+/* 1. Белый (Светлый контраст — максимально близок к оригиналу сайта, но с повышенной чёткостью) */
 html.poor-vision {
   --poor-contrast: 1;
-  --pv-bg: #ffffff;
+  --pv-bg: #eef2f7;
   --pv-surface: #ffffff;
-  --pv-fg: #000000;
-  --pv-border: #000000;
-  --pv-link: #0000cc;
-  --pv-btn-bg: #000000;
-  --pv-btn-fg: #ffffff;
-  --a11y-focus: #000000;
+  --pv-surface-alt: #f1f5f9;
+  --pv-surface-hover: #e2e8f0;
+  --pv-fg: #0f172a;
+  --pv-muted: #334155;
+  --pv-border: rgba(15, 23, 42, 0.14);
+  --pv-border-strong: rgba(15, 23, 42, 0.32);
+  --pv-accent: #1e40af;
+  --pv-accent-hover: #1e3a8a;
+  --pv-accent-fg: #ffffff;
+  --pv-accent-soft: #dbeafe;
+  --pv-link: #1e40af;
+  --pv-shadow: 0 2px 10px -2px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.05);
+  --pv-shadow-lg: 0 22px 48px -12px rgba(15, 23, 42, 0.22);
+  --pv-banner: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 55%, #2563eb 100%);
+  --pv-banner-fg: #ffffff;
+  --a11y-focus: #1e40af;
   color-scheme: light;
 }
+
+/* 2. Чёрный (Глубокий графит — спокойный тёмный контраст в стиле оригинального сайта) */
 html.poor-vision[data-a11y-scheme="bw"] {
-  --pv-bg: #000000;
-  --pv-surface: #0b0b0b;
-  --pv-fg: #ffffff;
-  --pv-border: #ffffff;
+  --pv-bg: #0c1017;
+  --pv-surface: #151b26;
+  --pv-surface-alt: #1e2736;
+  --pv-surface-hover: #283448;
+  --pv-fg: #f8fafc;
+  --pv-muted: #cbd5e1;
+  --pv-border: rgba(248, 250, 252, 0.14);
+  --pv-border-strong: rgba(248, 250, 252, 0.30);
+  --pv-accent: #f1f5f9;
+  --pv-accent-hover: #ffffff;
+  --pv-accent-fg: #0c1017;
+  --pv-accent-soft: rgba(148, 163, 184, 0.18);
   --pv-link: #93c5fd;
-  --pv-btn-bg: #ffffff;
-  --pv-btn-fg: #000000;
-  --a11y-focus: #ffffff;
+  --pv-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.45);
+  --pv-shadow-lg: 0 24px 52px -12px rgba(0, 0, 0, 0.72);
+  --pv-banner: linear-gradient(135deg, #1a2333 0%, #243248 55%, #161e2d 100%);
+  --pv-banner-fg: #f8fafc;
+  --a11y-focus: #93c5fd;
   color-scheme: dark;
 }
+
+/* 3. Жёлтый (Тёплый янтарно-графитовый контраст — без режущего глаза неона) */
 html.poor-vision[data-a11y-scheme="yb"] {
-  --pv-bg: #000000;
-  --pv-surface: #0c0c00;
-  --pv-fg: #ffea00;
-  --pv-border: #ffea00;
-  --pv-link: #fff566;
-  --pv-btn-bg: #ffea00;
-  --pv-btn-fg: #000000;
-  --a11y-focus: #ffea00;
+  --pv-bg: #14130e;
+  --pv-surface: #1e1c14;
+  --pv-surface-alt: #28251a;
+  --pv-surface-hover: #353122;
+  --pv-fg: #fde047;
+  --pv-muted: #e5d58c;
+  --pv-border: rgba(253, 224, 71, 0.20);
+  --pv-border-strong: rgba(253, 224, 71, 0.42);
+  --pv-accent: #facc15;
+  --pv-accent-hover: #fde047;
+  --pv-accent-fg: #14130e;
+  --pv-accent-soft: rgba(250, 204, 21, 0.16);
+  --pv-link: #fef08a;
+  --pv-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.50);
+  --pv-shadow-lg: 0 24px 52px -12px rgba(0, 0, 0, 0.76);
+  --pv-banner: linear-gradient(135deg, #2b2715 0%, #3d371b 55%, #232012 100%);
+  --pv-banner-fg: #fef08a;
+  --a11y-focus: #fde047;
   color-scheme: dark;
 }
+
+/* 4. Голубой (Мягкий небесно-синий — спокойный контраст для длительного чтения) */
 html.poor-vision[data-a11y-scheme="blue"] {
-  --pv-bg: #d8efff;
-  --pv-surface: #e6f5ff;
-  --pv-fg: #06264d;
-  --pv-border: #06264d;
-  --pv-link: #003380;
-  --pv-btn-bg: #06264d;
-  --pv-btn-fg: #ffffff;
-  --a11y-focus: #06264d;
+  --pv-bg: #dcecfd;
+  --pv-surface: #f4f9ff;
+  --pv-surface-alt: #e6f2fe;
+  --pv-surface-hover: #d1e6fc;
+  --pv-fg: #0b2545;
+  --pv-muted: #244a78;
+  --pv-border: rgba(11, 37, 69, 0.16);
+  --pv-border-strong: rgba(11, 37, 69, 0.34);
+  --pv-accent: #0f3b75;
+  --pv-accent-hover: #0b2545;
+  --pv-accent-fg: #ffffff;
+  --pv-accent-soft: #cde4fc;
+  --pv-link: #0b3d91;
+  --pv-shadow: 0 2px 12px -2px rgba(11, 37, 69, 0.10), 0 1px 3px rgba(11, 37, 69, 0.06);
+  --pv-shadow-lg: 0 22px 48px -12px rgba(11, 37, 69, 0.24);
+  --pv-banner: linear-gradient(135deg, #0f3b75 0%, #1d5ca8 55%, #16498a 100%);
+  --pv-banner-fg: #ffffff;
+  --a11y-focus: #0f3b75;
   color-scheme: light;
 }
 
 .poor-vision body {
-  background: var(--pv-bg) !important;
+  background-color: var(--pv-bg) !important;
   color: var(--pv-fg) !important;
-  line-height: 1.65;
-  letter-spacing: 0.02em;
+  line-height: 1.6;
+  letter-spacing: 0.015em;
 }
-.poor-vision[data-a11y-spacing="wide"] body { letter-spacing: 0.08em !important; word-spacing: 0.14em !important; }
-.poor-vision[data-a11y-spacing="xwide"] body { letter-spacing: 0.14em !important; word-spacing: 0.22em !important; }
+.poor-vision[data-a11y-spacing="wide"] body { letter-spacing: 0.07em !important; word-spacing: 0.12em !important; }
+.poor-vision[data-a11y-spacing="xwide"] body { letter-spacing: 0.12em !important; word-spacing: 0.2em !important; }
 .poor-vision[data-a11y-lh="large"] body,
 .poor-vision[data-a11y-lh="large"] p,
 .poor-vision[data-a11y-lh="large"] li,
-.poor-vision[data-a11y-lh="large"] div { line-height: 2 !important; }
+.poor-vision[data-a11y-lh="large"] main div { line-height: 1.95 !important; }
 
-/* Контрастные поверхности, текст и границы для всех 4 схем (кроме превью-свотчей в панели) */
-.poor-vision body *:not([data-a11y-swatch]):not([data-a11y-swatch] *):not(.monaco-editor):not(.monaco-editor *) {
-  border-color: var(--pv-border) !important;
-  box-shadow: none !important;
-  text-shadow: none !important;
-}
+/* Слоёная иерархия поверхностей (фон страницы → карточки → вложенные секции), как на основном сайте */
 .poor-vision header,
 .poor-vision aside,
-.poor-vision nav,
-.poor-vision main,
 .poor-vision [role="dialog"] > div,
-.poor-vision [class*="bg-white"],
-.poor-vision [class*="bg-slate-"],
-.poor-vision [class*="bg-indigo-"],
-.poor-vision [class*="bg-blue-"],
-.poor-vision [class*="bg-amber-"],
-.poor-vision [class*="bg-emerald-"],
-.poor-vision [class*="bg-orange-"],
-.poor-vision [class*="bg-rose-"],
-.poor-vision [class*="bg-violet-"],
-.poor-vision [class*="dark:bg-"] {
+.poor-vision [class~="bg-white"]:not([data-a11y-knob]):not([data-a11y-swatch]),
+.poor-vision [class*="bg-white/9"]:not([data-a11y-knob]):not([data-a11y-swatch]),
+.dark.poor-vision [class~="dark:bg-slate-900"]:not([data-a11y-swatch]),
+.dark.poor-vision [class*="dark:bg-slate-900/"]:not([data-a11y-swatch]) {
   background-color: var(--pv-surface) !important;
-  background-image: none !important;
+  color: var(--pv-fg) !important;
+  border-color: var(--pv-border) !important;
+}
+
+.poor-vision header,
+.poor-vision aside {
+  box-shadow: var(--pv-shadow) !important;
+}
+
+.poor-vision [role="dialog"] > div {
+  box-shadow: var(--pv-shadow-lg) !important;
+  border-color: var(--pv-border-strong) !important;
+}
+
+.poor-vision [class~="bg-slate-50"]:not([data-a11y-swatch]):not(.min-h-screen),
+.poor-vision [class*="bg-slate-50/"]:not([data-a11y-swatch]):not(.min-h-screen),
+.poor-vision [class~="bg-slate-100"]:not([data-a11y-swatch]),
+.poor-vision [class~="bg-slate-200"]:not([data-a11y-swatch]),
+.dark.poor-vision [class~="dark:bg-slate-800"]:not([data-a11y-swatch]),
+.dark.poor-vision [class*="dark:bg-slate-800/"]:not([data-a11y-swatch]) {
+  background-color: var(--pv-surface-alt) !important;
+  color: var(--pv-fg) !important;
+  border-color: var(--pv-border) !important;
+}
+
+.poor-vision .min-h-screen,
+.poor-vision main {
+  background-color: var(--pv-bg) !important;
   color: var(--pv-fg) !important;
 }
-.poor-vision [class*="text-slate-"],
-.poor-vision [class*="text-white"],
+
+.poor-vision [class~="bg-indigo-50"],
+.poor-vision [class~="bg-blue-50"],
+.poor-vision [class~="bg-amber-50"],
+.poor-vision [class~="bg-emerald-50"],
+.poor-vision [class~="bg-rose-50"],
+.poor-vision [class~="bg-violet-50"] {
+  background-color: var(--pv-accent-soft) !important;
+  color: var(--pv-fg) !important;
+  border-color: var(--pv-border) !important;
+}
+
+/* Спокойные деликатные границы вместо резкой сетки */
+.poor-vision body *:not([data-a11y-swatch]):not([data-a11y-swatch] *):not([data-a11y-switch]):not([data-a11y-knob]):not(.monaco-editor):not(.monaco-editor *) {
+  border-color: var(--pv-border) !important;
+  text-shadow: none !important;
+}
+.poor-vision [class*="ring-white"],
+.poor-vision [class*="dark:ring-slate-900"] {
+  --tw-ring-color: var(--pv-surface) !important;
+}
+
+/* Текстовая иерархия: основной и вторичный текст оба проходят WCAG AAA */
+.poor-vision [class~="text-slate-900"],
+.poor-vision [class~="text-slate-800"],
+.poor-vision [class~="text-slate-700"],
+.poor-vision [class~="text-slate-600"],
+.dark.poor-vision [class~="dark:text-white"],
+.dark.poor-vision [class~="dark:text-slate-100"],
+.dark.poor-vision [class~="dark:text-slate-200"],
+.dark.poor-vision [class~="dark:text-slate-300"],
 .poor-vision [class*="text-indigo-"],
 .poor-vision [class*="text-blue-"],
 .poor-vision [class*="text-emerald-"],
-.poor-vision [class*="text-rose-"],
 .poor-vision [class*="text-amber-"],
-.poor-vision [class*="dark:text-"] {
+.poor-vision [class*="text-rose-"] {
   color: var(--pv-fg) !important;
 }
+.poor-vision [class~="text-slate-500"],
+.poor-vision [class~="text-slate-400"],
+.dark.poor-vision [class~="dark:text-slate-400"] {
+  color: var(--pv-muted) !important;
+}
+
+/* Гармоничные баннеры и hero-блоки */
+.poor-vision [data-a11y-banner="1"],
+.poor-vision [class*="bg-gradient-to-"] {
+  background: var(--pv-banner) !important;
+  color: var(--pv-banner-fg) !important;
+}
+.poor-vision [data-a11y-banner="1"] *,
+.poor-vision [class*="bg-gradient-to-"] h1,
+.poor-vision [class*="bg-gradient-to-"] h2,
+.poor-vision [class*="bg-gradient-to-"] p,
+.poor-vision [class*="bg-gradient-to-"] span,
+.poor-vision [class*="bg-gradient-to-"] a:not([class~="bg-orange-500"]):not([class~="bg-indigo-600"]) {
+  color: var(--pv-banner-fg) !important;
+}
+.poor-vision [class*="bg-gradient-to-"] [class*="bg-white/"] {
+  background-color: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(255, 255, 255, 0.34) !important;
+}
+.poor-vision[data-a11y-scheme="yb"] [class*="bg-gradient-to-"] [class*="bg-white/"] {
+  background-color: rgba(250, 204, 21, 0.14) !important;
+  border-color: rgba(250, 204, 21, 0.42) !important;
+}
+
+/* Акцентные первичные кнопки, активные вкладки и навигация (сохраняют облик оригинала) */
+.poor-vision button[aria-pressed="true"]:not([data-a11y-swatch]):not([data-a11y-switch]),
+.poor-vision a[aria-current="page"],
+.poor-vision a[class~="bg-indigo-600"],
+.poor-vision button[class~="bg-indigo-600"],
+.poor-vision a[class~="bg-blue-600"],
+.poor-vision button[class~="bg-blue-600"],
+.poor-vision a[class~="bg-orange-500"],
+.poor-vision button[class~="bg-orange-500"],
+.poor-vision button[class~="bg-amber-400"],
+.poor-vision button[class~="bg-slate-900"] {
+  background-color: var(--pv-accent) !important;
+  color: var(--pv-accent-fg) !important;
+  border-color: var(--pv-accent) !important;
+}
+.poor-vision button[aria-pressed="true"]:not([data-a11y-swatch]):not([data-a11y-switch]) *,
+.poor-vision a[aria-current="page"] *,
+.poor-vision a[class~="bg-indigo-600"] *,
+.poor-vision button[class~="bg-indigo-600"] *,
+.poor-vision a[class~="bg-blue-600"] *,
+.poor-vision button[class~="bg-blue-600"] *,
+.poor-vision a[class~="bg-orange-500"] *,
+.poor-vision button[class~="bg-orange-500"] *,
+.poor-vision button[class~="bg-amber-400"] *,
+.poor-vision button[class~="bg-slate-900"] * {
+  color: var(--pv-accent-fg) !important;
+}
+.poor-vision a[aria-current="page"] span {
+  background-color: rgba(128, 128, 128, 0.22) !important;
+}
+
+/* Тумблер включения режима доступности */
+.poor-vision button[data-a11y-switch="1"] {
+  background-color: var(--pv-accent) !important;
+  border: 1.5px solid var(--pv-accent) !important;
+}
+.poor-vision button[data-a11y-switch="1"][aria-pressed="false"] {
+  background-color: var(--pv-surface-alt) !important;
+  border: 1.5px solid var(--pv-border-strong) !important;
+}
+.poor-vision span[data-a11y-knob="1"] {
+  background-color: var(--pv-accent-fg) !important;
+}
+.poor-vision button[data-a11y-switch="1"][aria-pressed="false"] span[data-a11y-knob="1"] {
+  background-color: var(--pv-fg) !important;
+}
+
+/* Поля ввода и вторичные кнопки */
 .poor-vision input,
 .poor-vision select,
 .poor-vision textarea {
-  background-color: var(--pv-bg) !important;
+  background-color: var(--pv-surface) !important;
   color: var(--pv-fg) !important;
-  border: 2px solid var(--pv-border) !important;
+  border: 1.5px solid var(--pv-border-strong) !important;
 }
-.poor-vision button:not([data-a11y-swatch]),
-.poor-vision [role="button"] {
-  border: 2px solid var(--pv-border) !important;
+.poor-vision button:not([data-a11y-swatch]):not([data-a11y-switch]):hover {
+  background-color: var(--pv-surface-hover) !important;
 }
-.poor-vision button[aria-pressed="true"]:not([data-a11y-swatch]),
-.poor-vision a[aria-current="page"] {
-  background-color: var(--pv-btn-bg) !important;
-  color: var(--pv-btn-fg) !important;
+.poor-vision button[aria-pressed="true"]:not([data-a11y-swatch]):not([data-a11y-switch]):hover,
+.poor-vision button[class~="bg-indigo-600"]:hover,
+.poor-vision button[class~="bg-blue-600"]:hover,
+.poor-vision button[class~="bg-slate-900"]:hover {
+  background-color: var(--pv-accent-hover) !important;
 }
-.poor-vision button[aria-pressed="true"]:not([data-a11y-swatch]) *,
-.poor-vision a[aria-current="page"] * {
-  color: var(--pv-btn-fg) !important;
-}
-.poor-vision[data-a11y-links="1"] a {
+
+/* Подчёркивание ссылок и скрытие фото */
+.poor-vision[data-a11y-links="1"] main a,
+.poor-vision[data-a11y-links="1"] footer a {
   text-decoration: underline !important;
   text-underline-offset: 4px !important;
-  text-decoration-thickness: 2px !important;
+  text-decoration-thickness: 1.5px !important;
   color: var(--pv-link) !important;
+}
+.poor-vision[data-a11y-links="1"] main a[class~="bg-indigo-600"],
+.poor-vision[data-a11y-links="1"] main a[class~="bg-orange-500"],
+.poor-vision[data-a11y-links="1"] main a[class~="bg-blue-600"] {
+  color: var(--pv-accent-fg) !important;
+  text-decoration: none !important;
+}
+.poor-vision[data-a11y-links="1"] [class*="bg-gradient-to-"] a:not([class~="bg-orange-500"]):not([class~="bg-indigo-600"]) {
+  color: var(--pv-banner-fg) !important;
 }
 .poor-vision[data-a11y-noimg="1"] img:not([alt="EduPlatform"]),
 .poor-vision[data-a11y-noimg="1"] video {
@@ -445,15 +638,93 @@ html.poor-vision[data-a11y-scheme="blue"] {
 }
 
 .poor-vision .card-hover, .poor-vision .btn-hover { transform: none !important; }
-.poor-vision :focus-visible { outline: 4px solid var(--a11y-focus) !important; outline-offset: 2px; border-radius: 6px; }
+.poor-vision :focus-visible { outline: 3px solid var(--a11y-focus) !important; outline-offset: 2px; border-radius: 8px; }
 .poor-vision .animate-enter, .poor-vision .animate-enterUp, .poor-vision .animate-enterScale,
 .poor-vision .stagger > *, .poor-vision .page-enter, .poor-vision .animate-floatSubtle { animation: none !important; opacity: 1 !important; }
 
-/* Крупный шрифт 125–200% не ломает шапку и меню */
-.poor-vision aside { width: 310px !important; }
-.poor-vision aside .font-display { white-space: normal !important; line-height: 1.25 !important; }
-.poor-vision header { flex-wrap: wrap !important; height: auto !important; min-height: 64px; row-gap: 8px; padding-top: 8px !important; padding-bottom: 8px !important; }
-.poor-vision main { overflow-x: hidden; }
+/* Защита от вылезания контента за границы при увеличении шрифта (125%–200%) */
+.poor-vision [data-a11y-panel="1"] {
+  font-size: 16px !important;
+  line-height: 1.4 !important;
+}
+.poor-vision [data-a11y-panel="1"] * {
+  letter-spacing: normal !important;
+  word-spacing: normal !important;
+  line-height: 1.35 !important;
+}
+.poor-vision aside {
+  width: clamp(260px, 23vw, 300px) !important;
+  flex-shrink: 0;
+}
+.poor-vision aside > div:first-child {
+  height: auto !important;
+  min-height: 64px;
+  padding: 12px 16px !important;
+}
+.poor-vision aside .font-display,
+.poor-vision aside a,
+.poor-vision aside button {
+  white-space: normal !important;
+  line-height: 1.3 !important;
+  overflow-wrap: break-word;
+}
+.poor-vision header {
+  flex-wrap: wrap !important;
+  height: auto !important;
+  min-height: 64px;
+  row-gap: 8px;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+.poor-vision header > div {
+  flex-wrap: wrap !important;
+  max-width: 100%;
+}
+.poor-vision main {
+  overflow-x: clip;
+  min-width: 0;
+}
+.poor-vision main *,
+.poor-vision header * {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.poor-vision[data-a11y-large="1"] main button:not([data-a11y-nowrap]),
+.poor-vision[data-a11y-large="1"] main a:not([data-a11y-nowrap]),
+.poor-vision[data-a11y-large="1"] header button:not([data-a11y-nowrap]),
+.poor-vision[data-a11y-large="1"] header a:not([data-a11y-nowrap]) {
+  max-width: 100%;
+  white-space: normal !important;
+  height: auto !important;
+  overflow-wrap: break-word;
+}
+.poor-vision[data-a11y-large="1"] main .whitespace-nowrap:not([data-a11y-nowrap]):not(code):not(pre) {
+  white-space: normal !important;
+}
+.poor-vision[data-a11y-xlarge="1"] aside {
+  width: 280px !important;
+}
+.poor-vision[data-a11y-xlarge="1"] main {
+  padding: 16px !important;
+  padding-bottom: 96px !important;
+}
+.poor-vision[data-a11y-xlarge="1"] main [class*="grid-cols-2"] {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)) !important;
+}
+.poor-vision[data-a11y-xlarge="1"] main [class*="grid-cols-3"],
+.poor-vision[data-a11y-xlarge="1"] main [class*="grid-cols-4"],
+.poor-vision[data-a11y-xlarge="1"] main [class*="grid-cols-5"],
+.poor-vision[data-a11y-xlarge="1"] main [class*="grid-cols-6"] {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)) !important;
+}
+.poor-vision[data-a11y-xlarge="1"] main [class*="flex-nowrap"] {
+  flex-wrap: wrap !important;
+}
+.poor-vision main table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
 .poor-vision nav { overflow-x: auto; }
 
 /* Reduced motion */

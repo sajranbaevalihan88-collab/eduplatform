@@ -570,6 +570,7 @@ export default function Profile() {
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
         {/* Обложка профиля (без декоративных пятен и неона) */}
         <div
+          data-a11y-banner={!bannerUrl ? '1' : undefined}
           onClick={() => setBannerModalOpen(true)}
           onDragOver={e => { e.preventDefault(); setBannerDragOver(true) }}
           onDragLeave={() => setBannerDragOver(false)}
