@@ -894,34 +894,44 @@ class SchoolMixin:
             raise ValidationError({'text': 'Передай CSV расписания или поле text'})
         from apps.catalog.models import Subject
         wd_map = {
-            '1': 1, 'пн': 1, 'понедельник': 1, 'mon': 1,
-            '2': 2, 'вт': 2, 'вторник': 2, 'tue': 2,
-            '3': 3, 'ср': 3, 'среда': 3, 'wed': 3,
-            '4': 4, 'чт': 4, 'четверг': 4, 'thu': 4,
-            '5': 5, 'пт': 5, 'пятница': 5, 'fri': 5,
-            '6': 6, 'сб': 6, 'суббота': 6, 'sat': 6,
+            '1': 1, 'пн': 1, 'пон': 1, 'понедельник': 1, 'mon': 1, 'monday': 1, 'дш': 1, 'дүйшөмбү': 1,
+            '2': 2, 'вт': 2, 'втр': 2, 'вторник': 2, 'tue': 2, 'tuesday': 2, 'шш': 2, 'шейшемби': 2,
+            '3': 3, 'ср': 3, 'срд': 3, 'среда': 3, 'wed': 3, 'wednesday': 3, 'шр': 3, 'шаршемби': 3,
+            '4': 4, 'чт': 4, 'чтв': 4, 'четверг': 4, 'thu': 4, 'thursday': 4, 'бш': 4, 'бейшемби': 4,
+            '5': 5, 'пт': 5, 'птн': 5, 'пятница': 5, 'fri': 5, 'friday': 5, 'жм': 5, 'жума': 5,
+            '6': 6, 'сб': 6, 'сбт': 6, 'суббота': 6, 'sat': 6, 'saturday': 6, 'иш': 6, 'ишемби': 6,
         }
+        import re as _re
         lines = [ln.strip() for ln in text.replace('\r\n', '\n').split('\n') if ln.strip()]
         imported, skipped = 0, []
         for idx, line in enumerate(lines, start=1):
-            delim = ';' if ';' in line else (',' if ',' in line else '\t')
+            delim = ';' if ';' in line else ('\t' if '\t' in line else ('|' if '|' in line else ','))
             parts = [p.strip() for p in line.split(delim)] + ['', '', '', '']
-            wd_raw, num_raw, subj_raw, room_str = parts[0].lower(), parts[1], parts[2], parts[3]
-            if idx == 1 and wd_raw in ('день', 'weekday', 'day', 'день_недели'):
-                continue
+            wd_raw, num_raw, subj_raw, room_str = parts[0].lower().rstrip('.'), parts[1], parts[2], parts[3]
+            if idx == 1 and (wd_raw in ('день', 'weekday', 'day', 'день_недели', 'күн', 'күнү') or not _re.search(r'\d', num_raw)):
+                if wd_raw not in wd_map:
+                    continue
             wd = wd_map.get(wd_raw)
-            try:
-                num = int(num_raw)
-            except (TypeError, ValueError):
-                num = 0
+            num_m = _re.search(r'(\d+)', str(num_raw or ''))
+            num = int(num_m.group(1)) if num_m else 0
             if not wd or not (1 <= num <= 9):
                 skipped.append(f'строка {idx}: неверный день «{parts[0]}» или урок «{num_raw}»')
                 continue
             subj = (Subject.objects.filter(slug__iexact=subj_raw).first()
                     or Subject.objects.filter(name__iexact=subj_raw).first()
                     or Subject.objects.filter(name__icontains=subj_raw).first()) if subj_raw else None
+            if not subj and subj_raw:
+                # Если предмет из расписания школы ещё не заведён в справочнике — создаём его автоматически
+                from django.utils.text import slugify
+                base_slug = slugify(subj_raw, allow_unicode=False) or f'subj-{Subject.objects.count() + 1}'
+                slug_cand = base_slug[:45]
+                suffix = 1
+                while Subject.objects.filter(slug=slug_cand).exists():
+                    suffix += 1
+                    slug_cand = f'{base_slug[:40]}-{suffix}'
+                subj = Subject.objects.create(name=subj_raw[:120], slug=slug_cand, icon='📘', color='#3B82F6')
             if not subj:
-                skipped.append(f'строка {idx}: предмет «{subj_raw}» не найден')
+                skipped.append(f'строка {idx}: пустой предмет')
                 continue
             LessonSlot.objects.update_or_create(
                 classroom=room, weekday=wd, num=num,

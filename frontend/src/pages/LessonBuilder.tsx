@@ -76,10 +76,14 @@ export default function LessonBuilder(){
   useEffect(()=>{
     loadSubjects(); loadOptions()
     if(!isNew && id) client.get(`/lessons/${id}/`).then(r=>{setTitle(r.data.title); setDesc(r.data.description||''); setIsPublic(!!r.data.is_public); setSubject(r.data.subject!=null?Number(r.data.subject):null); if(r.data.blocks?.length) setBlocks(r.data.blocks)}).catch(e=>toast(e?.response?.data?.detail||'Не удалось загрузить урок','error'))
-    // предвыбор предмета из ?subject=slug (приход со страницы предмета)
+    // предвыбор предмета и темы из ?subject=slug&title=...&desc=...
     if(isNew){
       const sp=new URLSearchParams(window.location.search)
       const s=sp.get('subject')
+      const tParam=sp.get('title')
+      const dParam=sp.get('desc')
+      if(tParam) setTitle(tParam)
+      if(dParam) setDesc(dParam)
       if(s) setFromSubject(s)
       if(s) client.get('/subjects/').then(r=>{
         const arr=Array.isArray(r.data)?r.data:r.data.results||[]
@@ -159,7 +163,8 @@ export default function LessonBuilder(){
   // Автогенерация вопросов прямо в inline-тесте (тот же /tests/generate/, что в ТестВыборателе)
   const [ltAiOpen,setLtAiOpen]=useState<Record<string,boolean>>({})
   const [ltAiPrompt,setLtAiPrompt]=useState('')
-  const [ltAiCount,setLtAiCount]=useState(5)
+  const [ltAiCount,setLtAiCount]=useState<number>(10)
+  const [ltAiCountInput,setLtAiCountInput]=useState<string>('10')
   const [ltAiBusy,setLtAiBusy]=useState(false)
   const [ltAiSrc,setLtAiSrc]=useState<string|null>(null)
   const getPresTab=(id:string)=> presTabs[id] || (options.presentations.length ? 'select' : 'upload')
@@ -167,16 +172,16 @@ export default function LessonBuilder(){
   const parsePromptCount=(s:string,fallback:number)=>{
     const m=s.toLowerCase().match(/\b(\d{1,2})\s*(?:вопрос\S*|вопр\.?|суроо\S*|question\S*|задани\S*|шт\.?|штук\S*)/i)
     if(m){ const n=parseInt(m[1],10); if(n>=1&&n<=40) return n }
-    const cleaned=s.toLowerCase().replace(/\b\d{1,2}\s*[-–]?\s*(?:класс\S*|кл\.?|grade\S*)/gi,'').replace(/python\s*3/gi,'')
-    const nums=(cleaned.match(/\b(\d{1,2})\b/g)||[]).map(Number).filter(n=>n>=1&&n<=40)
-    if(nums.length>0) return nums[nums.length-1]
-    return Math.max(1,Math.min(40,fallback||5))
+    return Math.max(1,Math.min(40,fallback||10))
   }
   const ltAiGenerate=async(bid:string)=>{
     if(ltAiBusy) return
     if(ltAiPrompt.trim().length<2){ toast('Напиши тему или запрос для генератора (например: «вопросы по пайтону 10 вопросов»)','error'); return }
-    const targetCount=parsePromptCount(ltAiPrompt, ltAiCount)
+    const typedNum = parseInt(ltAiCountInput, 10)
+    const baseCount = (!isNaN(typedNum) && typedNum >= 1) ? Math.min(40, typedNum) : ltAiCount
+    const targetCount=parsePromptCount(ltAiPrompt, baseCount)
     setLtAiCount(targetCount)
+    setLtAiCountInput(String(targetCount))
     setLtAiBusy(true)
     try{
       const r=await client.post('/tests/generate/',{count:targetCount,prompt:ltAiPrompt.trim().slice(0,2000)})
@@ -786,10 +791,42 @@ export default function LessonBuilder(){
                               <textarea value={ltAiPrompt} onChange={e=>setLtAiPrompt(e.target.value)}
                                 placeholder="Например: тест на тему «Атомы» для 6 класса, простые вопросы, по-русски"
                                 className="w-full px-3 py-2 rounded-xl border bg-white text-sm min-h-[64px]" />
-                              <div className="flex items-center gap-2">
-                                <label className="text-xs text-slate-600">Вопросов:
-                                  <input type="number" min={1} max={40} value={ltAiCount} onChange={e=>setLtAiCount(Math.max(1,Math.min(40,parseInt(e.target.value)||5)))} className="w-16 px-2 py-1 rounded border ml-1"/>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                                  Вопросов (1–40):
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={ltAiCountInput}
+                                    onChange={e=>{
+                                      const raw = e.target.value.replace(/[^\d]/g, '')
+                                      setLtAiCountInput(raw)
+                                      if(raw !== ''){
+                                        const n = Math.max(1, Math.min(40, parseInt(raw, 10) || 1))
+                                        setLtAiCount(n)
+                                      }
+                                    }}
+                                    onBlur={()=>{
+                                      const n = Math.max(1, Math.min(40, parseInt(ltAiCountInput, 10) || ltAiCount || 10))
+                                      setLtAiCount(n)
+                                      setLtAiCountInput(String(n))
+                                    }}
+                                    placeholder="10"
+                                    className="w-16 px-2.5 py-1.5 rounded-lg border bg-white text-center font-bold text-slate-900"
+                                  />
                                 </label>
+                                <div className="flex items-center gap-1">
+                                  {[5, 10, 15, 20, 30, 40].map(n => (
+                                    <button
+                                      key={n}
+                                      type="button"
+                                      onClick={() => { setLtAiCount(n); setLtAiCountInput(String(n)) }}
+                                      className={`px-2 py-1 rounded-md text-xs font-bold border transition ${ltAiCount === n && ltAiCountInput === String(n) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 hover:bg-emerald-50'}`}
+                                    >
+                                      {n}
+                                    </button>
+                                  ))}
+                                </div>
                                 <button onClick={()=>ltAiGenerate(b.id)} disabled={ltAiBusy}
                                   className="ml-auto px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold disabled:opacity-50" data-testid="lb-ai-gen">
                                   {ltAiBusy?'⏳ Думаю…':'Сгенерировать'}

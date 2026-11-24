@@ -1646,11 +1646,17 @@ export default function Arkan() {
             <label className="text-xs font-bold dark:text-slate-300 flex items-center gap-1.5">
               Вопросов:
               <input
-                type="number"
-                min={1}
-                max={40}
-                value={aiCount}
-                onChange={e => setAiCount(Math.max(1, Math.min(40, parseInt(e.target.value) || 10)))}
+                type="text"
+                inputMode="numeric"
+                value={aiCount || ''}
+                onChange={e => {
+                  const raw = e.target.value.replace(/[^\d]/g, '')
+                  setAiCount(raw === '' ? 0 : Math.min(40, parseInt(raw, 10) || 1))
+                }}
+                onBlur={() => {
+                  if (!aiCount || aiCount < 1) setAiCount(10)
+                }}
+                placeholder="10"
                 className="w-16 px-2 py-2 rounded-xl border dark:border-slate-600 bg-slate-50 dark:bg-slate-900 dark:text-white text-center font-mono font-bold"
               />
             </label>

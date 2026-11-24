@@ -1500,14 +1500,23 @@ export default function PresentationEditor() {
     }
   }
 
+  const currentSubjObj = subjects.find((s: any) => (subject && String(s.id) === String(subject)) || (subjSlug && String(s.slug) === String(subjSlug)))
+  const effectiveSubjSlug = currentSubjObj?.slug || subjSlug
+
   // ==================== СОХРАНЕНИЕ И ИМПОРТ ====================
   const save = async (silent = false) => {
     if (loadFailed) { toast('Презентация не загружена — обновите страницу', 'error'); return }
     const token = localStorage.getItem('token') || localStorage.getItem('access')
     if (!token) { toast('Войди чтобы сохранить', 'error'); nav('/login'); return }
     if (!title.trim()) { toast('Укажи название презентации', 'error'); return }
-    if (!silent && !subject && !confirm('Сохранить без предмета? Презентация не попадёт в уроки — предмет можно выбрать позже.')) return
+    if (!silent && !subject && !confirm('Сохранить без предмета? Презентация сохранится в раздел «Мои уроки → Презентации».')) return
     setSaving(true); savingRef.current = true
+    const afterSaveDestination = effectiveSubjSlug
+      ? `/subjects/${effectiveSubjSlug}?tab=pres`
+      : '/my-lessons?tab=pres'
+    const afterSaveMessage = currentSubjObj
+      ? `Презентация «${title.trim()}» сохранена в раздел «Предметы → ${currentSubjObj.name} → Презентации»`
+      : 'Презентация сохранена в раздел «Мои уроки → Презентации»'
     try {
       const targetId = isNew ? importedId : id
       if (isNew && !importedId) {
@@ -1521,8 +1530,8 @@ export default function PresentationEditor() {
           })
         }
         setDirty(false)
-        toast('Презентация сохранена', 'success')
-        nav(`/presentations/${pid}`)
+        toast(afterSaveMessage, 'success')
+        nav(afterSaveDestination)
       } else if (targetId) {
         await client.patch(`/presentations/${targetId}/`, { title: title.trim(), description: desc.trim(), subject: subject || null, is_public: isPublic })
         const existing = await client.get(`/presentations/${targetId}/`).then(r => r.data.slides || [])
@@ -1535,8 +1544,10 @@ export default function PresentationEditor() {
           })
         }
         setDirty(false)
-        if (!silent) toast('Презентация сохранена', 'success')
-        if (isNew && importedId) nav(`/presentations/${importedId}`)
+        if (!silent) {
+          toast(afterSaveMessage, 'success')
+          nav(afterSaveDestination)
+        }
       }
     } catch (e: any) {
       toast(e.response?.data?.detail || JSON.stringify(e.response?.data) || 'Ошибка сохранения', 'error')
@@ -1794,7 +1805,7 @@ export default function PresentationEditor() {
       <div className="bg-[#b7472a] dark:bg-[#8f2d14] text-white px-2 sm:px-3 py-1.5 flex items-center gap-1.5 sm:gap-2 shrink-0 shadow-md z-20">
         <button
           type="button"
-          onClick={() => nav(subjSlug ? `/subjects/${subjSlug}` : '/my-lessons')}
+          onClick={() => nav(effectiveSubjSlug ? `/subjects/${effectiveSubjSlug}?tab=pres` : '/my-lessons?tab=pres')}
           className="px-2 sm:px-2.5 h-9 rounded-lg bg-black/20 hover:bg-black/35 text-white text-xs sm:text-sm font-bold shrink-0 flex items-center justify-center"
           title={t('back')}
         >
@@ -1839,7 +1850,12 @@ export default function PresentationEditor() {
           <BookOpen size={14} className="text-slate-500 dark:text-slate-400 shrink-0" />
           <select
             value={subject || ''}
-            onChange={e => setSubject(e.target.value ? Number(e.target.value) : null)}
+            onChange={e => {
+              const val = e.target.value ? Number(e.target.value) : null
+              setSubject(val)
+              const found = subjects.find((s: any) => String(s.id) === String(val))
+              setSubjSlug(found?.slug || '')
+            }}
             className="px-2.5 py-1.5 rounded-lg border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold max-w-[165px]"
           >
             <option value="">{t('subj_no_subject')}</option>

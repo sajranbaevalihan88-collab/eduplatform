@@ -1,19 +1,38 @@
-﻿import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { Layers, Presentation as PresIcon, FlaskConical, Plus, Upload, Search, BookOpen, X, Download, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Layers, Presentation as PresIcon, FlaskConical, Plus, Upload, Search, BookOpen, X, Download, Trash2, FileText } from 'lucide-react'
 import client, { mediaUrl, mediaSrc } from '../api/client'
 import { openMediaFile } from '../utils/fileOpen'
+import { sanitizeHtml } from '../utils/sanitize'
 import { isStudent } from '../utils/role'
 import { toast } from '../context/UIContext'
 import { useLang } from '../context/LangContext'
 
-// Страница предмета: три вкладки — Уроки / Презентации / Тесты.
+function getBookFormatLabel(b: any): string {
+  const path = String(b?.file || b?.url || b?.title || '').toLowerCase()
+  if (b?.file_type === 'pdf' || path.endsWith('.pdf')) return 'PDF'
+  if (path.endsWith('.docx') || path.endsWith('.doc')) return 'Word (.docx)'
+  if (path.endsWith('.txt') || path.endsWith('.md')) return 'TXT'
+  if (path.endsWith('.pptx') || path.endsWith('.ppt')) return 'PPTX'
+  if (path.endsWith('.xlsx') || path.endsWith('.xls') || path.endsWith('.csv')) return 'Excel'
+  return b?.file_type === 'document' ? 'Word / Док' : 'Файл'
+}
+
+// Страница предмета: четыре вкладки — Уроки / Презентации / Тесты / Книги.
 // Учителю: создание и загрузка прямо внутри вкладки; ученику — просмотр и прохождение.
 export default function SubjectDetail(){
   const {t}=useLang()
   const {slug}=useParams()
+  const [searchParams, setSearchParams]=useSearchParams()
   const [subject,setSubject]=useState<any>(null)
-  const [tab,setTab]=useState<'lessons'|'pres'|'tests'|'books'>('lessons')
+  const initTab = (()=>{
+    const raw = (searchParams.get('tab') || '').toLowerCase()
+    if (raw === 'pres' || raw === 'presentations') return 'pres'
+    if (raw === 'tests' || raw === 'test') return 'tests'
+    if (raw === 'books' || raw === 'files') return 'books'
+    return 'lessons'
+  })()
+  const [tab,setTab]=useState<'lessons'|'pres'|'tests'|'books'>(initTab)
   const [lessons,setLessons]=useState<any[]>([])
   const [pres,setPres]=useState<any[]>([])
   const [tests,setTests]=useState<any[]>([])
@@ -23,11 +42,21 @@ export default function SubjectDetail(){
   const [me,setMe]=useState<any>(null)
   const [uploading,setUploading]=useState(false)
   const [bookObjUrl,setBookObjUrl]=useState('')
+  const [bookHtml,setBookHtml]=useState('')
+  const [bookText,setBookText]=useState('')
   const [bookLoading,setBookLoading]=useState(false)
   const [bookErr,setBookErr]=useState('')
   const [pendingBook,setPendingBook]=useState<File|null>(null)
   const [bookTitle,setBookTitle]=useState('')
   const fileRef=useRef<HTMLInputElement>(null)
+
+  useEffect(()=>{
+    const raw = (searchParams.get('tab') || '').toLowerCase()
+    if (raw === 'pres' || raw === 'presentations') setTab('pres')
+    else if (raw === 'tests' || raw === 'test') setTab('tests')
+    else if (raw === 'books' || raw === 'files') setTab('books')
+    else if (raw === 'lessons') setTab('lessons')
+  },[searchParams])
 
   useEffect(()=>{
     client.get('/subjects/').then(r=>{
@@ -89,17 +118,41 @@ export default function SubjectDetail(){
       toast(err?.response?.data?.detail||t('lessons_del_err'),'error')
     }
   }
-  // Открытие книги: качаем файл обычным fetch'ем (как все API-запросы — они
-  // стабильно работают) и отдаём в iframe через blob:URL. Прямой коннект
-  // iframe'а к localhost:8001 Chrome иногда блокирует, а vite-прокси на
-  // больших файлах отвечает 500/text-plain — серый экран вместо PDF.
+  // Открытие книги/документа:
+  // - PDF -> открываем как application/pdf blob во встроенном ридере
+  // - Word (.docx) -> рендерим форматированный документ через mammoth (или preview_text с бэкенда)
+  // - TXT / MD / CSV / DOC -> получаем текст через /files/:id/preview_text/
   const openBook=async(b:any)=>{
     if(bookObjUrl) URL.revokeObjectURL(bookObjUrl)
-    setBookObjUrl(''); setBookErr(''); setBook(b); setBookLoading(true)
+    setBookObjUrl(''); setBookHtml(''); setBookText(''); setBookErr(''); setBook(b); setBookLoading(true)
+    const rawPath = String(b.file || b.url || '').toLowerCase()
+    const isPdf = b.file_type === 'pdf' || rawPath.endsWith('.pdf')
+    const isDocx = rawPath.endsWith('.docx')
     try{
-      const r=await client.get(b.url||mediaUrl(b.file), {responseType:'blob'})
-      const blob=new Blob([r.data], {type:'application/pdf'})
-      setBookObjUrl(URL.createObjectURL(blob))
+      if(isPdf){
+        const r=await client.get(b.url||mediaUrl(b.file), {responseType:'blob'})
+        const blob=new Blob([r.data], {type:'application/pdf'})
+        setBookObjUrl(URL.createObjectURL(blob))
+      } else if(isDocx){
+        try{
+          const r=await client.get(b.url||mediaUrl(b.file), {responseType:'arraybuffer'})
+          const mammoth:any = await import('mammoth')
+          const res = await mammoth.convertToHtml({ arrayBuffer: r.data })
+          const html = sanitizeHtml(String(res?.value || ''))
+          if(html.trim()){
+            setBookHtml(html)
+          } else {
+            const pr = await client.get(`/files/${b.id}/preview_text/`)
+            setBookText(String(pr.data?.text || ''))
+          }
+        }catch{
+          const pr = await client.get(`/files/${b.id}/preview_text/`)
+          setBookText(String(pr.data?.text || ''))
+        }
+      } else {
+        const pr = await client.get(`/files/${b.id}/preview_text/`)
+        setBookText(String(pr.data?.text || ''))
+      }
     }catch(e:any){
       setBookErr(t('books_load_err'))
     }
@@ -178,7 +231,7 @@ export default function SubjectDetail(){
         </div>
         <div className="flex border-t dark:border-slate-800 overflow-x-auto tab-scroll">
           {tabs.map(x=>(
-            <button key={x.key} onClick={()=>setTab(x.key)}
+            <button key={x.key} onClick={()=>{ setTab(x.key); setSearchParams({ tab: x.key }, { replace: true }) }}
               className={`px-4 py-3 text-sm font-semibold flex items-center gap-2 whitespace-nowrap border-b-2 transition ${tab===x.key?'border-indigo-600 text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20':'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>
               <x.icon size={16}/>{x.label}<span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800">{x.count}</span>
             </button>
@@ -195,12 +248,12 @@ export default function SubjectDetail(){
         {isTeacher && tab==='pres' && <>
           <Link to={`/presentations/new?subject=${slug}`} className="flex-1 sm:flex-initial px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center justify-center gap-2 shrink-0"><Plus size={16}/>{t('create')}</Link>
           <button onClick={()=>fileRef.current?.click()} disabled={uploading} className="flex-1 sm:flex-initial px-4 py-2.5 min-h-[44px] rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"><Upload size={16}/>{uploading?'...':t('subj_upload')}</button>
-          <input ref={fileRef} type="file" accept=".pptx,.ppt" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f) uploadPres(f); e.target.value=''}}/>
+          <input ref={fileRef} type="file" accept=".pptx,.ppt,.pdf" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f) uploadPres(f); e.target.value=''}}/>
         </>}
         {isTeacher && tab==='tests' && <Link to={`/tests/new?subject=${slug}`} className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center justify-center gap-2 shrink-0"><Plus size={16}/>{t('create')}</Link>}
         {isAdmin && tab==='books' && <>
-          <button onClick={()=>fileRef.current?.click()} disabled={uploading} className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"><Upload size={16}/>{uploading?'...':t('subj_upload_book')}</button>
-          <input ref={fileRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f){ setPendingBook(f); setBookTitle(f.name.replace(/\.[^/.]+$/,'')) } e.target.value=''}}/>
+          <button onClick={()=>fileRef.current?.click()} disabled={uploading} className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"><Upload size={16}/>{uploading?'...':`${t('subj_upload_book')} (PDF, Word, TXT)`}</button>
+          <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.txt,.md" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f){ setPendingBook(f); setBookTitle(f.name.replace(/\.[^/.]+$/,'')) } e.target.value=''}}/>
         </>}
       </div>
 
@@ -259,16 +312,34 @@ export default function SubjectDetail(){
               <div className="px-4 py-2.5 flex items-center gap-2 border-b dark:border-slate-800">
                 <BookOpen size={16} className="text-cyan-600 shrink-0"/>
                 <span className="font-bold text-sm truncate dark:text-white">{book.title}</span>
-                {bookObjUrl && <a href={bookObjUrl} target="_blank" rel="noopener noreferrer" className="ml-auto px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1 shrink-0"><Download size={13}/>{t('books_open_new')}</a>}
-                <button onClick={()=>{ if(bookObjUrl) URL.revokeObjectURL(bookObjUrl); setBook(null); setBookObjUrl('') }} className={bookObjUrl?'p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500':'ml-auto p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500'}><X size={14}/></button>
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-300 shrink-0">
+                  {getBookFormatLabel(book)}
+                </span>
+                {bookObjUrl ? (
+                  <a href={bookObjUrl} target="_blank" rel="noopener noreferrer" className="ml-auto px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1 shrink-0"><Download size={13}/>{t('books_open_new')}</a>
+                ) : (
+                  <button onClick={()=>openMediaFile(mediaSrc(book.url||book.file), book.title).catch(()=>alert(t('books_load_err')))} className="ml-auto px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1 shrink-0"><Download size={13}/>{t('books_download')}</button>
+                )}
+                <button onClick={()=>{ if(bookObjUrl) URL.revokeObjectURL(bookObjUrl); setBook(null); setBookObjUrl(''); setBookHtml(''); setBookText('') }} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500"><X size={14}/></button>
               </div>
               {bookLoading ? (
                 <div className="p-14 text-center text-sm text-slate-500 dark:text-slate-400">⏳ {t('books_loading')}</div>
               ) : bookObjUrl ? (
                 <iframe src={bookObjUrl} className="w-full h-[70vh] bg-white" title={book.title}/>
+              ) : bookHtml ? (
+                <div className="p-6 sm:p-10 max-h-[75vh] overflow-y-auto bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+                  <div
+                    className="max-w-3xl mx-auto prose dark:prose-invert prose-slate text-sm sm:text-base leading-relaxed space-y-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_th]:border [&_th]:p-2"
+                    dangerouslySetInnerHTML={{ __html: bookHtml }}
+                  />
+                </div>
+              ) : bookText ? (
+                <div className="p-6 sm:p-10 max-h-[75vh] overflow-y-auto bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+                  <pre className="max-w-3xl mx-auto whitespace-pre-wrap font-sans text-sm sm:text-base leading-relaxed">{bookText}</pre>
+                </div>
               ) : (
                 <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
-                  <BookOpen size={36} className="mx-auto mb-3 opacity-40"/>
+                  <FileText size={36} className="mx-auto mb-3 opacity-40"/>
                   <p>{bookErr||t('books_doc_hint')}</p>
                   <button onClick={()=>openMediaFile(mediaSrc(book.url||book.file), book.title).catch(()=>alert(t('books_load_err')))} className="inline-block mt-3 px-4 py-2 rounded-xl bg-cyan-600 text-white text-sm font-semibold"><Download size={14} className="inline mr-1"/>{t('books_download')}</button>
                 </div>
@@ -284,7 +355,7 @@ export default function SubjectDetail(){
                   {canDeleteFile(b) && <button onClick={e=>delBook(e,b)} className="p-1.5 rounded-lg bg-red-50 text-red-600 shrink-0"><Trash2 size={14}/></button>}
                 </div>
                 <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
-                  <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 font-semibold uppercase">{b.file_type==='pdf'?'PDF':'Word'}</span>
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 font-semibold">{getBookFormatLabel(b)}</span>
                   {b.size ? <span>{humanSize(b.size)}</span> : null}
                   <span className="ml-auto text-cyan-600 font-semibold">{t('subj_open')}</span>
                 </div>

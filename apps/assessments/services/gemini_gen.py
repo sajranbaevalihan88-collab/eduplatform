@@ -12,23 +12,23 @@ import requests
 API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent'
 
 ALLOWED_TYPES = {'single', 'multiple', 'true_false'}
-MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-3-flash-preview']
+MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-flash-latest']
 
 
 def _prompt(text, count, instruction=''):
     base = (
-        "Ты — генератор тестовых вопросов для школьной платформы. "
-        f"Составь РОВНО {count} вопросов по тексту ниже. "
+        "Ты — опытный школьный методист и генератор тестовых вопросов. "
+        f"Составь РОВНО {count} РАЗНЫХ, уникальных вопросов. "
         "Разрешены ТОЛЬКО три типа: single (один правильный из 4), "
         "multiple (несколько правильных из 4-6) и "
-        "true_false (Верно/Неверно). Тип text (свободный ответ) СТРОГО ЗАПРЕЩЁН — не используй его никогда. "
+        "true_false (Верно/Неверно). Тип text (свободный ответ) СТРОГО ЗАПРЕЩЁН. "
+        "ВАЖНЫЕ ПРАВИЛА КАЧЕСТВА:\n"
+        "1) ВСЕ вопросы должны быть УНИКАЛЬНЫМИ и проверять разные понятия, факты, действия, формулы или примеры — НИКОГДА не повторяй вопросы ни дословно, ни по смыслу.\n"
+        "2) НЕ вставляй полное название темы в каждый вопрос (не пиши в каждом вопросе «По теме ...»). Задавай прямые, естественные предметные вопросы.\n"
+        "3) Правильный ответ ставь на РАЗНЫЕ позиции (1-й, 2-й, 3-й или 4-й).\n"
         "Отвечай ТОЛЬКО валидным JSON-массивом, без пояснений и markdown, в формате:\n"
-        '[{"text":"...","type":"single","points":1,"explanation":"...?",'
+        '[{"text":"...","type":"single","points":1,"explanation":"...",'
         '"options":[{"text":"...","is_correct":true},{"text":"...","is_correct":false}]}]\n'
-        "Правила: single — ровно 4 варианта, правильный ровно 1; "
-        "multiple — 4-6 вариантов, правильных минимум 1; "
-        "true_false — варианты Верно/Неверно. "
-        "Правильный ответ ставь на РАЗНЫЕ позиции (1-й, 2-й, 3-й или 4-й) — не всегда первым."
     )
     extra = str(instruction or '').strip()[:2000]
     if extra:
@@ -54,10 +54,14 @@ def _strip_fences(s):
 
 def _normalize(items, count):
     out = []
+    seen_texts = set()
     for q in items:
         if not isinstance(q, dict):
             continue
         text = str(q.get('text') or '').strip()
+        norm_key = re.sub(r'\s+', ' ', text.lower()).strip(' ?.!.,;:')
+        if not norm_key or norm_key in seen_texts:
+            continue
         qtype = str(q.get('type') or 'single').strip()
         # текстовые вопросы отключены — пропускаем
         if qtype not in ('single', 'multiple', 'true_false'):
@@ -87,6 +91,7 @@ def _normalize(items, count):
             opts = []
         if not text:
             continue
+        seen_texts.add(norm_key)
         try:
             points = max(1, min(10, int(q.get('points') or 1)))
         except Exception:
@@ -111,7 +116,12 @@ def generate_with_gemini(text, count=5, api_key='', preferred_model='', instruct
     """Возвращает (questions, model_name) или (None, None) при любой ошибке."""
     if not api_key:
         return None, None
-    models = [m for m in [preferred_model] + MODEL_FALLBACKS if m]
+    seen_m = set()
+    models = []
+    for m in [preferred_model] + MODEL_FALLBACKS:
+        if m and m not in seen_m:
+            seen_m.add(m)
+            models.append(m)
     last_err = None
     for model_name in models:
         try:
@@ -122,7 +132,7 @@ def generate_with_gemini(text, count=5, api_key='', preferred_model='', instruct
                     'contents': [{'parts': [{'text': _prompt(text, count, instruction)}]}],
                     'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 16384},
                 },
-                timeout=(3, 15),
+                timeout=(4, 35),
             )
             if not r.ok:
                 last_err = f'HTTP {r.status_code}: {str(r.text)[:180]}'
@@ -140,7 +150,7 @@ def generate_with_gemini(text, count=5, api_key='', preferred_model='', instruct
             last_err = 'empty result'
         except requests.exceptions.RequestException as e:
             last_err = f'{type(e).__name__}: {e}'
-            break
+            continue
         except Exception as e:
             last_err = f'{type(e).__name__}: {e}'
             continue

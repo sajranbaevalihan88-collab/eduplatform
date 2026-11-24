@@ -14,7 +14,8 @@ export default function QuizBuilder({ lessons = [], onSaved }: { lessons?: any[]
   const [bQs, setBQs] = useState<BuilderQ[]>([])
   const [genLesson, setGenLesson] = useState('')
   const [genText, setGenText] = useState('')
-  const [genCount, setGenCount] = useState(5)
+  const [genCount, setGenCount] = useState(10)
+  const [genCountInput, setGenCountInput] = useState('10')
   const [busy, setBusy] = useState(false)
   const [genSource, setGenSource] = useState<string | null>(null)
   const [genPrompt, setGenPrompt] = useState('')
@@ -87,8 +88,23 @@ export default function QuizBuilder({ lessons = [], onSaved }: { lessons?: any[]
             <option value="">Свой текст ниже</option>
             {lessons.map((l: any) => <option key={l.id} value={l.id}>{l.title}</option>)}
           </select>
-              <input type="number" min={1} max={40} value={genCount} onChange={e => setGenCount(Math.max(1, Math.min(40, parseInt(e.target.value) || 5)))}
-                aria-label="Сколько вопросов (макс 40)" className="w-16 px-2 py-2 min-h-[44px] rounded-xl border dark:bg-slate-700 dark:text-white" />
+              <input
+                type="text"
+                inputMode="numeric"
+                value={genCountInput}
+                onChange={e => {
+                  const raw = e.target.value.replace(/[^\d]/g, '')
+                  setGenCountInput(raw)
+                  if (raw !== '') setGenCount(Math.max(1, Math.min(40, parseInt(raw, 10) || 1)))
+                }}
+                onBlur={() => {
+                  const n = Math.max(1, Math.min(40, parseInt(genCountInput, 10) || genCount || 10))
+                  setGenCount(n)
+                  setGenCountInput(String(n))
+                }}
+                aria-label="Сколько вопросов (макс 40)"
+                className="w-16 px-2 py-2 min-h-[44px] rounded-xl border dark:bg-slate-700 dark:text-white text-center font-bold"
+              />
           <button onClick={aiGen} disabled={busy} className="px-3 py-2 min-h-[44px] rounded-xl bg-indigo-600 text-white text-sm font-bold disabled:opacity-50">Сгенерировать</button>
         </div>
       )}

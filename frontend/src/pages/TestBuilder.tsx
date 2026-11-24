@@ -23,7 +23,8 @@ export default function TestBuilder(){
   const [topics,setTopics]=useState<any[]>([])
   const [questions,setQuestions]=useState<Q[]>([])
   const [showGen,setShowGen]=useState(false)
-  const [genCount,setGenCount]=useState(5)
+  const [genCount,setGenCount]=useState(10)
+  const [genCountInput,setGenCountInput]=useState('10')
   const [generating,setGenerating]=useState(false)
   const [genSource,setGenSource]=useState<string|null>(null)
   const [genPrompt,setGenPrompt]=useState('')
@@ -35,22 +36,23 @@ export default function TestBuilder(){
   const parsePromptCount=(s:string,fallback:number):number=>{
     const m=s.toLowerCase().match(/\b(\d{1,2})\s*(?:вопрос\S*|вопр\.?|суроо\S*|question\S*|задани\S*|шт\.?|штук\S*)/i)
     if(m){ const n=parseInt(m[1],10); if(n>=1&&n<=40) return n }
-    const cleaned=s.toLowerCase().replace(/\b\d{1,2}\s*[-–]?\s*(?:класс\S*|кл\.?|grade\S*)/gi,'').replace(/python\s*3/gi,'')
-    const nums=(cleaned.match(/\b(\d{1,2})\b/g)||[]).map(Number).filter(n=>n>=1&&n<=40)
-    if(nums.length>0) return nums[nums.length-1]
-    return Math.max(1,Math.min(40,fallback||5))
+    return Math.max(1,Math.min(40,fallback||10))
   }
   const onPromptChange=(val:string)=>{
     setGenPrompt(val)
-    if(/\d/.test(val)){
-      const c=parsePromptCount(val,genCount)
-      if(c>=1&&c<=40) setGenCount(c)
+    const m=val.toLowerCase().match(/\b(\d{1,2})\s*(?:вопрос\S*|вопр\.?|суроо\S*|question\S*|задани\S*|шт\.?|штук\S*)/i)
+    if(m){
+      const c=parseInt(m[1],10)
+      if(c>=1&&c<=40){ setGenCount(c); setGenCountInput(String(c)) }
     }
   }
   const doGenerate=async()=>{
     if(genPrompt.trim().length < 2){ alert(t('tb_gen_prompt_min')); return }
-    const targetCount=parsePromptCount(genPrompt,genCount)
+    const typedNum = parseInt(genCountInput, 10)
+    const baseCount = (!isNaN(typedNum) && typedNum >= 1) ? Math.min(40, typedNum) : genCount
+    const targetCount=parsePromptCount(genPrompt,baseCount)
     setGenCount(targetCount)
+    setGenCountInput(String(targetCount))
     setGenerating(true)
     try{
       const payload:any={count:targetCount, prompt:genPrompt.trim().slice(0,2000)}
@@ -65,8 +67,13 @@ export default function TestBuilder(){
   }
   const [searchParams]=useSearchParams()
   const subjectBack=searchParams.get('subject')?`/subjects/${searchParams.get('subject')}`:null
-  // Предмет теста: загрузка списка + предвыбор из ?subject=slug (приход из страницы предмета)
+  // Предмет теста: загрузка списка + предвыбор из ?subject=slug&title=... (приход из страницы предмета или учебной программы)
   useEffect(()=>{
+    const tParam=searchParams.get('title')
+    if(tParam && isNew){
+      setTitle(tParam)
+      setGenPrompt(tParam)
+    }
     client.get('/subjects/').then(r=>{
       const arr=Array.isArray(r.data)?r.data:r.data.results||[]
       setSubjects(arr)
@@ -250,9 +257,40 @@ export default function TestBuilder(){
             <button onClick={()=>setShowGen(false)} aria-label={t('close')} title={t('close')} className="absolute top-2 right-2 inline-flex items-center justify-center w-11 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-white text-lg font-bold">✕</button>
             <div className="font-bold dark:text-white">{t('tb_gen_title')}</div>
             <textarea value={genPrompt} onChange={e=>onPromptChange(e.target.value)} placeholder="Напр.: «сделай мне вопросы по пайтону 14 вопросов»" className="w-full h-28 px-3 py-2 rounded-xl border bg-indigo-50/50 dark:bg-slate-700 dark:text-white text-sm" aria-label={t('tb_gen_aria')}/>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <label className="text-sm dark:text-slate-300">{t('tb_gen_count')}</label>
-              <input type="number" min={1} max={40} value={genCount} onChange={e=>setGenCount(Math.max(1, Math.min(40, parseInt(e.target.value)||5)))} className="w-20 px-3 py-2 rounded-xl border dark:bg-slate-700 dark:text-white"/>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={genCountInput}
+                onChange={e=>{
+                  const raw = e.target.value.replace(/[^\d]/g, '')
+                  setGenCountInput(raw)
+                  if(raw !== ''){
+                    const n = Math.max(1, Math.min(40, parseInt(raw, 10) || 1))
+                    setGenCount(n)
+                  }
+                }}
+                onBlur={()=>{
+                  const n = Math.max(1, Math.min(40, parseInt(genCountInput, 10) || genCount || 10))
+                  setGenCount(n)
+                  setGenCountInput(String(n))
+                }}
+                placeholder="10"
+                className="w-20 px-3 py-2 rounded-xl border dark:bg-slate-700 dark:text-white text-center font-bold"
+              />
+              <div className="flex items-center gap-1">
+                {[5, 10, 15, 20, 30, 40].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => { setGenCount(n); setGenCountInput(String(n)) }}
+                    className={`px-2 py-1 rounded-lg text-xs font-bold border transition ${genCount === n && genCountInput === String(n) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-100 dark:bg-slate-700 dark:text-slate-200 hover:bg-indigo-50'}`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
               <button onClick={doGenerate} disabled={generating} className="ml-auto px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold disabled:opacity-50">{generating?t('tb_thinking'):t('tb_generate')}</button>
             </div>
             <div className="text-xs text-slate-400">{t('tb_gen_hint')}</div>

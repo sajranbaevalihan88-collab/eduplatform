@@ -137,3 +137,6 @@ export function sanitizeWordHtml(rawHtml: string): string {
     return ''
   }
 }
+
+export const sanitizeHtml = sanitizeWordHtml
+

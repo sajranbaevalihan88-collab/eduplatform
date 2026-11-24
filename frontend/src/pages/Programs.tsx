@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import client from '../api/client'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
-import { BookOpenCheck, Trash2, Upload, Plus, Edit3, Search, ChevronDown, ChevronRight, RotateCw, Award, FileSpreadsheet, X } from 'lucide-react'
+import { BookOpenCheck, Trash2, Upload, Plus, Edit3, Search, ChevronDown, ChevronRight, RotateCw, Award, FileSpreadsheet, X, Layers, FlaskConical, Sparkles } from 'lucide-react'
+import { TABLE_IMPORT_ACCEPT, parseImportedTableFile } from '../utils/tableImport'
 
 type Topic = {
-  id: number; subject: number|null; subject_name: string; subject_icon: string
+  id: number; subject: number|null; subject_name: string; subject_slug?: string; subject_icon: string
   grade: string; num: number; title: string; description: string; created_by?: number|null
 }
 
@@ -24,7 +26,8 @@ export default function Programs(){
   const [search, setSearch] = useState('')
   const [openAdd, setOpenAdd] = useState(false)
   const [edit, setEdit] = useState<Topic|null>(null)
-  const [form, setForm] = useState({ num: 1, title: '', description: '' })
+  const [form, setForm] = useState({ num: '1', title: '', description: '' })
+  const [lastSavedId, setLastSavedId] = useState<number|null>(null)
   const [busy, setBusy] = useState(false)
   const [standards, setStandards] = useState<any>(null)
   const [showStd, setShowStd] = useState(false)
@@ -66,20 +69,46 @@ export default function Programs(){
     }finally{ setBusy(false) }
   }
 
+  const getNextTopicNum = (subjVal = subject, gradeVal = grade, list = topics || []) => {
+    const matching = list.filter(x => {
+      const sOk = !subjVal || String(x.subject) === String(subjVal)
+      const gOk = String(x.grade || '') === String(gradeVal || '')
+      return sOk && gOk
+    })
+    const maxNum = matching.reduce((m, x) => Math.max(m, Number(x.num) || 0), 0)
+    return String(maxNum + 1)
+  }
+
+  useEffect(() => {
+    if (openAdd && !edit && topics) {
+      setForm(f => ({ ...f, num: getNextTopicNum(subject, grade, topics) }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subject, grade, topics?.length, openAdd, edit])
+
   const saveTopic = async ()=>{
     const title = form.title.trim()
     if(!title){ toast(t('prog_need_title'),'error'); return }
     if(!edit && !subject){ toast(t('prog_need_subject'),'error'); return }
+    const parsedNum = Math.max(1, parseInt(String(form.num).trim(), 10) || Number(getNextTopicNum()))
     try{
+      let savedId: number | null = null
       if(edit){
-        await client.patch(`/topics/${edit.id}/`, { title, num: form.num, description: form.description.trim() })
-        toast(t('prog_topic_updated'),'success')
+        const r = await client.patch(`/topics/${edit.id}/`, { title, num: parsedNum, description: form.description.trim() })
+        savedId = r.data?.id || edit.id
+        toast(`${t('prog_topic_updated')} (№${r.data?.num ?? parsedNum})`,'success')
       } else {
-        await client.post('/topics/', { subject: subject, grade: grade, num: form.num, title, description: form.description.trim() })
-        toast(t('prog_topic_added'),'success')
+        const r = await client.post('/topics/', { subject: subject, grade: grade, num: parsedNum, title, description: form.description.trim() })
+        savedId = r.data?.id || null
+        toast(`${t('prog_topic_added')}: №${r.data?.num ?? parsedNum} «${title}» — добавлена в список ниже`,'success')
       }
-      setOpenAdd(false); setEdit(null); setForm({num:1,title:'',description:''}); load()
-    }catch(e:any){ toast(e?.response?.data?.detail||e?.response?.data?.title||t('prog_save_err'),'error') }
+      setLastSavedId(savedId)
+      setOpenAdd(false); setEdit(null); setForm({num: getNextTopicNum(), title:'', description:''}); load()
+    }catch(e:any){
+      const d = e?.response?.data
+      const msg = d?.detail || d?.title || (Array.isArray(d?.non_field_errors) ? d.non_field_errors[0] : '') || t('prog_save_err')
+      toast(String(msg),'error')
+    }
   }
 
   const delTopic = async (id:number, title:string)=>{
@@ -88,9 +117,10 @@ export default function Programs(){
   }
 
   const importCsv = async (file: File)=>{
-    const fd = new FormData(); fd.append('file', file)
     try{
-      const r = await client.post('/topics/import_csv/', fd, { headers:{'Content-Type':'multipart/form-data'} })
+      const parsedText = await parseImportedTableFile(file)
+      if (!parsedText.trim()) { toast('Пустой файл', 'error'); return }
+      const r = await client.post('/topics/import_csv/', { text: parsedText })
       toast(`${t('prog_imported')}: ${r.data.created + (r.data.updated||0)}`, 'success')
       if(r.data.skipped && r.data.skipped.length){
         toast(r.data.skipped[0], 'error')
@@ -175,7 +205,11 @@ export default function Programs(){
         )}
         {canWrite && (
           <div className="flex flex-wrap gap-2 pt-1 border-t dark:border-slate-800">
-            <button onClick={()=>{ setOpenAdd(o=>!o); setEdit(null); if(!grade){ /* подсказка выбрана при сохранении */ } }} data-testid="topic-add-toggle"
+            <button onClick={()=>{
+              setEdit(null)
+              setForm(f => ({ ...f, num: getNextTopicNum(subject, grade, topics || []) }))
+              setOpenAdd(o=>!o)
+            }} data-testid="topic-add-toggle"
               className="px-4 py-2 min-h-[44px] rounded-xl bg-indigo-600 text-white text-sm font-semibold flex items-center gap-1 hover:bg-indigo-700">
               <Plus size={15}/>{t('prog_add')}
             </button>
@@ -186,8 +220,8 @@ export default function Programs(){
               </button>
             )}
             <label className="px-4 py-2 min-h-[44px] rounded-xl bg-white dark:bg-slate-800 border dark:border-slate-700 text-sm font-semibold inline-flex items-center gap-1 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-white">
-              <Upload size={15}/>{t('prog_csv')}
-              <input type="file" accept=".csv,.txt,.tsv" className="hidden" onChange={e=>{ const f=e.target.files?.[0]; if(f) importCsv(f); e.target.value='' }}/>
+              <Upload size={15}/>Импорт (Excel / Word / CSV)
+              <input type="file" accept={TABLE_IMPORT_ACCEPT} className="hidden" onChange={e=>{ const f=e.target.files?.[0]; if(f) importCsv(f); e.target.value='' }}/>
             </label>
             <button onClick={()=>setShowCsv(s=>!s)} className="px-3 py-2 min-h-[44px] rounded-xl text-sm font-semibold text-slate-500 hover:text-indigo-600 flex items-center gap-1">
               <FileSpreadsheet size={15}/>{t('prog_csv_help')}
@@ -196,14 +230,29 @@ export default function Programs(){
         )}
       </div>
 
+      {/* Подсказка: где появляется и как работает учебный план */}
+      <div className="bg-indigo-50/70 dark:bg-slate-900/90 rounded-2xl border border-indigo-200/80 dark:border-slate-700 px-4 py-3 text-xs text-slate-700 dark:text-slate-300 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <b className="text-indigo-700 dark:text-indigo-300">Куда попадает добавленная тема плана:</b> она сразу отображается в списке предмета и класса ниже, автоматически появляется при создании <b>тестов</b> и <b>заданий в классах</b> (для расчёта прогресса и пробелов учеников), а также позволяет в 1 клик создать <b>Урок</b>, <b>Тест</b> или <b>Поурочный план (КСП)</b> прямо из строки темы.
+        </div>
+      </div>
+
       {/* Форма добавления/редактирования */}
       {(openAdd || edit) && canWrite && (
         <div className="bg-indigo-50/60 dark:bg-slate-900 rounded-2xl border border-indigo-200 dark:border-slate-700 p-4 space-y-2">
           <div className="text-xs font-bold text-indigo-700 dark:text-indigo-300">{edit? t('prog_edit_topic') : t('prog_new_topic')}</div>
           <div className="flex flex-wrap gap-2 items-end">
-            <input type="number" min={1} value={form.num} onChange={e=>setForm(f=>({...f,num:Number(e.target.value)||1}))}
-              data-testid="topic-num" aria-label={t('prog_num')}
-              className="w-20 px-3 py-2 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white text-sm"/>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={form.num}
+              onChange={e => setForm(f => ({ ...f, num: e.target.value.replace(/[^\d]/g, '') }))}
+              onBlur={() => setForm(f => ({ ...f, num: String(Math.max(1, parseInt(String(f.num), 10) || Number(getNextTopicNum()))) }))}
+              placeholder="№"
+              data-testid="topic-num"
+              aria-label={t('prog_num')}
+              className="w-20 px-3 py-2 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white text-sm text-center font-bold"
+            />
             <input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))}
               onKeyDown={e=>e.key==='Enter'&&saveTopic()} placeholder={t('prog_title_ph')}
               data-testid="topic-title"
@@ -218,7 +267,9 @@ export default function Programs(){
             data-testid="topic-criteria"
             className="w-full px-3 py-2 min-h-[44px] rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white text-sm"/>
           {!edit && (
-            <div className="text-[11px] text-slate-500 dark:text-slate-400">{t('prog_new_topic_hint')}</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">
+              {t('prog_new_topic_hint')} Если номер темы уже занят, система автоматически присвоит следующий свободный номер.
+            </div>
           )}
         </div>
       )}
@@ -319,24 +370,50 @@ himiya;8;1;Периодическая система;Критерий КР: оп
             </div>
           </button>
           {!isCollapsed && (
-          <div className="px-4 pb-4 space-y-1">
-            {g.arr.map(tp=>(
-              <div key={tp.id} className="flex items-start gap-2 p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 group" data-testid={`topic-${tp.id}`}>
+          <div className="px-4 pb-4 space-y-1.5">
+            {g.arr.map(tp=>{
+              const subjParam = tp.subject_slug || tp.subject || ''
+              const isJustSaved = lastSavedId != null && Number(lastSavedId) === Number(tp.id)
+              return (
+              <div key={tp.id} className={`flex flex-wrap sm:flex-nowrap items-start gap-2.5 p-2.5 rounded-xl border transition group ${isJustSaved ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700' : 'border-transparent hover:bg-slate-50 dark:hover:bg-slate-800'}`} data-testid={`topic-${tp.id}`}>
                 <span className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-200 flex items-center justify-center font-bold text-sm shrink-0">{tp.num}</span>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-[180px]">
                   <div className="font-semibold text-sm dark:text-white break-words">{tp.title}</div>
                   {tp.description && <div className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5 break-words">✓ {tp.description}</div>}
+                  {canWrite && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <Link
+                        to={`/lessons/new?subject=${encodeURIComponent(String(subjParam))}&title=${encodeURIComponent(tp.title)}&desc=${encodeURIComponent(tp.description || '')}`}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[11px] font-semibold inline-flex items-center gap-1 hover:bg-indigo-100"
+                      >
+                        <Layers size={12}/> + Урок по теме
+                      </Link>
+                      <Link
+                        to={`/tests/new?subject=${encodeURIComponent(String(subjParam))}&topic=${tp.id}&title=${encodeURIComponent(tp.title)}`}
+                        className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[11px] font-semibold inline-flex items-center gap-1 hover:bg-amber-100"
+                      >
+                        <FlaskConical size={12}/> + Тест по теме
+                      </Link>
+                      <Link
+                        to={`/ai-assistant?topic=${tp.id}&title=${encodeURIComponent(tp.title)}`}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold inline-flex items-center gap-1 hover:bg-emerald-100"
+                      >
+                        <Sparkles size={12}/> ИИ-план урока
+                      </Link>
+                    </div>
+                  )}
                 </div>
                 {canEditTopic(tp) && (
-                  <div className="flex shrink-0 opacity-60 group-hover:opacity-100">
-                    <button onClick={()=>{ setOpenAdd(true); setEdit(tp); setForm({num:tp.num,title:tp.title,description:tp.description||''}) }} aria-label={t('edit')||'Править'}
+                  <div className="flex shrink-0 opacity-70 group-hover:opacity-100">
+                    <button onClick={()=>{ setOpenAdd(true); setEdit(tp); setForm({num:String(tp.num),title:tp.title,description:tp.description||''}) }} aria-label={t('edit')||'Править'}
                       className="p-2 text-slate-400 hover:text-indigo-600"><Edit3 size={15}/></button>
                     <button onClick={()=>delTopic(tp.id, tp.title)} aria-label={t('delete')||'Удалить'}
                       className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={15}/></button>
                   </div>
                 )}
               </div>
-            ))}
+              )
+            })}
           </div>
           )}
         </div>

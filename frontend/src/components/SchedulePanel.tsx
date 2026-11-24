@@ -3,6 +3,7 @@ import client from '../api/client'
 import { useLang } from '../context/LangContext'
 import { toast } from '../context/UIContext'
 import { CalendarDays, Repeat2, Upload, Trash2 } from 'lucide-react'
+import { TABLE_IMPORT_ACCEPT, parseImportedTableFile } from '../utils/tableImport'
 
 const WD = ['', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
 
@@ -104,12 +105,22 @@ export default function SchedulePanel({ classId, isOwner }:{ classId:number|any,
         {isOwner && impOpen && (
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border dark:border-slate-700 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-xs text-slate-500">CSV: <code className="font-mono">weekday;period;subject;room</code> (<code className="font-mono">Пн;1;Математика;204</code>)</div>
-              <label className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border dark:border-slate-600 text-xs font-semibold cursor-pointer hover:border-indigo-400 dark:text-slate-200">
-                📎 Загрузить .csv файл
-                <input type="file" accept=".csv,.txt" className="hidden" onChange={async e=>{
-                  const f = e.target.files?.[0]; if(!f) return
-                  const txt = await f.text(); setImpText(txt); e.target.value=''
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                Формат: <code className="font-mono">день;урок;предмет;кабинет</code> (<code className="font-mono">Пн;1;Математика;204</code>) — можно загрузить <b>Excel (.xlsx/.xls), Word (.docx), CSV или TXT</b>
+              </div>
+              <label className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border dark:border-slate-600 text-xs font-semibold cursor-pointer hover:border-indigo-400 dark:text-slate-200 inline-flex items-center gap-1">
+                📎 Загрузить файл (.xlsx, .docx, .csv, .txt)
+                <input type="file" accept={TABLE_IMPORT_ACCEPT} className="hidden" onChange={async e=>{
+                  const f = e.target.files?.[0]; e.target.value=''
+                  if(!f) return
+                  try {
+                    const txt = await parseImportedTableFile(f)
+                    if (!txt.trim()) { toast('В файле не найдено строк расписания', 'error'); return }
+                    setImpText(txt)
+                    toast(`Загружено из файла «${f.name}» — проверьте строки и нажмите «Импортировать»`, 'info')
+                  } catch {
+                    toast('Не удалось прочитать файл — используйте .xlsx, .docx, .csv или .txt', 'error')
+                  }
                 }}/>
               </label>
             </div>
