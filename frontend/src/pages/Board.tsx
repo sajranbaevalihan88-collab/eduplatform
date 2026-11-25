@@ -11,6 +11,21 @@ const Board3D = lazy(() => import('../components/Board3D'))
 
 const DRAFT_KEY = 'board-draft-v2'
 
+// Локальные шрифты и переводы tldraw из /fonts/tldraw/ ('self'):
+// доска запускается мгновенно, не зависит от внешнего CDN и никогда не блокируется CSP.
+const TLDRAW_ASSET_URLS = {
+  fonts: {
+    draw: '/fonts/tldraw/Shantell_Sans-Tldrawish.woff2',
+    serif: '/fonts/tldraw/IBMPlexSerif-Medium.woff2',
+    sansSerif: '/fonts/tldraw/IBMPlexSans-Medium.woff2',
+    monospace: '/fonts/tldraw/IBMPlexMono-Medium.woff2',
+  },
+  translations: {
+    ru: '/fonts/tldraw/ru.json',
+    en: '/fonts/tldraw/en.json',
+  },
+}
+
 // ——— (старая геометрия разрезания удалена — ластик теперь работает как в Paint) ———
 type Pt = { x: number; y: number }
 
@@ -994,6 +1009,7 @@ export default function Board() {
       <div className="absolute inset-0">
         <Tldraw
           key={resetKey}
+          assetUrls={TLDRAW_ASSET_URLS}
           onMount={onMount}
           components={mode === '3d' ? ({
             Toolbar: null, StylePanel: null, TopPanel: null, SharePanel: null, NavigationPanel: null,

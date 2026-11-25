@@ -6,7 +6,7 @@
  * - Privacy-safe: clears API cache on logout via postMessage({ type: 'CLEAR_API_CACHE' }).
  */
 
-const CACHE_VERSION = 'edu-v5'
+const CACHE_VERSION = 'edu-v6'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 const API_CACHE = `${CACHE_VERSION}-api`
