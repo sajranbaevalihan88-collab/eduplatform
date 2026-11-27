@@ -1,125 +1,72 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Единый движок SQL-лаборатории:
-//  • PostgreSQL 17 (WASM через @electric-sql/pglite — как на dbfiddle.dev)
-//  • SQLite 3      (WASM через sql.js)
-// Оба движка загружаются лениво и работают полностью локально в браузере.
+//  • PostgreSQL 17 (WASM через @electric-sql/pglite) в выделенном Web Worker:
+//    загрузка WASM, initdb и выполнение запросов не блокируют основной поток UI!
+//  • Мгновенный сброс схемы через DROP SCHEMA public CASCADE (< 5 мс вместо перезапуска WASM).
+//  • Тёплый singleton-воркер: повторное открытие /sql работает мгновенно.
+//  • Автоматический fallback на main-thread PGlite, если браузер ограничивает Worker.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type DbEngineKind = 'postgres' | 'sqlite'
+export * from './sqlTypes'
+import {
+  pgOidToName,
+  parseSqlError,
+  type DbEngineKind,
+  type SqlExecOutcome,
+  type SqlResultSet,
+  type SqlCommandNote,
+  type TableSchemaInfo,
+  type TableColumnInfo,
+} from './sqlTypes'
 
-export interface SqlColumnMeta {
-  name: string
-  typeName?: string
-}
+// ── Shared warm PostgreSQL Web Worker RPC client ──
+let sharedWorker: Worker | null = null
+let workerFailed = false
+let rpcSeq = 1
+const pendingRpc = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>()
 
-export interface SqlResultSet {
-  columns: SqlColumnMeta[]
-  rows: unknown[][]
-  command?: string
-  rowCount?: number
-}
-
-export interface SqlCommandNote {
-  command: string
-  rowCount?: number
-}
-
-export interface SqlErrorDetail {
-  message: string
-  code?: string
-  detail?: string
-  hint?: string
-  line?: number
-  col?: number
-  snippet?: string
-}
-
-export interface SqlExecOutcome {
-  results: SqlResultSet[]
-  notices: SqlCommandNote[]
-  durationMs: number
-  error?: SqlErrorDetail
-}
-
-export interface TableColumnInfo {
-  name: string
-  type: string
-  nullable: boolean
-  isPk: boolean
-  fkTarget?: { table: string; column: string }
-  defaultVal?: string | null
-}
-
-export interface TableSchemaInfo {
-  name: string
-  kind: 'table' | 'view'
-  rowCount: number
-  columns: TableColumnInfo[]
-}
-
-// Справочник PostgreSQL OID → понятное название типа колонки
-const PG_OID_MAP: Record<number, string> = {
-  16: 'bool',
-  17: 'bytea',
-  20: 'bigint',
-  21: 'smallint',
-  23: 'int4',
-  25: 'text',
-  26: 'oid',
-  114: 'json',
-  700: 'float4',
-  701: 'float8',
-  1000: 'bool[]',
-  1005: 'int2[]',
-  1007: 'int4[]',
-  1009: 'text[]',
-  1015: 'varchar[]',
-  1016: 'int8[]',
-  1042: 'char',
-  1043: 'varchar',
-  1082: 'date',
-  1083: 'time',
-  1114: 'timestamp',
-  1184: 'timestamptz',
-  1186: 'interval',
-  1700: 'numeric',
-  2950: 'uuid',
-  3802: 'jsonb',
-  3807: 'jsonb[]',
-}
-
-export function pgOidToName(oid?: number): string | undefined {
-  if (!oid) return undefined
-  return PG_OID_MAP[oid] || `oid:${oid}`
-}
-
-function posToLineCol(sql: string, pos1Based: number): { line: number; col: number; snippet: string } {
-  const idx = Math.max(0, Math.min(sql.length, pos1Based - 1))
-  const before = sql.slice(0, idx)
-  const lines = before.split('\n')
-  const line = lines.length
-  const col = lines[lines.length - 1].length + 1
-  const allLines = sql.split('\n')
-  const rawLine = allLines[line - 1] ?? ''
-  const caret = ' '.repeat(Math.max(0, col - 1)) + '^'
-  return { line, col, snippet: `${rawLine}\n${caret}` }
-}
-
-function parseSqlError(err: any, sql: string): SqlErrorDetail {
-  const message = String(err?.message || err || 'Неизвестная ошибка SQL')
-  const out: SqlErrorDetail = { message }
-  if (err?.code) out.code = String(err.code)
-  if (err?.detail) out.detail = String(err.detail)
-  if (err?.hint) out.hint = String(err.hint)
-  const posNum = err?.position ? parseInt(String(err.position), 10) : NaN
-  if (!Number.isNaN(posNum) && posNum > 0) {
-    const lc = posToLineCol(sql, posNum)
-    out.line = lc.line
-    out.col = lc.col
-    out.snippet = lc.snippet
+function getPgWorker(): Worker | null {
+  if (workerFailed || typeof Worker === 'undefined') return null
+  if (sharedWorker) return sharedWorker
+  try {
+    const w = new Worker(new URL('./pgWorker.ts', import.meta.url), { type: 'module' })
+    w.onmessage = (ev: MessageEvent) => {
+      const { id, ok, result, error } = ev.data || {}
+      const entry = pendingRpc.get(id)
+      if (!entry) return
+      pendingRpc.delete(id)
+      if (ok) entry.resolve(result)
+      else entry.reject(new Error(error || 'PostgreSQL worker error'))
+    }
+    w.onerror = (err) => {
+      workerFailed = true
+      sharedWorker = null
+      const msg = new Error(err?.message || 'PostgreSQL worker failed')
+      for (const [, entry] of pendingRpc) entry.reject(msg)
+      pendingRpc.clear()
+      try { w.terminate() } catch {}
+    }
+    sharedWorker = w
+    return w
+  } catch {
+    workerFailed = true
+    return null
   }
-  return out
 }
+
+function callPgWorker<T = any>(op: 'init' | 'reset' | 'exec' | 'inspect' | 'close', sql?: string): Promise<T> {
+  const w = getPgWorker()
+  if (!w) return Promise.reject(new Error('Web Worker unavailable'))
+  const id = rpcSeq++
+  return new Promise<T>((resolve, reject) => {
+    pendingRpc.set(id, { resolve, reject })
+    w.postMessage({ id, op, sql })
+  })
+}
+
+// ── Fallback main-thread PGlite singleton (used only if Web Worker is blocked) ──
+let fallbackPg: any = null
+let fallbackPgVer = 'PostgreSQL 17'
 
 interface SqlJsDb {
   run(sql: string): void
@@ -133,11 +80,10 @@ interface SqlJsEngine {
 
 export class SqlLabSession {
   private kind: DbEngineKind = 'postgres'
-  private pg: any = null
-  private pgCtor: any = null
+  private useWorker = true
   private sqliteEngine: SqlJsEngine | null = null
   private sqliteDb: SqlJsDb | null = null
-  public versionLabel = 'PostgreSQL WASM'
+  public versionLabel = 'PostgreSQL 17'
 
   getEngine(): DbEngineKind {
     return this.kind
@@ -147,14 +93,22 @@ export class SqlLabSession {
     this.kind = kind
     if (kind === 'postgres') {
       await this.closeSqlite()
-      if (!this.pgCtor) {
-        const mod = await import('@electric-sql/pglite')
-        this.pgCtor = mod.PGlite
+      if (!workerFailed && typeof Worker !== 'undefined') {
+        try {
+          const ver = await callPgWorker<string>('init')
+          this.useWorker = true
+          this.versionLabel = ver || 'PostgreSQL 17'
+          return this.versionLabel
+        } catch {
+          this.useWorker = false
+          workerFailed = true
+        }
+      } else {
+        this.useWorker = false
       }
-      await this.reset()
+      await this.ensureFallbackPg()
       return this.versionLabel
     } else {
-      await this.closePg()
       if (!this.sqliteEngine) {
         const initmod = (await import('sql.js')) as unknown as {
           default?: (cfg?: object) => Promise<SqlJsEngine>
@@ -169,21 +123,41 @@ export class SqlLabSession {
     }
   }
 
+  private async ensureFallbackPg(): Promise<void> {
+    if (!fallbackPg) {
+      const mod = await import('@electric-sql/pglite')
+      fallbackPg = await mod.PGlite.create()
+      try {
+        const vr = await fallbackPg.query('SELECT version() AS v')
+        const raw = String((vr?.rows?.[0] as any)?.v || '')
+        const m = raw.match(/PostgreSQL\s+([\d.]+)/i)
+        fallbackPgVer = m ? `PostgreSQL ${m[1]}` : 'PostgreSQL 17'
+      } catch {
+        fallbackPgVer = 'PostgreSQL 17'
+      }
+    }
+    this.versionLabel = fallbackPgVer
+  }
+
   async reset(): Promise<void> {
     if (this.kind === 'postgres') {
-      await this.closePg()
-      if (!this.pgCtor) {
-        const mod = await import('@electric-sql/pglite')
-        this.pgCtor = mod.PGlite
+      if (this.useWorker && !workerFailed) {
+        try {
+          const ver = await callPgWorker<string>('reset')
+          this.versionLabel = ver || this.versionLabel
+          return
+        } catch {
+          this.useWorker = false
+          workerFailed = true
+        }
       }
-      this.pg = await this.pgCtor.create()
+      await this.ensureFallbackPg()
       try {
-        const vr = await this.pg.query('SELECT version() AS v')
-        const raw = String(vr?.rows?.[0]?.v || '')
-        const m = raw.match(/PostgreSQL\s+([\d.]+)/i)
-        this.versionLabel = m ? `PostgreSQL ${m[1]}` : 'PostgreSQL 17'
+        await fallbackPg.exec('DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;')
       } catch {
-        this.versionLabel = 'PostgreSQL 17'
+        try { await fallbackPg?.close() } catch {}
+        fallbackPg = null
+        await this.ensureFallbackPg()
       }
     } else {
       await this.closeSqlite()
@@ -205,12 +179,20 @@ export class SqlLabSession {
     if (!trimmed) {
       return { results: [], notices: [], durationMs: 0 }
     }
-    const t0 = performance.now()
 
     if (this.kind === 'postgres') {
-      if (!this.pg) await this.reset()
+      if (this.useWorker && !workerFailed) {
+        try {
+          return await callPgWorker<SqlExecOutcome>('exec', trimmed)
+        } catch {
+          this.useWorker = false
+          workerFailed = true
+        }
+      }
+      const t0 = performance.now()
+      await this.ensureFallbackPg()
       try {
-        const rawList: any[] = await this.pg.exec(trimmed, { rowMode: 'array' })
+        const rawList: any[] = await fallbackPg.exec(trimmed, { rowMode: 'array' })
         const results: SqlResultSet[] = []
         const notices: SqlCommandNote[] = []
         for (const item of rawList || []) {
@@ -248,6 +230,7 @@ export class SqlLabSession {
         }
       }
     } else {
+      const t0 = performance.now()
       if (!this.sqliteDb) await this.reset()
       try {
         const raw = this.sqliteDb!.exec(trimmed)
@@ -281,21 +264,29 @@ export class SqlLabSession {
 
   async inspectSchema(): Promise<TableSchemaInfo[]> {
     if (this.kind === 'postgres') {
-      if (!this.pg) return []
+      if (this.useWorker && !workerFailed) {
+        try {
+          return await callPgWorker<TableSchemaInfo[]>('inspect')
+        } catch {
+          this.useWorker = false
+          workerFailed = true
+        }
+      }
+      if (!fallbackPg) return []
       try {
-        const tblRes = await this.pg.query(`
+        const tblRes = await fallbackPg.query(`
           SELECT table_name, table_type
           FROM information_schema.tables
           WHERE table_schema = 'public'
           ORDER BY table_type, table_name
         `)
-        const colsRes = await this.pg.query(`
+        const colsRes = await fallbackPg.query(`
           SELECT table_name, column_name, data_type, udt_name, is_nullable, column_default
           FROM information_schema.columns
           WHERE table_schema = 'public'
           ORDER BY table_name, ordinal_position
         `)
-        const pkRes = await this.pg.query(`
+        const pkRes = await fallbackPg.query(`
           SELECT kcu.table_name, kcu.column_name
           FROM information_schema.table_constraints tc
           JOIN information_schema.key_column_usage kcu
@@ -304,7 +295,7 @@ export class SqlLabSession {
           WHERE tc.table_schema = 'public'
             AND tc.constraint_type = 'PRIMARY KEY'
         `)
-        const fkRes = await this.pg.query(`
+        const fkRes = await fallbackPg.query(`
           SELECT
             kcu.table_name,
             kcu.column_name,
@@ -320,18 +311,11 @@ export class SqlLabSession {
           WHERE tc.table_schema = 'public'
             AND tc.constraint_type = 'FOREIGN KEY'
         `)
-
-        const pkSet = new Set<string>(
-          (pkRes.rows || []).map((r: any) => `${r.table_name}.${r.column_name}`)
-        )
+        const pkSet = new Set<string>((pkRes.rows || []).map((r: any) => `${r.table_name}.${r.column_name}`))
         const fkMap = new Map<string, { table: string; column: string }>()
         for (const r of fkRes.rows || []) {
-          fkMap.set(`${r.table_name}.${r.column_name}`, {
-            table: String(r.foreign_table),
-            column: String(r.foreign_column),
-          })
+          fkMap.set(`${r.table_name}.${r.column_name}`, { table: String(r.foreign_table), column: String(r.foreign_column) })
         }
-
         const colsByTable = new Map<string, TableColumnInfo[]>()
         for (const c of colsRes.rows || []) {
           const tname = String(c.table_name)
@@ -349,7 +333,6 @@ export class SqlLabSession {
           })
           colsByTable.set(tname, list)
         }
-
         const out: TableSchemaInfo[] = []
         for (const t of tblRes.rows || []) {
           const name = String(t.table_name)
@@ -357,15 +340,10 @@ export class SqlLabSession {
           let rowCount = 0
           try {
             const safeIdent = name.replace(/"/g, '""')
-            const cnt = await this.pg.query(`SELECT COUNT(*)::int AS c FROM "public"."${safeIdent}"`)
+            const cnt = await fallbackPg.query(`SELECT COUNT(*)::int AS c FROM "public"."${safeIdent}"`)
             rowCount = Number(cnt.rows?.[0]?.c || 0)
           } catch {}
-          out.push({
-            name,
-            kind,
-            rowCount,
-            columns: colsByTable.get(name) || [],
-          })
+          out.push({ name, kind, rowCount, columns: colsByTable.get(name) || [] })
         }
         return out
       } catch {
@@ -423,13 +401,6 @@ export class SqlLabSession {
     }
   }
 
-  private async closePg() {
-    if (this.pg) {
-      try { await this.pg.close() } catch {}
-      this.pg = null
-    }
-  }
-
   private async closeSqlite() {
     if (this.sqliteDb) {
       try { this.sqliteDb.close() } catch {}
@@ -438,7 +409,7 @@ export class SqlLabSession {
   }
 
   async destroy() {
-    await this.closePg()
+    // Keep the warm PostgreSQL Web Worker alive across route switches so re-opening /sql is instant!
     await this.closeSqlite()
   }
 }
@@ -459,7 +430,6 @@ const SQL_KEYWORDS = new Set([
 const NEWLINE_CLAUSES = /\b(SELECT|FROM|WHERE|LEFT JOIN|RIGHT JOIN|INNER JOIN|FULL JOIN|JOIN|GROUP BY|HAVING|ORDER BY|LIMIT|OFFSET|RETURNING|UNION ALL|UNION)\b/gi
 
 export function formatSqlLite(sql: string): string {
-  // Сохраняем строковые литералы и -- комментарии нетронутыми
   const tokens: string[] = []
   const masked = sql.replace(/('(?:''|[^'])*'|--[^\n]*|\/\*[\s\S]*?\*\/)/g, m => {
     const id = tokens.push(m) - 1
@@ -469,7 +439,6 @@ export function formatSqlLite(sql: string): string {
     const u = w.toUpperCase()
     return SQL_KEYWORDS.has(u) ? u : w
   })
-  // Если запрос написан в одну строку (простой SELECT), раскладываем по клаузам
   let out = upper
   if (out.split('\n').length <= 2 && /^\s*(SELECT|WITH)\b/i.test(out)) {
     out = out

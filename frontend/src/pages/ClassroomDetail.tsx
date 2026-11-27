@@ -107,6 +107,7 @@ export default function ClassroomDetail() {
   const [payInfo, setPayInfo] = useState<any>(null)
   const [pendingPays, setPendingPays] = useState<any[]>([])
   const [paidOpen, setPaidOpen] = useState(false)
+  const [pIsPaid, setPIsPaid] = useState(false)
   const [pPrice, setPPrice] = useState('')
   const [pDetails, setPDetails] = useState('')
   const [pBusy, setPBusy] = useState(false)
@@ -185,9 +186,21 @@ export default function ClassroomDetail() {
   }, [])
 
   if (!room) return <div className="p-8 text-center"><div className="skeleton h-32 rounded-2xl max-w-2xl mx-auto" /></div>
-  const isOwner = String(room.owner) === String(meId) || isAdmin
+  const isOwner = room.my_status === 'owner' || String(room.owner) === String(meId) || isAdmin
   // платный класс и текущий ученик ещё не подтверждён владельцем
   const needsPay = !isOwner && !isParent && room.is_paid && room.my_status === 'pending'
+
+  const openPaidSettings = () => {
+    setPaidOpen(v => {
+      const next = !v
+      if (next) {
+        setPIsPaid(!!room.is_paid)
+        setPPrice(room.price != null ? String(parseFloat(String(room.price))) : '')
+        setPDetails(room.payment_details || '')
+      }
+      return next
+    })
+  }
 
   const openEditClass = () => {
     setEcTitle(room.title || '')
@@ -487,9 +500,28 @@ export default function ClassroomDetail() {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isOwner && (
             <>
+              <button
+                type="button"
+                onClick={openPaidSettings}
+                data-testid="paid-header-btn"
+                className={`flex items-center gap-1.5 px-3.5 py-2.5 min-h-[44px] rounded-xl border text-xs sm:text-sm font-bold transition ${
+                  room.is_paid || paidOpen
+                    ? 'bg-amber-400 border-amber-300 text-slate-950 hover:bg-amber-300 shadow-sm'
+                    : 'bg-white/15 border-white/30 text-white hover:bg-white/25'
+                }`}
+                title="Платный курс и оплата по QR"
+              >
+                <Wallet size={15} />
+                <span>{room.is_paid ? 'Платный курс' : 'Сделать платным'}</span>
+                {pendingPays.length > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-extrabold leading-none">
+                    {pendingPays.length}
+                  </span>
+                )}
+              </button>
               <button onClick={openEditClass} className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-white/15 border border-white/30 flex items-center justify-center hover:bg-white/25" title="Настройки класса" aria-label="Настройки класса">
                 <Settings size={16} />
               </button>
@@ -503,6 +535,136 @@ export default function ClassroomDetail() {
           )}
         </div>
       </div>
+
+      {/* Панель настроек платного курса — доступна сразу с любой вкладки по кнопке в шапке */}
+      {isOwner && paidOpen && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-amber-300/80 dark:border-amber-800/70 p-4 sm:p-5 space-y-3.5 shadow-sm" data-testid="paid-panel-top">
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+              <Wallet size={18} className="text-amber-500" /> Платный курс и оплата по QR
+            </div>
+            <button type="button" onClick={() => setPaidOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-white">
+              <X size={16} />
+            </button>
+          </div>
+          <label className="flex items-center gap-2.5 text-sm font-semibold text-slate-800 dark:text-white cursor-pointer">
+            <input
+              type="checkbox"
+              checked={pIsPaid}
+              onChange={e => {
+                const next = e.target.checked
+                setPIsPaid(next)
+                savePaid({ is_paid: next }, true)
+              }}
+              className="w-4 h-4 accent-amber-600"
+            />
+            <span>Включить платный доступ</span>
+          </label>
+          <div className="text-xs text-slate-500 dark:text-slate-400 -mt-1.5">
+            При включении <b>все текущие ученики</b> без подтверждения перейдут в статус «ждёт оплаты» — кто уже заплатил, подтверди кнопкой «Принять» ниже или во вкладке «Люди».
+          </div>
+          <div className="grid sm:grid-cols-2 gap-2.5">
+            <input
+              value={pPrice}
+              onChange={e => setPPrice(e.target.value)}
+              placeholder="Цена, сом (например 500)"
+              inputMode="decimal"
+              data-testid="paid-price"
+              className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm focus-ring"
+            />
+            <input
+              value={pDetails}
+              onChange={e => setPDetails(e.target.value)}
+              placeholder="Реквизиты: Мбанк 0500123456 / карта"
+              data-testid="paid-details"
+              className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm focus-ring"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const shouldEnable = pIsPaid || pPrice.trim() !== '' || pDetails.trim() !== ''
+                setPIsPaid(shouldEnable)
+                savePaid({ is_paid: shouldEnable, price: pPrice, payment_details: pDetails }, true)
+              }}
+              disabled={pBusy}
+              data-testid="paid-save"
+              className="px-5 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-50 transition"
+            >
+              {pBusy ? '…' : 'Сохранить'}
+            </button>
+            {room.is_paid && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPIsPaid(false)
+                  savePaid({ is_paid: false }, false)
+                }}
+                disabled={pBusy}
+                className="px-4 py-2.5 min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-semibold transition"
+              >
+                Сделать бесплатным
+              </button>
+            )}
+          </div>
+          {(room.is_paid || pIsPaid) && (
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">QR твоего банка — ученики сканируют и платят напрямую</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Открой приложение банка → «Мой QR-код» / «Получить перевод» → сделай скриншот → загрузи сюда. Плюс продублируй номер в реквизитах выше.</div>
+                <div className="flex items-start gap-3 mt-2.5">
+                  {room.payment_qr ? (
+                    <>
+                      <img src={mediaUrl(room.payment_qr)} alt="QR банка" className="w-36 h-36 object-contain rounded-xl border border-slate-200 dark:border-slate-600 bg-white" data-testid="paid-qr-bank" />
+                      <div className="space-y-2">
+                        <label className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-white text-sm font-semibold cursor-pointer inline-block hover:bg-slate-200 dark:hover:bg-slate-700">
+                          Заменить
+                          <input type="file" accept="image/*" className="hidden" onChange={e => uploadQr(e.target.files?.[0])} />
+                        </label>
+                        <button type="button" onClick={removeQr} className="px-4 py-2 rounded-xl bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 text-sm font-semibold block">Удалить</button>
+                      </div>
+                    </>
+                  ) : (
+                    <label className="px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold cursor-pointer inline-flex items-center gap-1.5 transition" data-testid="paid-qr-upload">
+                      📷 Загрузить QR из банка
+                      <input type="file" accept="image/*" className="hidden" onChange={e => uploadQr(e.target.files?.[0])} />
+                    </label>
+                  )}
+                </div>
+              </div>
+              {payInfo?.qr && (
+                <div className="flex items-start gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <img src={payInfo.qr} alt="Запасной QR с реквизитами" className="w-24 h-24 rounded-lg border dark:border-slate-600 bg-white" />
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Запасной QR с текстом реквизитов — покажется ученику, если свой QR банка не загружен.</div>
+                </div>
+              )}
+            </div>
+          )}
+          {pendingPays.length > 0 && (
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
+              <div className="text-sm font-semibold text-slate-900 dark:text-white mb-1.5">«Я оплатил» — ждут подтверждения ({pendingPays.length}):</div>
+              {pendingPays.map((p: any) => (
+                <div key={p.id} className="flex items-center gap-2.5 py-1.5">
+                  {p.receipt ? (
+                    <a href={mediaUrl(p.receipt)} target="_blank" rel="noopener noreferrer" title="Открыть чек полностью">
+                      <img src={mediaUrl(p.receipt)} alt={`Чек: ${p.student_name}`} className="w-12 h-12 object-cover rounded-lg border dark:border-slate-600" data-testid={`receipt-${p.student}`} />
+                    </a>
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg border border-dashed dark:border-slate-600 flex items-center justify-center text-slate-400 text-xs">нет чека</div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{p.student_name}</div>
+                    <div className="text-xs text-slate-400">{p.paid_requested_at ? new Date(p.paid_requested_at).toLocaleString() : ''}</div>
+                  </div>
+                  <button type="button" onClick={() => approvePay(p.student)} data-testid={`pay-approve-${p.student}`} className="ml-auto px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold">Принять</button>
+                  <button type="button" onClick={() => declinePay(p.student)} className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold">Отклонить</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {isOwner && editClassOpen && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 p-4 space-y-3 shadow-sm" data-testid="edit-class-form">
@@ -601,9 +763,9 @@ export default function ClassroomDetail() {
       )}
 
       <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 overflow-hidden">
-        <div className="flex overflow-x-auto sm:grid sm:grid-flow-col sm:auto-cols-fr border-b dark:border-slate-700">
+        <div className="flex overflow-x-auto tab-scroll lg:grid lg:grid-flow-col lg:auto-cols-fr border-b dark:border-slate-700">
           {tabs.map(tb => (
-            <button key={tb.k} onClick={() => setTab(tb.k)} className={`py-3 min-h-[46px] px-3 text-[13px] sm:text-sm font-semibold flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap ${tab === tb.k ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+            <button key={tb.k} onClick={() => setTab(tb.k)} className={`py-3 min-h-[46px] px-3.5 text-[13px] sm:text-sm font-semibold flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap ${tab === tb.k ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
               <tb.icon size={15} className="shrink-0" /> <span>{tb.label}</span>
             </button>
           ))}
@@ -613,15 +775,15 @@ export default function ClassroomDetail() {
           {tab === 'stream' && (
             <div className="space-y-4">
               {isOwner && (
-                <div className="flex gap-2">
-                  <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && post()} placeholder={t('cls_announce_ph')} className="flex-1 min-w-0 px-4 py-2.5 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-indigo-400" />
-                  <button onClick={post} className="px-5 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 text-white font-semibold">{t('cls_publish')}</button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && post()} placeholder={t('cls_announce_ph')} className="w-full sm:flex-1 min-w-0 px-4 py-2.5 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-indigo-400" />
+                  <button onClick={post} className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 text-white font-semibold shrink-0">{t('cls_publish')}</button>
                 </div>
               )}
               {notes.map(n => (
                 <div key={n.id} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 border dark:border-slate-700">
                   <div className="text-sm whitespace-pre-wrap dark:text-slate-100">{n.text}</div>
-                  <div className="text-xs text-slate-400 mt-2 flex items-center gap-3">
+                  <div className="text-xs text-slate-400 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                     <span>{n.author_name} • {new Date(n.created_at).toLocaleString()}</span>
                     <button onClick={() => toggleComments(n.id)} className="ml-auto font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1" data-testid={`comm-btn-${n.id}`}>
                       <MessageSquare size={13} /> {t('cls_comments')} {(cmList[n.id]?.length || n.comments_count || 0) ? `(${cmList[n.id]?.length ?? n.comments_count ?? 0})` : ''}
@@ -845,10 +1007,10 @@ export default function ClassroomDetail() {
                         <Trash2 size={16} />
                       </button>
                     )}
-                    {!isOwner && a.kind === 'link' && a.url && <a href={a.url} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 min-h-[44px] rounded-xl bg-violet-50 text-violet-700 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14} /></a>}
+                    {!isOwner && a.kind === 'link' && a.url && <a href={a.url} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 min-h-[44px] rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14} /></a>}
                     {!isOwner && (a.kind === 'lesson' || a.kind === 'test') && (gone
                       ? <span className="px-3 py-2.5 min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 text-sm font-semibold flex items-center gap-1" title={t('cls_material_gone')}>{t('cls_material_gone')}</span>
-                      : <Link to={openTo} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-50 text-indigo-700 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14} /></Link>)}
+                      : <Link to={openTo} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-sm font-semibold flex items-center gap-1">{t('open')} <ExternalLink size={14} /></Link>)}
                     {!isOwner && !isParent && a.kind === 'write' && wOpen !== a.id && (
                       st !== 'submitted' && st !== 'late'
                         ? <button onClick={() => startWrite(a.id)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-amber-500 text-white text-sm font-semibold">{t('cls_write_do')}</button>
@@ -864,68 +1026,26 @@ export default function ClassroomDetail() {
 
           {tab === 'people' && (
             <div className="space-y-4">
-              {isOwner && (
-                <div className="rounded-xl border dark:border-slate-700 p-4" data-testid="paid-panel">
+              {isOwner && !paidOpen && (
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 p-4" data-testid="paid-panel">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="font-semibold dark:text-white flex items-center gap-2"><Wallet size={16} /> Платный курс</div>
-                    <button onClick={() => { setPaidOpen(v => !v); setPPrice(room.price != null ? String(room.price) : ''); setPDetails(room.payment_details || '') }} className="text-sm font-semibold text-indigo-700 dark:text-indigo-400" data-testid="paid-toggle">
-                      {paidOpen ? 'Скрыть' : (room.is_paid ? 'Настройки' : 'Сделать платным')}
+                    <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-2"><Wallet size={16} className="text-amber-500" /> Платный курс</div>
+                    <button
+                      type="button"
+                      onClick={() => { openPaidSettings(); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                      className="text-sm font-semibold text-indigo-700 dark:text-indigo-400 hover:underline"
+                      data-testid="paid-toggle"
+                    >
+                      {room.is_paid ? 'Настройки' : 'Сделать платным'}
                     </button>
                   </div>
-                  {room.is_paid && !paidOpen && (
+                  {room.is_paid && (
                     <div className="text-sm text-slate-600 dark:text-slate-300 mt-1">
                       Цена: <b>{fmtSom(room.price)} сом</b> • реквизиты: {room.payment_details || '—'} • ждут подтверждения: {pendingPays.length}
                     </div>
                   )}
-                  {paidOpen && (
-                    <div className="mt-3 space-y-3">
-                      <label className="flex items-center gap-2 text-sm dark:text-white">
-                        <input type="checkbox" checked={!!room.is_paid} onChange={e => savePaid({ is_paid: e.target.checked }, true)} className="w-4 h-4" />
-                        Включить платный доступ
-                      </label>
-                      <div className="text-xs text-slate-500 dark:text-slate-400 -mt-2">При включении <b>все текущие ученики</b> перейдут в статус «ждёт оплаты» — кто уже заплатил, подтверди кнопкой «Оплату принял» в списке ниже.</div>
-                      <div className="grid sm:grid-cols-2 gap-2">
-                        <input value={pPrice} onChange={e => setPPrice(e.target.value)} placeholder="Цена, сом (например 500)" inputMode="decimal" data-testid="paid-price" className="px-3 py-2 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white" />
-                        <input value={pDetails} onChange={e => setPDetails(e.target.value)} placeholder="Реквизиты: Мбанк 0500123456 / карта" data-testid="paid-details" className="px-3 py-2 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white" />
-                      </div>
-                      <button onClick={() => savePaid({ is_paid: !!room.is_paid, price: pPrice, payment_details: pDetails })} disabled={pBusy} data-testid="paid-save" className="px-5 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 text-white font-semibold disabled:opacity-50">{pBusy ? '…' : 'Сохранить'}</button>
-                      {room.is_paid && (
-                        <div className="pt-2 border-t dark:border-slate-700 space-y-3">
-                          <div>
-                            <div className="text-sm font-semibold dark:text-white">QR твоего банка — ученики сканируют и платят напрямую</div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Открой приложение банка → «Мой QR-код» / «Получить перевод» → сделай скриншот → загрузи сюда. Плюс продублируй номер в реквизитах выше — ученик сможет скопировать.</div>
-                            <div className="flex items-start gap-3 mt-2">
-                              {room.payment_qr ? (
-                                <>
-                                  <img src={mediaUrl(room.payment_qr)} alt="QR банка" className="w-36 h-36 object-contain rounded-xl border dark:border-slate-600 bg-white" data-testid="paid-qr-bank" />
-                                  <div className="space-y-2">
-                                    <label className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white text-sm font-semibold cursor-pointer inline-block hover:bg-slate-200 dark:hover:bg-slate-700">
-                                      Заменить
-                                      <input type="file" accept="image/*" className="hidden" onChange={e => uploadQr(e.target.files?.[0])} />
-                                    </label>
-                                    <button onClick={removeQr} className="px-4 py-2 rounded-xl bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 text-sm font-semibold block">Удалить</button>
-                                  </div>
-                                </>
-                              ) : (
-                                <label className="px-4 py-2.5 min-h-[44px] rounded-xl bg-indigo-600 text-white text-sm font-semibold cursor-pointer inline-flex items-center gap-1" data-testid="paid-qr-upload">
-                                  📷 Загрузить QR из банка
-                                  <input type="file" accept="image/*" className="hidden" onChange={e => uploadQr(e.target.files?.[0])} />
-                                </label>
-                              )}
-                            </div>
-                          </div>
-                          {payInfo?.qr && (
-                            <div className="flex items-start gap-3 pt-2 border-t dark:border-slate-700">
-                              <img src={payInfo.qr} alt="Запасной QR с реквизитами" className="w-24 h-24 rounded-lg border dark:border-slate-600 bg-white" />
-                              <div className="text-xs text-slate-500 dark:text-slate-400">Запасной QR с текстом реквизитов — покажется ученику, если свой QR банка не загружен.</div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
                   {pendingPays.length > 0 && (
-                    <div className="mt-3 pt-3 border-t dark:border-slate-700">
+                    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
                       <div className="text-sm font-semibold dark:text-white mb-1">«Я оплатил» — ждут подтверждения:</div>
                       {pendingPays.map((p: any) => (
                         <div key={p.id} className="flex items-center gap-2.5 py-1.5">
@@ -940,8 +1060,8 @@ export default function ClassroomDetail() {
                             <div className="text-sm font-semibold dark:text-slate-200">{p.student_name}</div>
                             <div className="text-xs text-slate-400">{p.paid_requested_at ? new Date(p.paid_requested_at).toLocaleString() : ''}</div>
                           </div>
-                          <button onClick={() => approvePay(p.student)} data-testid={`pay-approve-${p.student}`} className="ml-auto px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold">Принять</button>
-                          <button onClick={() => declinePay(p.student)} className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold">Отклонить</button>
+                          <button type="button" onClick={() => approvePay(p.student)} data-testid={`pay-approve-${p.student}`} className="ml-auto px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold">Принять</button>
+                          <button type="button" onClick={() => declinePay(p.student)} className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold">Отклонить</button>
                         </div>
                       ))}
                     </div>
@@ -963,15 +1083,15 @@ export default function ClassroomDetail() {
                         <div className="text-xs text-slate-500 dark:text-slate-400">Формат строк: <code className="font-mono">логин;Имя Фамилия;пароль (≥8 символов)</code>. Поддерживаются <b>.xlsx, .docx, .csv, .txt</b>.</div>
                         <label className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border dark:border-slate-600 text-xs font-semibold cursor-pointer hover:border-indigo-400 dark:text-slate-200">
                           📎 Загрузить файл (.xlsx, .docx, .csv, .txt)
-                          <input type="file" accept={TABLE_IMPORT_ACCEPT} className="hidden" onChange={async e=>{
-                            const f=e.target.files?.[0]; e.target.value=''
-                            if(!f) return
+                          <input type="file" accept={TABLE_IMPORT_ACCEPT} className="hidden" onChange={async e => {
+                            const f = e.target.files?.[0]; e.target.value = ''
+                            if (!f) return
                             try {
                               setBulkText(await parseImportedTableFile(f))
                             } catch {
                               toast('Не удалось прочитать файл', 'error')
                             }
-                          }}/>
+                          }} />
                         </label>
                       </div>
                       <textarea value={bulkText} onChange={e => setBulkText(e.target.value)} rows={4} placeholder={"asanov_a;Асанов Адилет;School2026!\nbekova_a;Бекова Айдана;School2026!"}
@@ -1143,7 +1263,7 @@ export default function ClassroomDetail() {
                     placeholder={t('cls_g_col_max')} aria-label={t('cls_g_col_max')} className="px-3 py-2 rounded-xl border w-24 text-center" />
                   <button data-testid="cls-colcreate" onClick={addCol} disabled={colBusy}
                     className="px-4 py-2 rounded-xl bg-indigo-600 dark:bg-indigo-600 text-white font-bold text-sm disabled:opacity-50">{t('cls_g_create')}</button>
-                  <button onClick={() => setColOpen(false)} className="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border text-sm">{t('cls_g_cancel')}</button>
+                  <button onClick={() => setColOpen(false)} className="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm">{t('cls_g_cancel')}</button>
                 </div>
               )}
               {(!gb || !(gb.assignments || []).length) && (
@@ -1161,7 +1281,7 @@ export default function ClassroomDetail() {
                               <span>{a.title.slice(0, 14)}{a.title.length > 14 ? '…' : ''}</span>
                               {a.kind === 'manual' && (
                                 <button onClick={() => delCol(a.id, a.title)} data-testid={`gb-delcol-${a.id}`}
-                                  title={t('cls_g_del')} aria-label={`${t('cls_g_del')}: ${a.title}`} className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 leading-none text-base">✕</button>
+                                  title={t('cls_g_del')} aria-label={`${t('cls_g_del')}: ${a.title}`} className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 dark:hover:text-red-300 leading-none text-base">✕</button>
                               )}
                             </div>
                             <div className="font-normal text-xs text-slate-400">max {a.max_score}</div>

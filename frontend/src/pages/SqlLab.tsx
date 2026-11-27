@@ -51,7 +51,7 @@ function loadSavedBlocks(): SqlBlock[] {
         return parsed
       }
     }
-  } catch {}
+  } catch { }
   return presetToBlocks(SQL_PRESETS[0])
 }
 
@@ -76,6 +76,7 @@ const completionTablesRef: { current: TableSchemaInfo[] } = { current: [] }
 
 export default function SqlLab() {
   const [phase, setPhase] = useState<'loading' | 'ready' | 'fail'>('loading')
+  const [editorsReady, setEditorsReady] = useState(false)
   const [initErr, setInitErr] = useState('')
   const [pgVersion, setPgVersion] = useState('PostgreSQL')
 
@@ -115,7 +116,7 @@ export default function SqlLab() {
         const arr = Array.isArray(r.data) ? r.data : r.data?.results || []
         setServerSqlTasks(arr.map((x: any) => ({ ...x, tests: x.tests || x.public_tests || [] })))
       })
-      .catch(() => {})
+      .catch(() => { })
     if (isTeacher && isAuth) {
       client
         .get('/classrooms/')
@@ -123,7 +124,7 @@ export default function SqlLab() {
           const arr = Array.isArray(r.data) ? r.data : r.data?.results || []
           setClassrooms(arr.map((c: any) => ({ id: c.id, title: c.title })))
         })
-        .catch(() => {})
+        .catch(() => { })
     }
   }, [isAuth, isTeacher])
 
@@ -133,13 +134,26 @@ export default function SqlLab() {
   const blocksRef = useRef(blocks)
   blocksRef.current = blocks
   const dbInitializedRef = useRef(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    // Даём браузеру сначала мгновенно отрисовать страницу, затем монтируем тяжёлые редакторы Monaco
+    const raf = requestAnimationFrame(() => {
+      if (mountedRef.current) setEditorsReady(true)
+    })
+    return () => {
+      mountedRef.current = false
+      cancelAnimationFrame(raf)
+    }
+  }, [])
 
   useEffect(() => {
     completionTablesRef.current = tables
   }, [tables])
 
   useEffect(() => {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(blocks)) } catch {}
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(blocks)) } catch { }
   }, [blocks])
 
   useEffect(() => {
@@ -230,25 +244,31 @@ export default function SqlLab() {
   const runOneRef = useRef(runOneBlock)
   runOneRef.current = runOneBlock
 
-  // Старт настоящего PostgreSQL (PGlite WASM) при открытии страницы
+  // Старт настоящего PostgreSQL (PGlite WASM в Web Worker — без зависания интерфейса)
   const bootPostgres = useCallback(async (initialBlocks?: SqlBlock[]) => {
     setPhase('loading')
     setInitErr('')
     try {
       if (!sessionRef.current) sessionRef.current = new SqlLabSession()
       const ver = await sessionRef.current.init('postgres')
+      if (!mountedRef.current) return
       setPgVersion(ver)
       setPhase('ready')
       await runAllBlocks(initialBlocks ?? blocksRef.current)
     } catch (e: any) {
+      if (!mountedRef.current) return
       setInitErr(String(e?.message || e))
       setPhase('fail')
     }
   }, [runAllBlocks])
 
   useEffect(() => {
-    bootPostgres()
+    // Откладываем старт воркера на следующий кадр, чтобы переход по клику «База данных» был мгновенным
+    const tid = window.setTimeout(() => {
+      if (mountedRef.current) bootPostgres()
+    }, 30)
     return () => {
+      window.clearTimeout(tid)
       sessionRef.current?.destroy()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -372,8 +392,8 @@ export default function SqlLab() {
       await refreshSchema()
 
       const lastTable = qOut.results[qOut.results.length - 1]
-      const cols = (lastTable?.columns || []).map((c) => c.name)
-      const rows = (lastTable?.rows || []) as any[][]
+      const cols: string[] = (lastTable?.columns || []).map((c) => c.name)
+      const rows: unknown[][] = lastTable?.rows || []
       const errMsg = qOut.error?.message || ''
 
       if (!activeTask.builtin) {
@@ -418,18 +438,19 @@ export default function SqlLab() {
         return
       }
 
-      const ev = evaluateSqlLocal(activeTask.tests || [], querySql, cols, rows, errMsg)
+      const maxPts = activeTask.max_score || 100
+      const ev = evaluateSqlLocal(activeTask.tests ?? [], querySql, cols, rows, errMsg, maxPts)
       setTaskReport({
         passed: ev.passed,
         score: ev.score,
-        max_score: activeTask.max_score,
+        max_score: maxPts,
         passed_tests: ev.passedTests,
         total_tests: ev.totalTests,
         results: ev.results,
       })
       toast(
         ev.passed
-          ? `Отлично! Задача решена (${ev.score}/${activeTask.max_score})`
+          ? `Отлично! Задача решена (${ev.score}/${maxPts})`
           : `Пройдено ${ev.passedTests} из ${ev.totalTests} проверок`,
         ev.passed ? 'success' : 'info'
       )
@@ -679,11 +700,10 @@ export default function SqlLab() {
         <button
           type="button"
           onClick={() => setShowTasksModal(true)}
-          className={`h-8 px-2.5 rounded-lg border text-xs font-semibold flex items-center gap-1 shrink-0 whitespace-nowrap ${
-            activeTask
-              ? 'bg-emerald-700 border-emerald-500 text-white'
-              : 'bg-[#21262d] hover:bg-[#30363d] border-[#30363d] text-emerald-300'
-          }`}
+          className={`h-8 px-2.5 rounded-lg border text-xs font-semibold flex items-center gap-1 shrink-0 whitespace-nowrap ${activeTask
+            ? 'bg-emerald-700 border-emerald-500 text-white'
+            : 'bg-[#21262d] hover:bg-[#30363d] border-[#30363d] text-emerald-300'
+            }`}
           title="Практические задачи PostgreSQL с автопроверкой"
         >
           <ClipboardCheck size={12} />
@@ -742,11 +762,10 @@ export default function SqlLab() {
                 key={tbl.name}
                 type="button"
                 onClick={() => setInspectedTable(active ? null : tbl.name)}
-                className={`px-2.5 py-0.5 rounded-md border text-[11.5px] font-mono flex items-center gap-1.5 shrink-0 transition ${
-                  active
-                    ? 'bg-sky-600 text-white border-sky-500'
-                    : 'bg-[#1a222d] hover:bg-[#222d3c] border-[#2c3645] text-slate-200'
-                }`}
+                className={`px-2.5 py-0.5 rounded-md border text-[11.5px] font-mono flex items-center gap-1.5 shrink-0 transition ${active
+                  ? 'bg-sky-600 text-white border-sky-500'
+                  : 'bg-[#1a222d] hover:bg-[#222d3c] border-[#2c3645] text-slate-200'
+                  }`}
                 title="Нажмите, чтобы увидеть колонки и содержимое таблицы"
               >
                 {tbl.kind === 'view' ? <Eye size={11} className="text-violet-300" /> : null}
@@ -881,11 +900,10 @@ export default function SqlLab() {
                       {taskReport.results.map((r, i) => (
                         <div
                           key={i}
-                          className={`px-2.5 py-1 rounded-lg border text-[11px] flex items-center gap-1.5 ${
-                            r.passed
-                              ? 'bg-emerald-950/50 border-emerald-700/60 text-emerald-200'
-                              : 'bg-rose-950/50 border-rose-700/60 text-rose-200'
-                          }`}
+                          className={`px-2.5 py-1 rounded-lg border text-[11px] flex items-center gap-1.5 ${r.passed
+                            ? 'bg-emerald-950/50 border-emerald-700/60 text-emerald-200'
+                            : 'bg-rose-950/50 border-rose-700/60 text-rose-200'
+                            }`}
                         >
                           {r.passed ? <CheckCircle2 size={12} className="text-emerald-400 shrink-0" /> : <XCircle size={12} className="text-rose-400 shrink-0" />}
                           <span>{r.label}</span>
@@ -907,17 +925,16 @@ export default function SqlLab() {
               return (
                 <div
                   key={blk.id}
-                  className={`rounded-xl border overflow-hidden transition ${
-                    out?.error ? 'border-rose-700/80 bg-[#141921]' : 'border-[#27303d] bg-[#141921]'
-                  }`}
+                  className={`rounded-xl border overflow-hidden transition ${out?.error ? 'border-rose-700/80 bg-[#141921]' : 'border-[#27303d] bg-[#141921]'
+                    }`}
                 >
                   {/* Шапка блока */}
-                  <div className="px-2.5 sm:px-3 py-2 bg-[#181f29] border-b border-[#242d3a] flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <div className="px-2.5 sm:px-3 py-2 bg-[#181f29] border-b border-[#242d3a] flex items-center gap-1.5 sm:gap-2">
                     {isSchema && (
                       <button
                         type="button"
                         onClick={() => setCollapsedSchema(v => !v)}
-                        className="p-0.5 rounded hover:bg-white/10 text-slate-400"
+                        className="p-0.5 rounded hover:bg-white/10 text-slate-400 shrink-0"
                         title={isCollapsed ? 'Развернуть код создания таблиц' : 'Свернуть код создания таблиц'}
                       >
                         {isCollapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
@@ -927,11 +944,13 @@ export default function SqlLab() {
                     <input
                       value={blk.title}
                       onChange={e => updateBlock(blk.id, { title: e.target.value })}
-                      className="bg-transparent text-xs sm:text-sm font-bold text-slate-100 outline-none flex-1 min-w-[100px]"
+                      aria-label="Название SQL-блока"
+                      data-compact-input="1"
+                      className="bg-transparent text-xs sm:text-sm font-bold text-slate-100 outline-none flex-1 min-w-0 truncate"
                     />
 
                     {out && !out.error && (
-                      <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1 shrink-0">
+                      <span className="text-[11px] font-mono text-emerald-400 hidden sm:flex items-center gap-1 shrink-0">
                         <CircleCheck size={12} /> {out.durationMs} ms
                       </span>
                     )}
@@ -940,11 +959,12 @@ export default function SqlLab() {
                       type="button"
                       disabled={phase !== 'ready' || isRunning || runningAll}
                       onClick={() => runOneBlock(blk.id, false)}
-                      className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1 shrink-0"
+                      className="px-2.5 sm:px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1 shrink-0"
                       title="Выполнить этот блок (Ctrl+Enter)"
                     >
                       {isRunning ? <Loader2 size={12} className="animate-spin" /> : <Play size={11} className="fill-white" />}
-                      <span>Выполнить</span>
+                      <span className="hidden sm:inline">Выполнить</span>
+                      <span className="sm:hidden">Пуск</span>
                     </button>
 
                     {!isSchema && (
@@ -974,17 +994,21 @@ export default function SqlLab() {
                   {/* Код SQL */}
                   {!isCollapsed && (
                     <div style={{ height: calcEditorHeight(blk.sql) }} className="relative bg-[#1e1e1e]">
-                      <Editor
-                        height="100%"
-                        path={`pg-blk-${blk.id}`}
-                        language="sql"
-                        value={blk.sql}
-                        onChange={v => updateBlock(blk.id, { sql: v || '' })}
-                        onMount={mountEditor(blk.id)}
-                        theme="vs-dark"
-                        options={editorOpts}
-                        loading={<div className="flex items-center justify-center h-full text-slate-500 text-xs">Загрузка редактора…</div>}
-                      />
+                      {editorsReady ? (
+                        <Editor
+                          height="100%"
+                          path={`pg-blk-${blk.id}`}
+                          language="sql"
+                          value={blk.sql}
+                          onChange={v => updateBlock(blk.id, { sql: v || '' })}
+                          onMount={mountEditor(blk.id)}
+                          theme="vs-dark"
+                          options={editorOpts}
+                          loading={<div className="flex items-center justify-center h-full text-slate-500 text-xs">Загрузка редактора…</div>}
+                        />
+                      ) : (
+                        <pre className="h-full overflow-hidden p-3 text-xs font-mono text-slate-400 whitespace-pre-wrap">{blk.sql}</pre>
+                      )}
                     </div>
                   )}
 

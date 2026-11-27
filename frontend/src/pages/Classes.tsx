@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import client from '../api/client'
-import { GraduationCap, Plus, Copy, Check, LogOut, Users, UsersRound, Search } from 'lucide-react'
+import { GraduationCap, Plus, Copy, Check, LogOut, Users, UsersRound, Search, Wallet } from 'lucide-react'
 import { useLang } from '../context/LangContext'
 import { canTeach, getRole } from '../utils/role'
 import { toast } from '../context/UIContext'
@@ -19,7 +19,7 @@ export default function Classes(){
   const [search,setSearch]=useState('')
   const [code,setCode]=useState('')
   const [creating,setCreating]=useState(false)
-  const [form,setForm]=useState({title:'',description:'',color:'#3B82F6',subject:''})
+  const [form,setForm]=useState({title:'',description:'',color:'#3B82F6',subject:'',is_paid:false,price:'',payment_details:''})
   const [subjects,setSubjects]=useState<any[]>([])
   const [copied,setCopied]=useState<number|null>(null)
   const role = getRole()
@@ -58,10 +58,24 @@ export default function Classes(){
   const create=async()=>{
     if(!form.title.trim()){ toast(t('cls_need_title'),'error'); return }
     try{
-      const payload: any = { title: form.title.trim(), description: form.description, color: form.color }
+      const payload: any = {
+        title: form.title.trim(),
+        description: form.description,
+        color: form.color,
+        is_paid: !!form.is_paid,
+      }
       if (form.subject) payload.subject = Number(form.subject)
+      if (form.is_paid) {
+        const raw = String(form.price || '').trim().replace(',', '.')
+        if (raw !== '') {
+          const num = Number(raw)
+          if (isNaN(num) || num < 0) { toast('Цена — число больше 0', 'error'); return }
+          payload.price = num
+        }
+        payload.payment_details = form.payment_details.trim()
+      }
       await client.post('/classrooms/', payload)
-      setForm({title:'',description:'',color:'#3B82F6',subject:''}); setCreating(false); load()
+      setForm({title:'',description:'',color:'#3B82F6',subject:'',is_paid:false,price:'',payment_details:''}); setCreating(false); load()
       toast(t('cls_created'),'success')
     }catch(e:any){ toast(e?.response?.data?.detail||t('cls_err'),'error') }
   }
@@ -144,6 +158,38 @@ export default function Classes(){
             </select>
           </div>
           <textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder={t('cls_desc_ph')} rows={2} className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-700 bg-transparent dark:text-white dark:placeholder-slate-500 outline-none focus:border-indigo-400"/>
+          <div className="p-3.5 rounded-xl border border-amber-200/80 dark:border-amber-800/60 bg-amber-50/60 dark:bg-amber-950/25 space-y-2.5">
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-amber-100 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.is_paid}
+                onChange={e=>setForm({...form, is_paid: e.target.checked})}
+                data-testid="cls-new-paid"
+                className="w-4 h-4 accent-amber-600"
+              />
+              <Wallet size={15} className="text-amber-600 dark:text-amber-400"/>
+              <span>Сделать платным курсом</span>
+            </label>
+            {form.is_paid && (
+              <div className="grid sm:grid-cols-2 gap-2 pt-0.5">
+                <input
+                  value={form.price}
+                  onChange={e=>setForm({...form, price: e.target.value})}
+                  placeholder="Цена, сом (например 500)"
+                  inputMode="decimal"
+                  data-testid="cls-new-price"
+                  className="px-3 py-2 rounded-xl border border-amber-300/80 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm outline-none focus:border-amber-500"
+                />
+                <input
+                  value={form.payment_details}
+                  onChange={e=>setForm({...form, payment_details: e.target.value})}
+                  placeholder="Реквизиты: Мбанк 0500123456 / карта"
+                  data-testid="cls-new-details"
+                  className="px-3 py-2 rounded-xl border border-amber-300/80 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm outline-none focus:border-amber-500"
+                />
+              </div>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-2 justify-between">
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               {COLORS.map(c => (
@@ -166,9 +212,16 @@ export default function Classes(){
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {rooms.map(r=>(
           <div key={r.id} className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-700 overflow-hidden card-hover">
-            <div className="h-20 flex items-end justify-between p-4" style={{background:r.color}}>
-              <GraduationCap className="text-white/90" size={28}/>
-              {r.subject_name && <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-black/20 text-white backdrop-blur-sm">{r.subject_name}</span>}
+            <div className="h-20 flex items-end justify-between gap-2 p-4" style={{background:r.color}}>
+              <GraduationCap className="text-white/90 shrink-0" size={28}/>
+              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                {r.is_paid && (
+                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-400 text-slate-950 shadow-sm">
+                    💰 {r.price != null ? `${parseFloat(String(r.price))} сом` : 'Платный'}
+                  </span>
+                )}
+                {r.subject_name && <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-black/20 text-white backdrop-blur-sm">{r.subject_name}</span>}
+              </div>
             </div>
             <div className="p-4 space-y-2">
               <div>

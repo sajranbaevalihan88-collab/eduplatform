@@ -88,11 +88,11 @@ export default function Lessons(){
         ))}
       </div>
       {filtered.length===0 && (
-        <div className="text-center py-16 bg-white rounded-2xl border border-slate-100 px-6" data-testid="lessons-empty">
+        <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 px-6" data-testid="lessons-empty">
           <div className="text-4xl mb-3">📘</div>
-          <div className="text-slate-400 mb-5">
+          <div className="text-slate-500 dark:text-slate-400 mb-5">
             {q ? (
-              <div>{t('lessons_nothing_found')} "<b>{q}</b>" <button onClick={()=>setQ('')} className="ml-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 text-sm">{t('lessons_reset_short')}</button></div>
+              <div>{t('lessons_nothing_found')} "<b>{q}</b>" <button onClick={()=>setQ('')} className="ml-2 px-3 py-1 rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-sm">{t('lessons_reset_short')}</button></div>
             ) : (
               t('lessons_empty')
             )}

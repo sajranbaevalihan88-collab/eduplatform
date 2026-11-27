@@ -52,7 +52,9 @@ class ClassroomSerializer(serializers.ModelSerializer):
         return 'active'
 
     def get_pending_count(self, obj):
-        return obj.enrollments.filter(status='pending').count()
+        if not obj.is_paid:
+            return 0
+        return obj.enrollments.filter(access_granted=False).count()
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):

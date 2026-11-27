@@ -1250,8 +1250,8 @@ export default function VSCodeEditor(){
 
         {/* Editor */}
         <div className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e]">
-          <div className="bg-[#252526] flex flex-col sm:flex-row sm:h-9 sm:items-stretch border-b border-[#2d2d2d] shrink-0">
-            <div className="hidden sm:flex flex-1 items-center min-w-0 overflow-x-auto tab-scroll">
+          <div className="bg-[#252526] flex flex-col xl:flex-row xl:h-9 xl:items-stretch border-b border-[#2d2d2d] shrink-0">
+            <div className="hidden xl:flex flex-1 items-center min-w-0 overflow-x-auto tab-scroll">
             {files.map(f=>(
               <div key={f.id} onClick={()=>setActiveId(f.id)} className={`h-full flex items-center gap-1.5 px-2.5 border-r border-[#2d2d2d] cursor-pointer text-xs whitespace-nowrap shrink-0 ${activeId===f.id?'bg-[#1e1e1e] text-white border-t-2 border-t-[#007acc]':'bg-[#2d2d2d] text-slate-400 hover:text-white'}`}>
                 <FileIcon name={f.name} content={f.content}/>
@@ -1260,42 +1260,46 @@ export default function VSCodeEditor(){
               </div>
             ))}
             </div>
-            <div className="flex items-center gap-1 px-1.5 py-1 sm:py-0.5 sm:ml-auto shrink-0 overflow-x-auto tab-scroll">
-              <button onClick={()=>setFilesOpen(v=>!v)} className="h-8 w-8 rounded hover:bg-white/10 text-slate-300 text-xs md:hidden flex items-center justify-center shrink-0" title="Файлы"><Files size={14}/></button>
-              <button onClick={()=>setShowTemplatesModal(true)} className="h-8 sm:h-6 px-2 rounded bg-[#333333] hover:bg-[#3e3e42] text-sky-300 text-xs font-medium flex items-center justify-center gap-1 shrink-0" title="Готовые шаблоны (HTML/CSS/JS с картинками, Canvas-игра, Python)">
-                <LayoutTemplate size={12}/><span className="hidden md:inline">Шаблоны</span>
-              </button>
-              <button onClick={()=>setShowTasksModal(true)} className={`h-8 sm:h-6 px-2 rounded text-xs font-medium flex items-center justify-center gap-1 shrink-0 ${activeTask ? 'bg-emerald-700 text-white' : 'bg-[#333333] hover:bg-[#3e3e42] text-emerald-300'}`} title="Практические задачи с автопроверкой">
-                <ClipboardCheck size={12}/><span className="hidden md:inline">Задачи</span>
-              </button>
-              <button onClick={()=>imageInputRef.current?.click()} className="h-8 sm:h-6 px-2 rounded hover:bg-white/10 text-emerald-400 hover:text-emerald-300 text-xs flex items-center justify-center gap-1 shrink-0" title="Загрузить изображение (PNG, JPG, WEBP, GIF, SVG)">
-                <ImagePlus size={13}/><span className="hidden xl:inline">Фото</span>
-              </button>
-              <button onClick={()=>setFontSize(f=>Math.max(10,f-1))} className="h-8 w-7 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs hidden sm:flex items-center justify-center shrink-0" title={t('vsc_font_down')}>A-</button>
-              <button onClick={()=>setFontSize(f=>Math.min(24,f+1))} className="h-8 w-7 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs hidden sm:flex items-center justify-center shrink-0" title={t('vsc_font_up')}>A+</button>
-              <button onClick={()=>setEditorTheme(tm=>tm==='vs-dark'?'light':'vs-dark')} className="h-8 w-8 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs flex items-center justify-center shrink-0" title={t('vsc_theme')}>{editorTheme==='vs-dark'?'☀':'🌙'}</button>
-              {canShowPreview && (
-                <button
-                  onClick={()=>{
-                    if(window.innerWidth < 1024){
-                      setMobPrev(v=>!v)
-                    } else {
-                      if(active.lang==='html' || active.lang==='css') setMobPrev(v=>!v)
-                      else setJsPreviewOpen(v=>!v)
-                    }
-                  }}
-                  className={`h-8 px-2.5 lg:h-6 lg:px-2 rounded text-xs flex items-center justify-center gap-1 font-semibold shrink-0 ${(mobPrev || (active.lang!=='html' && active.lang!=='css' && jsPreviewOpen)) ? 'bg-[#007acc] text-white' : 'bg-[#007acc]/90 hover:bg-[#007acc] text-white'}`}
-                  title={t('vsc_prev_title')}
-                >
-                  {mobPrev ? `◂ ${t('vsc_code')}` : (active.lang!=='html' && active.lang!=='css' && jsPreviewOpen ? `Скрыть превью` : `${t('vsc_preview')} ▸`)}
+            <div className="flex items-center justify-between gap-1.5 px-1.5 py-1 xl:py-0.5 xl:ml-auto min-w-0">
+              <div className="flex items-center gap-1 min-w-0 overflow-x-auto tab-scroll">
+                <button onClick={()=>setFilesOpen(v=>!v)} className="h-8 w-8 rounded hover:bg-white/10 text-slate-300 text-xs md:hidden flex items-center justify-center shrink-0" title="Файлы"><Files size={14}/></button>
+                <button onClick={()=>setShowTemplatesModal(true)} className="h-8 sm:h-6 px-2 rounded bg-[#333333] hover:bg-[#3e3e42] text-sky-300 text-xs font-medium flex items-center justify-center gap-1 shrink-0" title="Готовые шаблоны (HTML/CSS/JS с картинками, Canvas-игра, Python)">
+                  <LayoutTemplate size={12}/><span className="hidden md:inline">Шаблоны</span>
                 </button>
-              )}
-              <span className="w-px h-4 bg-[#3c3c3c] mx-0.5 hidden sm:block"/>
-              <button onClick={downloadFile} className="h-8 w-8 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs hidden sm:flex items-center justify-center gap-1 shrink-0" title={t('vsc_download_title')}><Download size={11}/><span className="hidden lg:inline">{t('vsc_download')}</span></button>
-              <button onClick={()=>{setShareUrl(''); setShowShare(v=>!v)}} className="h-8 w-8 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs hidden sm:flex items-center justify-center gap-1 shrink-0" title={t('vsc_share_title')}><Share2 size={11}/><span className="hidden lg:inline">{t('vsc_share')}</span></button>
-              <button onClick={()=>setIsFull(v=>!v)} className="h-8 w-8 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs flex items-center justify-center gap-1 shrink-0" title={isFull?t('vsc_exit_full'):t('vsc_fullscreen')}><Maximize2 size={11}/><span className="hidden xl:inline">{isFull?t('vsc_min'):t('vsc_maximize')}</span></button>
-              <button onClick={handleSave} disabled={saving} className="ml-auto sm:ml-0 h-8 sm:h-6 px-2.5 rounded bg-[#0e639c] hover:bg-[#1177bb] text-white text-xs flex items-center gap-1 shrink-0"><Save size={11}/><span className="hidden sm:inline">{saving?'..':'Save'}</span></button>
-              <button onClick={run} disabled={running} title={t('vsc_run_title')} className="h-8 sm:h-7 px-3 sm:px-4 rounded-lg bg-[#16825d] hover:bg-[#1a9c6e] text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow shrink-0"><Play size={12}/>{running?'...':'Run'}</button>
+                <button onClick={()=>setShowTasksModal(true)} className={`h-8 sm:h-6 px-2 rounded text-xs font-medium flex items-center justify-center gap-1 shrink-0 ${activeTask ? 'bg-emerald-700 text-white' : 'bg-[#333333] hover:bg-[#3e3e42] text-emerald-300'}`} title="Практические задачи с автопроверкой">
+                  <ClipboardCheck size={12}/><span className="hidden md:inline">Задачи</span>
+                </button>
+                <button onClick={()=>imageInputRef.current?.click()} className="h-8 sm:h-6 px-2 rounded hover:bg-white/10 text-emerald-400 hover:text-emerald-300 text-xs flex items-center justify-center gap-1 shrink-0" title="Загрузить изображение (PNG, JPG, WEBP, GIF, SVG)">
+                  <ImagePlus size={13}/><span className="hidden xl:inline">Фото</span>
+                </button>
+                <button onClick={()=>setFontSize(f=>Math.max(10,f-1))} className="h-8 w-7 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs hidden sm:flex items-center justify-center shrink-0" title={t('vsc_font_down')}>A-</button>
+                <button onClick={()=>setFontSize(f=>Math.min(24,f+1))} className="h-8 w-7 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs hidden sm:flex items-center justify-center shrink-0" title={t('vsc_font_up')}>A+</button>
+                <button onClick={()=>setEditorTheme(tm=>tm==='vs-dark'?'light':'vs-dark')} className="h-8 w-8 sm:h-6 sm:w-auto sm:px-1.5 rounded text-slate-400 hover:text-white text-xs flex items-center justify-center shrink-0" title={t('vsc_theme')}>{editorTheme==='vs-dark'?'☀':'🌙'}</button>
+                {canShowPreview && (
+                  <button
+                    onClick={()=>{
+                      if(window.innerWidth < 1024){
+                        setMobPrev(v=>!v)
+                      } else {
+                        if(active.lang==='html' || active.lang==='css') setMobPrev(v=>!v)
+                        else setJsPreviewOpen(v=>!v)
+                      }
+                    }}
+                    className={`h-8 px-2.5 lg:h-6 lg:px-2 rounded text-xs flex items-center justify-center gap-1 font-semibold shrink-0 ${(mobPrev || (active.lang!=='html' && active.lang!=='css' && jsPreviewOpen)) ? 'bg-[#007acc] text-white' : 'bg-[#007acc]/90 hover:bg-[#007acc] text-white'}`}
+                    title={t('vsc_prev_title')}
+                  >
+                    {mobPrev ? `◂ ${t('vsc_code')}` : (active.lang!=='html' && active.lang!=='css' && jsPreviewOpen ? `Скрыть превью` : `${t('vsc_preview')} ▸`)}
+                  </button>
+                )}
+                <span className="w-px h-4 bg-[#3c3c3c] mx-0.5 hidden sm:block shrink-0"/>
+                <button onClick={downloadFile} className="h-8 w-8 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs hidden sm:flex items-center justify-center gap-1 shrink-0" title={t('vsc_download_title')}><Download size={11}/><span className="hidden lg:inline">{t('vsc_download')}</span></button>
+                <button onClick={()=>{setShareUrl(''); setShowShare(v=>!v)}} className="h-8 w-8 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs hidden sm:flex items-center justify-center gap-1 shrink-0" title={t('vsc_share_title')}><Share2 size={11}/><span className="hidden lg:inline">{t('vsc_share')}</span></button>
+                <button onClick={()=>setIsFull(v=>!v)} className="h-8 w-8 sm:h-6 sm:w-auto sm:px-2 rounded hover:bg-white/10 text-slate-300 text-xs flex items-center justify-center gap-1 shrink-0" title={isFull?t('vsc_exit_full'):t('vsc_fullscreen')}><Maximize2 size={11}/><span className="hidden xl:inline">{isFull?t('vsc_min'):t('vsc_maximize')}</span></button>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button onClick={handleSave} disabled={saving} className="h-8 sm:h-6 px-2.5 rounded bg-[#0e639c] hover:bg-[#1177bb] text-white text-xs flex items-center gap-1 shrink-0"><Save size={11}/><span className="hidden sm:inline">{saving?'..':'Save'}</span></button>
+                <button onClick={run} disabled={running} title={t('vsc_run_title')} className="h-8 sm:h-7 px-3 sm:px-3.5 rounded-lg bg-[#16825d] hover:bg-[#1a9c6e] text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow shrink-0"><Play size={12}/>{running?'...':'Run'}</button>
+              </div>
             </div>
           </div>
           <div className="h-5 bg-[#1e1e1e] flex items-center px-2 text-xs text-slate-500 border-b border-[#2d2d2d]/40 shrink-0">

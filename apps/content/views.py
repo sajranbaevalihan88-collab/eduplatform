@@ -15,6 +15,8 @@ _MEDIA_MIME = {'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif
                '.txt':'text/plain; charset=utf-8','.md':'text/plain; charset=utf-8','.csv':'text/csv; charset=utf-8',
                '.doc':'application/msword',
                '.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+               '.xls':'application/vnd.ms-excel',
+               '.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                '.ppt':'application/vnd.ms-powerpoint',
                '.pptx':'application/vnd.openxmlformats-officedocument.presentationml.presentation'}
 
@@ -234,11 +236,11 @@ def _validate_upload(file_obj):
         if ext == '.pdf':
             if not head.startswith(b'%PDF-'):
                 raise ValueError("Содержимое файла не соответствует формату PDF")
-        elif ext in ('.pptx', '.docx'):
+        elif ext in ('.pptx', '.docx', '.xlsx'):
             if not head.startswith(b'PK\x03\x04') and not head.startswith(b'PK\x05\x06'):
                 raise ValueError(f"Содержимое файла не соответствует формату {ext}")
-        elif ext in ('.ppt', '.doc'):
-            if not (head.startswith(b'\xd0\xcf\x11\xe0') or head.startswith(b'PK\x03\x04')):
+        elif ext in ('.ppt', '.doc', '.xls'):
+            if not (head.startswith(b'\xd0\xcf\x11\xe0') or head.startswith(b'PK\x03\x04') or head.startswith(b'PK\x05\x06')):
                 raise ValueError(f"Содержимое файла не соответствует формату {ext}")
         elif ext in ('.png', '.jpg', '.jpeg', '.gif', '.webp'):
             from PIL import Image
@@ -391,8 +393,81 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         return resp
 
     @action(detail=True, methods=['get'], permission_classes=[permissions.AllowAny])
+    def pdf_info(self, request, pk=None):
+        """GET /api/files/<id>/pdf_info/ — метаданные всех страниц PDF через PyMuPDF (точные размеры и число страниц)."""
+        uf = UploadedFile.objects.filter(pk=pk).first()
+        if not uf or not self._can_read_file(request, uf):
+            return Response({'error': 'Файл не найден'}, status=404)
+        data = self._read_file_bytes(uf)
+        if data is None:
+            return Response({'error': 'Файл недоступен на сервере'}, status=404)
+        try:
+            try:
+                import pymupdf as fitz
+            except ImportError:
+                import fitz
+            doc = fitz.open(stream=data, filetype='pdf')
+            pages = []
+            for i in range(len(doc)):
+                rect = doc[i].rect
+                pages.append({
+                    'page': i + 1,
+                    'width': round(float(rect.width), 1),
+                    'height': round(float(rect.height), 1),
+                })
+            num_pages = len(doc)
+            doc.close()
+            return Response({'id': uf.id, 'num_pages': num_pages, 'pages': pages})
+        except Exception as exc:
+            return Response({'error': f'Не удалось прочитать PDF: {exc}'}, status=500)
+
+    @action(detail=True, methods=['get'], permission_classes=[permissions.AllowAny])
+    def pdf_page(self, request, pk=None):
+        """GET /api/files/<id>/pdf_page/?page=1&zoom=1.8 — серверный рендер любой страницы PDF в PNG через PyMuPDF."""
+        uf = UploadedFile.objects.filter(pk=pk).first()
+        if not uf or not self._can_read_file(request, uf):
+            raise Http404('Файл не найден')
+        data = self._read_file_bytes(uf)
+        if data is None:
+            raise Http404('Содержимое файла не найдено')
+        try:
+            page_num = int(request.query_params.get('page', '1'))
+        except Exception:
+            page_num = 1
+        try:
+            zoom = float(request.query_params.get('zoom', '1.8'))
+        except Exception:
+            zoom = 1.8
+        zoom = max(0.5, min(2.6, zoom))
+        try:
+            try:
+                import pymupdf as fitz
+            except ImportError:
+                import fitz
+            doc = fitz.open(stream=data, filetype='pdf')
+            if len(doc) == 0:
+                doc.close()
+                raise Http404('Пустой PDF')
+            idx = max(0, min(len(doc) - 1, page_num - 1))
+            page = doc[idx]
+            # Ограничиваем максимальный размер растра по длинной стороне (~2200px) чтобы не перегружать RAM
+            max_side = max(float(page.rect.width), float(page.rect.height), 1.0)
+            eff_zoom = min(zoom, 2200.0 / max_side)
+            pix = page.get_pixmap(matrix=fitz.Matrix(eff_zoom, eff_zoom), alpha=False)
+            png_bytes = pix.tobytes('png')
+            doc.close()
+            resp = HttpResponse(png_bytes, content_type='image/png')
+            resp['X-Content-Type-Options'] = 'nosniff'
+            resp['Cache-Control'] = 'private, max-age=3600'
+            return resp
+        except Http404:
+            raise
+        except Exception:
+            raise Http404('Не удалось отрендерить страницу PDF')
+
+    @action(detail=True, methods=['get'], permission_classes=[permissions.AllowAny])
     def preview_text(self, request, pk=None):
-        """GET /api/files/<id>/preview_text/ — извлекает красиво оформленный HTML и текст для .docx/.txt/.md/.csv прямо в уроке."""
+        """GET /api/files/<id>/preview_text/ — извлекает красиво оформленный HTML и текст для Word (.docx/.doc), Excel (.xlsx/.xls/.csv), PowerPoint (.pptx), TXT/MD прямо в уроке."""
         import base64
         import csv as _csv
         import html as _html
@@ -410,84 +485,88 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         fname = os.path.basename(rel) or uf.title
         text_out = ''
         html_out = ''
+        sheets_out = []
+        is_zip = data[:4] in (b'PK\x03\x04', b'PK\x05\x06')
+        MAX_HTML = 1_800_000
+        MAX_TEXT = 200_000
 
-        if ext in ('.txt', '.md', '.csv', '.py', '.json', '.xml', '.html', '.css', '.js'):
-            for enc in ('utf-8-sig', 'utf-8', 'cp1251', 'latin-1'):
-                try:
-                    text_out = data.decode(enc)
+        def _join_capped_html(blocks_list, limit=MAX_HTML):
+            """Склеивает готовые HTML-блоки целиком, никогда не обрывая тег или base64-картинку посередине."""
+            acc = []
+            total = 0
+            truncated = False
+            for blk in blocks_list:
+                blen = len(blk)
+                if total + blen > limit:
+                    truncated = True
                     break
-                except Exception:
-                    continue
-            if ext == '.csv' and text_out.strip():
-                try:
-                    rows = list(_csv.reader(_io.StringIO(text_out)))[:200]
-                    if rows:
-                        parts = ['<table class="docx-table">']
-                        for ri, row in enumerate(rows):
-                            tag = 'th' if ri == 0 else 'td'
-                            cells = ''.join(f'<{tag}>{_html.escape(c)}</{tag}>' for c in row)
-                            parts.append(f'<tr>{cells}</tr>')
-                        parts.append('</table>')
-                        html_out = ''.join(parts)
-                except Exception:
-                    html_out = ''
-        elif ext == '.docx':
-            try:
-                from apps.common.safety import validate_ooxml_zip
-                validate_ooxml_zip(_io.BytesIO(data))
-                W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
-                R = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
-                A = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
-                with zipfile.ZipFile(_io.BytesIO(data)) as zf:
-                    names = set(zf.namelist())
-                    # Карта rId -> base64 data URI для встроенных картинок документа
-                    img_map = {}
-                    rels_path = 'word/_rels/document.xml.rels'
-                    if rels_path in names:
-                        try:
-                            rels_root = ET.fromstring(zf.read(rels_path))
-                            for rel_el in rels_root:
-                                rid = rel_el.attrib.get('Id', '')
-                                target = rel_el.attrib.get('Target', '').lstrip('/')
-                                full_t = target if target.startswith('word/') else f'word/{target}'
-                                img_ext = os.path.splitext(full_t)[1].lower()
-                                if rid and full_t in names and img_ext in ('.png', '.jpg', '.jpeg', '.gif', '.webp'):
-                                    raw_img = zf.read(full_t)
-                                    if len(raw_img) <= 2 * 1024 * 1024:
-                                        mime_i = _MEDIA_MIME.get(img_ext, 'image/png')
-                                        b64 = base64.b64encode(raw_img).decode('ascii')
-                                        img_map[rid] = f'data:{mime_i};base64,{b64}'
-                        except Exception:
-                            pass
+                acc.append(blk)
+                total += blen
+            if truncated:
+                acc.append('<p style="color:#64748b;font-style:italic">… Показана основная часть документа. Нажми «Скачать», чтобы открыть полный файл.</p>')
+            return ''.join(acc)
 
-                    def _is_on(el):
-                        if el is None:
-                            return False
-                        v = el.attrib.get(f'{W}val')
-                        return v is None or str(v).lower() not in ('0', 'false', 'none')
+        def _parse_docx_bytes(raw_bytes):
+            from apps.common.safety import validate_ooxml_zip
+            validate_ooxml_zip(_io.BytesIO(raw_bytes))
+            W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+            R = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
+            A = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
+            V = '{urn:schemas-microsoft-com:vml}'
+            with zipfile.ZipFile(_io.BytesIO(raw_bytes)) as zf:
+                names = set(zf.namelist())
+                img_map = {}
+                rels_path = 'word/_rels/document.xml.rels'
+                if rels_path in names:
+                    try:
+                        rels_root = ET.fromstring(zf.read(rels_path))
+                        for rel_el in rels_root:
+                            rid = rel_el.attrib.get('Id', '')
+                            target = rel_el.attrib.get('Target', '').lstrip('/')
+                            full_t = target if target.startswith('word/') else f'word/{target}'
+                            img_ext = os.path.splitext(full_t)[1].lower()
+                            if rid and full_t in names and img_ext in ('.png', '.jpg', '.jpeg', '.gif', '.webp'):
+                                raw_img = zf.read(full_t)
+                                if len(raw_img) <= 2 * 1024 * 1024:
+                                    mime_i = _MEDIA_MIME.get(img_ext, 'image/png')
+                                    b64 = base64.b64encode(raw_img).decode('ascii')
+                                    img_map[rid] = f'data:{mime_i};base64,{b64}'
+                    except Exception:
+                        pass
 
-                    def _render_para(p_el, in_cell=False):
-                        ppr = p_el.find(f'{W}pPr')
-                        style_id = ''
-                        align = ''
-                        is_list = False
-                        if ppr is not None:
-                            ps = ppr.find(f'{W}pStyle')
-                            if ps is not None:
-                                style_id = str(ps.attrib.get(f'{W}val', '')).lower()
-                            jc = ppr.find(f'{W}jc')
-                            if jc is not None:
-                                jv = str(jc.attrib.get(f'{W}val', '')).lower()
-                                if jv in ('center', 'right', 'left'):
-                                    align = jv
-                                elif jv == 'both':
-                                    align = 'justify'
-                            if ppr.find(f'{W}numPr') is not None:
-                                is_list = True
+                def _is_on(el):
+                    if el is None:
+                        return False
+                    v = el.attrib.get(f'{W}val')
+                    return v is None or str(v).lower() not in ('0', 'false', 'none')
 
-                        inline_html = []
-                        plain_chunks = []
-                        for child in p_el:
+                def _render_para(p_el, in_cell=False):
+                    ppr = p_el.find(f'{W}pPr')
+                    style_id = ''
+                    align = ''
+                    is_list = False
+                    if ppr is not None:
+                        ps = ppr.find(f'{W}pStyle')
+                        if ps is not None:
+                            style_id = str(ps.attrib.get(f'{W}val', '')).lower()
+                        jc = ppr.find(f'{W}jc')
+                        if jc is not None:
+                            jv = str(jc.attrib.get(f'{W}val', '')).lower()
+                            if jv in ('center', 'right', 'left'):
+                                align = jv
+                            elif jv == 'both':
+                                align = 'justify'
+                        if ppr.find(f'{W}numPr') is not None:
+                            is_list = True
+
+                    inline_html = []
+                    plain_chunks = []
+                    extra_blocks_html = []
+                    extra_blocks_plain = []
+                    seen_img_rids = set()
+
+                    def _walk_inline(node):
+                        for child in node:
                             ctag = child.tag
                             if ctag == f'{W}r':
                                 rpr = child.find(f'{W}rPr')
@@ -507,11 +586,25 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
                                     if va_el is not None:
                                         vert = str(va_el.attrib.get(f'{W}val', '')).lower()
 
-                                # Картинки внутри run
                                 for blip in child.findall(f'.//{A}blip'):
                                     rid = blip.attrib.get(f'{R}embed', '')
-                                    if rid in img_map:
+                                    if rid in img_map and rid not in seen_img_rids:
+                                        seen_img_rids.add(rid)
                                         inline_html.append(f'<img src="{img_map[rid]}" alt="" class="docx-img" />')
+                                for vimg in child.findall(f'.//{V}imagedata'):
+                                    rid = vimg.attrib.get(f'{R}id', '')
+                                    if rid in img_map and rid not in seen_img_rids:
+                                        seen_img_rids.add(rid)
+                                        inline_html.append(f'<img src="{img_map[rid]}" alt="" class="docx-img" />')
+
+                                # Текст внутри текстовых рамок/фигур (w:txbxContent)
+                                for txbx in child.findall(f'.//{W}txbxContent'):
+                                    for tp in txbx.findall(f'{W}p'):
+                                        th, tpl = _render_para(tp, in_cell=True)
+                                        if th:
+                                            extra_blocks_html.append(th)
+                                        if tpl:
+                                            extra_blocks_plain.append(tpl)
 
                                 buf = []
                                 for sub in child:
@@ -546,93 +639,437 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
                                 if h_txt:
                                     plain_chunks.append(h_txt)
                                     inline_html.append(f'<span class="docx-link">{_html.escape(h_txt)}</span>')
+                            elif ctag in (f'{W}sdt', f'{W}sdtContent', f'{W}ins', f'{W}smartTag'):
+                                _walk_inline(child)
 
-                        inner = ''.join(inline_html).strip()
-                        plain = ''.join(plain_chunks).strip()
-                        if not inner:
-                            return '', ''
+                    _walk_inline(p_el)
+                    inner = ''.join(inline_html).strip()
+                    plain = ''.join(plain_chunks).strip()
+                    out_h = ''
+                    if inner:
                         st_attr = f' style="text-align:{align}"' if align else ''
                         if not in_cell:
                             if 'title' in style_id or style_id in ('heading1', '1'):
-                                return f'<h1{st_attr}>{inner}</h1>', plain
-                            if 'subtitle' in style_id or style_id in ('heading2', '2'):
-                                return f'<h2{st_attr}>{inner}</h2>', plain
-                            if style_id in ('heading3', 'heading4', '3', '4'):
-                                return f'<h3{st_attr}>{inner}</h3>', plain
-                            if is_list:
-                                return f'<li{st_attr}>{inner}</li>', f'• {plain}'
-                        return f'<p{st_attr}>{inner}</p>', plain
+                                out_h = f'<h1{st_attr}>{inner}</h1>'
+                            elif 'subtitle' in style_id or style_id in ('heading2', '2'):
+                                out_h = f'<h2{st_attr}>{inner}</h2>'
+                            elif style_id in ('heading3', 'heading4', '3', '4'):
+                                out_h = f'<h3{st_attr}>{inner}</h3>'
+                            elif is_list:
+                                out_h = f'<li{st_attr}>{inner}</li>'
+                                plain = f'• {plain}'
+                            else:
+                                out_h = f'<p{st_attr}>{inner}</p>'
+                        else:
+                            out_h = f'<p{st_attr}>{inner}</p>'
+                    if extra_blocks_html:
+                        out_h = (out_h + ''.join(extra_blocks_html))
+                        plain = '\n'.join([p for p in [plain, *extra_blocks_plain] if p])
+                    return out_h, plain
 
-                    if 'word/document.xml' in names:
-                        root = ET.fromstring(zf.read('word/document.xml'))
-                        body = root.find(f'{W}body')
-                        html_blocks = []
-                        plain_blocks = []
-                        in_ul = False
-                        if body is not None:
-                            for el in body:
-                                if el.tag == f'{W}p':
-                                    h_p, pl_p = _render_para(el, in_cell=False)
-                                    if not h_p:
-                                        continue
-                                    if h_p.startswith('<li'):
-                                        if not in_ul:
-                                            html_blocks.append('<ul>')
-                                            in_ul = True
-                                        html_blocks.append(h_p)
-                                    else:
-                                        if in_ul:
-                                            html_blocks.append('</ul>')
-                                            in_ul = False
-                                        html_blocks.append(h_p)
-                                    if pl_p:
-                                        plain_blocks.append(pl_p)
-                                elif el.tag == f'{W}tbl':
-                                    if in_ul:
-                                        html_blocks.append('</ul>')
-                                        in_ul = False
-                                    tbl_rows = []
-                                    for r_idx, tr in enumerate(el.findall(f'{W}tr')):
-                                        cells_html = []
-                                        row_plain = []
-                                        for tc in tr.findall(f'{W}tc'):
-                                            tc_pr = tc.find(f'{W}tcPr')
-                                            colspan = 1
-                                            bg_hex = ''
-                                            if tc_pr is not None:
-                                                gs = tc_pr.find(f'{W}gridSpan')
-                                                if gs is not None:
-                                                    try:
-                                                        colspan = max(1, int(gs.attrib.get(f'{W}val', '1')))
-                                                    except Exception:
-                                                        colspan = 1
-                                                shd = tc_pr.find(f'{W}shd')
-                                                if shd is not None:
-                                                    fv = str(shd.attrib.get(f'{W}fill', ''))
-                                                    if len(fv) == 6 and all(c in '0123456789abcdefABCDEF' for c in fv) and fv.lower() != 'auto':
-                                                        bg_hex = f'#{fv}'
-                                            c_parts = []
-                                            c_plain = []
-                                            for cp in tc.findall(f'{W}p'):
-                                                ch, cpl = _render_para(cp, in_cell=True)
-                                                if ch:
-                                                    c_parts.append(ch)
-                                                if cpl:
-                                                    c_plain.append(cpl)
-                                            tag = 'th' if r_idx == 0 else 'td'
-                                            cs_attr = f' colspan="{colspan}"' if colspan > 1 else ''
-                                            bg_attr = f' style="background:{bg_hex}"' if bg_hex else ''
-                                            cells_html.append(f'<{tag}{cs_attr}{bg_attr}>{"".join(c_parts) or "&nbsp;"}</{tag}>')
-                                            row_plain.append(' '.join(c_plain))
-                                        if cells_html:
-                                            tbl_rows.append(f'<tr>{"".join(cells_html)}</tr>')
-                                            plain_blocks.append(' | '.join(row_plain))
-                                    if tbl_rows:
-                                        html_blocks.append(f'<div class="docx-table-wrap"><table class="docx-table">{"".join(tbl_rows)}</table></div>')
+                def _render_table(tbl_el):
+                    tbl_rows = []
+                    row_plains = []
+                    for r_idx, tr in enumerate(tbl_el.findall(f'{W}tr')):
+                        cells_html = []
+                        row_plain = []
+                        for tc in tr.findall(f'{W}tc'):
+                            tc_pr = tc.find(f'{W}tcPr')
+                            colspan = 1
+                            bg_hex = ''
+                            if tc_pr is not None:
+                                gs = tc_pr.find(f'{W}gridSpan')
+                                if gs is not None:
+                                    try:
+                                        colspan = max(1, int(gs.attrib.get(f'{W}val', '1')))
+                                    except Exception:
+                                        colspan = 1
+                                shd = tc_pr.find(f'{W}shd')
+                                if shd is not None:
+                                    fv = str(shd.attrib.get(f'{W}fill', ''))
+                                    if len(fv) == 6 and all(c in '0123456789abcdefABCDEF' for c in fv) and fv.lower() != 'auto':
+                                        bg_hex = f'#{fv}'
+                            c_parts = []
+                            c_plain = []
+                            for cp in tc.findall(f'{W}p'):
+                                ch, cpl = _render_para(cp, in_cell=True)
+                                if ch:
+                                    c_parts.append(ch)
+                                if cpl:
+                                    c_plain.append(cpl)
+                            tag = 'th' if r_idx == 0 else 'td'
+                            cs_attr = f' colspan="{colspan}"' if colspan > 1 else ''
+                            bg_attr = f' style="background:{bg_hex}"' if bg_hex else ''
+                            cells_html.append(f'<{tag}{cs_attr}{bg_attr}>{"".join(c_parts) or "&nbsp;"}</{tag}>')
+                            row_plain.append(' '.join(c_plain))
+                        if cells_html:
+                            tbl_rows.append(f'<tr>{"".join(cells_html)}</tr>')
+                            row_plains.append(' | '.join(row_plain))
+                    if not tbl_rows:
+                        return '', []
+                    return f'<div class="docx-table-wrap"><table class="docx-table">{"".join(tbl_rows)}</table></div>', row_plains
+
+                html_blocks = []
+                plain_blocks = []
+                in_ul = False
+
+                def _walk_body(container):
+                    nonlocal in_ul
+                    for el in container:
+                        if el.tag == f'{W}p':
+                            h_p, pl_p = _render_para(el, in_cell=False)
+                            if not h_p:
+                                continue
+                            if h_p.startswith('<li'):
+                                if not in_ul:
+                                    html_blocks.append('<ul>')
+                                    in_ul = True
+                                html_blocks.append(h_p)
+                            else:
+                                if in_ul:
+                                    html_blocks.append('</ul>')
+                                    in_ul = False
+                                html_blocks.append(h_p)
+                            if pl_p:
+                                plain_blocks.append(pl_p)
+                        elif el.tag == f'{W}tbl':
                             if in_ul:
                                 html_blocks.append('</ul>')
-                        html_out = ''.join(html_blocks)
-                        text_out = '\n\n'.join(plain_blocks)
+                                in_ul = False
+                            th, tpl = _render_table(el)
+                            if th:
+                                html_blocks.append(th)
+                                plain_blocks.extend(tpl)
+                        elif el.tag == f'{W}sdt':
+                            sdt_c = el.find(f'{W}sdtContent')
+                            if sdt_c is not None:
+                                _walk_body(sdt_c)
+
+                if 'word/document.xml' in names:
+                    root = ET.fromstring(zf.read('word/document.xml'))
+                    body = root.find(f'{W}body')
+                    if body is not None:
+                        _walk_body(body)
+                    if in_ul:
+                        html_blocks.append('</ul>')
+                return _join_capped_html(html_blocks), '\n\n'.join(plain_blocks)
+
+        def _parse_xlsx_bytes(raw_bytes):
+            from apps.common.safety import validate_ooxml_zip
+            validate_ooxml_zip(_io.BytesIO(raw_bytes))
+            NS = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
+            RNS = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
+
+            def _col_to_idx(ref):
+                col = 0
+                for ch in ref:
+                    if 'A' <= ch <= 'Z':
+                        col = col * 26 + (ord(ch) - ord('A') + 1)
+                    elif 'a' <= ch <= 'z':
+                        col = col * 26 + (ord(ch) - ord('a') + 1)
+                    else:
+                        break
+                return max(0, col - 1)
+
+            def _split_ref(ref):
+                col = _col_to_idx(ref)
+                digits = ''.join(ch for ch in ref if ch.isdigit())
+                row = int(digits) - 1 if digits else 0
+                return max(0, row), col
+
+            sheets_res = []
+            plain_parts = []
+            combined_html = []
+            with zipfile.ZipFile(_io.BytesIO(raw_bytes)) as zf:
+                names = set(zf.namelist())
+                shared_strings = []
+                if 'xl/sharedStrings.xml' in names:
+                    try:
+                        ss_root = ET.fromstring(zf.read('xl/sharedStrings.xml'))
+                        for si in ss_root.findall(f'{NS}si'):
+                            txt = ''.join(t.text or '' for t in si.findall(f'.//{NS}t'))
+                            shared_strings.append(txt)
+                    except Exception:
+                        pass
+
+                rel_map = {}
+                if 'xl/_rels/workbook.xml.rels' in names:
+                    try:
+                        rr = ET.fromstring(zf.read('xl/_rels/workbook.xml.rels'))
+                        for rel_el in rr:
+                            rid = rel_el.attrib.get('Id', '')
+                            target = rel_el.attrib.get('Target', '').lstrip('/')
+                            if rid and target:
+                                full = target if target.startswith('xl/') else f'xl/{target}'
+                                rel_map[rid] = full
+                    except Exception:
+                        pass
+
+                sheet_specs = []
+                if 'xl/workbook.xml' in names:
+                    try:
+                        wb = ET.fromstring(zf.read('xl/workbook.xml'))
+                        for sh in wb.findall(f'.//{NS}sheet'):
+                            sname = sh.attrib.get('name') or f'Лист {len(sheet_specs) + 1}'
+                            rid = sh.attrib.get(f'{RNS}id', '')
+                            target = rel_map.get(rid, '')
+                            if target and target in names:
+                                sheet_specs.append((sname, target))
+                    except Exception:
+                        pass
+                if not sheet_specs:
+                    ws_files = sorted([n for n in names if n.startswith('xl/worksheets/sheet') and n.endswith('.xml')])
+                    sheet_specs = [(f'Лист {i + 1}', path) for i, path in enumerate(ws_files)]
+
+                MAX_ROWS = 400
+                MAX_COLS = 50
+                for sname, spath in sheet_specs[:20]:
+                    try:
+                        sroot = ET.fromstring(zf.read(spath))
+                    except Exception:
+                        continue
+                    merges = {}
+                    skip_cells = set()
+                    for mc in sroot.findall(f'.//{NS}mergeCell'):
+                        ref = mc.attrib.get('ref', '')
+                        if ':' in ref:
+                            a, b = ref.split(':', 1)
+                            r1, c1 = _split_ref(a)
+                            r2, c2 = _split_ref(b)
+                            if r2 >= r1 and c2 >= c1:
+                                merges[(r1, c1)] = (r2 - r1 + 1, c2 - c1 + 1)
+                                for rr in range(r1, min(r2 + 1, MAX_ROWS)):
+                                    for cc in range(c1, min(c2 + 1, MAX_COLS)):
+                                        if (rr, cc) != (r1, c1):
+                                            skip_cells.add((rr, cc))
+
+                    row_dict = {}
+                    max_col_seen = 0
+                    total_rows_seen = 0
+                    sheet_data = sroot.find(f'{NS}sheetData')
+                    if sheet_data is not None:
+                        for r_el in sheet_data.findall(f'{NS}row'):
+                            total_rows_seen += 1
+                            r_attr = r_el.attrib.get('r')
+                            r_idx = (int(r_attr) - 1) if (r_attr and r_attr.isdigit()) else (total_rows_seen - 1)
+                            if r_idx >= MAX_ROWS:
+                                continue
+                            cells_map = {}
+                            auto_c = 0
+                            for c_el in r_el.findall(f'{NS}c'):
+                                cref = c_el.attrib.get('r', '')
+                                c_idx = _col_to_idx(cref) if cref else auto_c
+                                auto_c = c_idx + 1
+                                if c_idx >= MAX_COLS:
+                                    continue
+                                ctype = c_el.attrib.get('t', '')
+                                val = ''
+                                if ctype == 's':
+                                    v_el = c_el.find(f'{NS}v')
+                                    if v_el is not None and v_el.text and v_el.text.isdigit():
+                                        si_i = int(v_el.text)
+                                        val = shared_strings[si_i] if 0 <= si_i < len(shared_strings) else ''
+                                elif ctype == 'inlineStr':
+                                    val = ''.join(t.text or '' for t in c_el.findall(f'.//{NS}t'))
+                                elif ctype == 'b':
+                                    v_el = c_el.find(f'{NS}v')
+                                    val = 'ИСТИНА' if (v_el is not None and v_el.text == '1') else 'ЛОЖЬ'
+                                else:
+                                    v_el = c_el.find(f'{NS}v')
+                                    if v_el is not None and v_el.text is not None:
+                                        raw_v = v_el.text
+                                        # Убираем хвост .0 у целых чисел и длинные артефакты float
+                                        if ctype in ('', 'n'):
+                                            try:
+                                                fv = float(raw_v)
+                                                val = str(int(fv)) if fv.is_integer() and abs(fv) < 1e15 else f'{fv:.6g}'
+                                            except Exception:
+                                                val = raw_v
+                                        else:
+                                            val = raw_v
+                                if val != '':
+                                    cells_map[c_idx] = val
+                                    if c_idx + 1 > max_col_seen:
+                                        max_col_seen = c_idx + 1
+                            if cells_map:
+                                row_dict[r_idx] = cells_map
+
+                    if not row_dict:
+                        sh_html = '<p style="color:#64748b">Лист пустой</p>'
+                        sheets_res.append({'name': sname, 'html': sh_html, 'rows_count': 0, 'cols_count': 0, 'truncated': False})
+                        continue
+
+                    col_count = max(1, min(max_col_seen, MAX_COLS))
+                    sorted_r = sorted(row_dict.keys())
+                    first_r = sorted_r[0]
+                    rows_html = ['<div class="docx-table-wrap"><table class="docx-table">']
+                    sheet_plain = [f'=== {sname} ===']
+                    for r_idx in sorted_r:
+                        cmap = row_dict[r_idx]
+                        tag = 'th' if r_idx == first_r else 'td'
+                        tds = []
+                        row_txt = []
+                        for c_idx in range(col_count):
+                            if (r_idx, c_idx) in skip_cells:
+                                continue
+                            v = cmap.get(c_idx, '')
+                            row_txt.append(v)
+                            attrs = ''
+                            if (r_idx, c_idx) in merges:
+                                rs, cs = merges[(r_idx, c_idx)]
+                                if rs > 1:
+                                    attrs += f' rowspan="{rs}"'
+                                if cs > 1:
+                                    attrs += f' colspan="{cs}"'
+                            tds.append(f'<{tag}{attrs}>{_html.escape(v) if v != "" else "&nbsp;"}</{tag}>')
+                        rows_html.append(f'<tr>{"".join(tds)}</tr>')
+                        sheet_plain.append(' | '.join(row_txt))
+                    rows_html.append('</table></div>')
+                    truncated = total_rows_seen > MAX_ROWS
+                    if truncated:
+                        rows_html.append(f'<p style="color:#64748b;font-size:12px">Показано первых {MAX_ROWS} из {total_rows_seen} строк. Скачай файл, чтобы увидеть весь лист.</p>')
+                    sh_html = ''.join(rows_html)
+                    sheets_res.append({
+                        'name': sname,
+                        'html': sh_html,
+                        'rows_count': total_rows_seen,
+                        'cols_count': col_count,
+                        'truncated': truncated,
+                    })
+                    combined_html.append(f'<div class="xlsx-sheet"><h3>{_html.escape(sname)}</h3>{sh_html}</div>')
+                    plain_parts.append('\n'.join(sheet_plain))
+            return sheets_res, _join_capped_html(combined_html), '\n\n'.join(plain_parts)
+
+        def _parse_pptx_bytes(raw_bytes):
+            from apps.common.safety import validate_ooxml_zip
+            validate_ooxml_zip(_io.BytesIO(raw_bytes))
+            A = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
+            P = '{http://schemas.openxmlformats.org/presentationml/2006/main}'
+            R = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
+            blocks = []
+            plain = []
+            with zipfile.ZipFile(_io.BytesIO(raw_bytes)) as zf:
+                names = set(zf.namelist())
+                slide_files = [n for n in names if re.match(r'^ppt/slides/slide\d+\.xml$', n)]
+                slide_files.sort(key=lambda s: int(re.search(r'(\d+)\.xml$', s).group(1)))
+                for idx, spath in enumerate(slide_files[:60], 1):
+                    snum = re.search(r'(\d+)\.xml$', spath).group(1)
+                    rels_path = f'ppt/slides/_rels/slide{snum}.xml.rels'
+                    img_map = {}
+                    if rels_path in names:
+                        try:
+                            rr = ET.fromstring(zf.read(rels_path))
+                            for rel_el in rr:
+                                rid = rel_el.attrib.get('Id', '')
+                                tgt = rel_el.attrib.get('Target', '')
+                                norm = os.path.normpath(os.path.join('ppt/slides', tgt)).replace('\\', '/')
+                                iext = os.path.splitext(norm)[1].lower()
+                                if rid and norm in names and iext in ('.png', '.jpg', '.jpeg', '.gif', '.webp'):
+                                    raw_i = zf.read(norm)
+                                    if len(raw_i) <= 1_500_000:
+                                        mime_i = _MEDIA_MIME.get(iext, 'image/png')
+                                        img_map[rid] = f'data:{mime_i};base64,{base64.b64encode(raw_i).decode("ascii")}'
+                        except Exception:
+                            pass
+                    sroot = ET.fromstring(zf.read(spath))
+                    sparts = [f'<h2>Слайд {idx}</h2>']
+                    splain = [f'--- Слайд {idx} ---']
+                    for p_el in sroot.findall(f'.//{A}p'):
+                        txt = ''.join(t.text or '' for t in p_el.findall(f'.//{A}t')).strip()
+                        if txt:
+                            sparts.append(f'<p>{_html.escape(txt)}</p>')
+                            splain.append(txt)
+                    for tbl in sroot.findall(f'.//{A}tbl'):
+                        trows = []
+                        for ri, tr in enumerate(tbl.findall(f'{A}tr')):
+                            tag = 'th' if ri == 0 else 'td'
+                            cells = []
+                            for tc in tr.findall(f'{A}tc'):
+                                ctxt = ' '.join(''.join(t.text or '' for t in p.findall(f'.//{A}t')).strip() for p in tc.findall(f'.//{A}p')).strip()
+                                cells.append(f'<{tag}>{_html.escape(ctxt) or "&nbsp;"}</{tag}>')
+                            if cells:
+                                trows.append(f'<tr>{"".join(cells)}</tr>')
+                        if trows:
+                            sparts.append(f'<div class="docx-table-wrap"><table class="docx-table">{"".join(trows)}</table></div>')
+                    seen_r = set()
+                    for blip in sroot.findall(f'.//{A}blip'):
+                        rid = blip.attrib.get(f'{R}embed', '')
+                        if rid in img_map and rid not in seen_r:
+                            seen_r.add(rid)
+                            sparts.append(f'<img src="{img_map[rid]}" alt="" class="docx-img" />')
+                    blocks.append(f'<div class="pptx-slide">{"".join(sparts)}</div>')
+                    plain.append('\n'.join(splain))
+            return _join_capped_html(blocks), '\n\n'.join(plain)
+
+        if ext in ('.txt', '.md', '.csv', '.py', '.json', '.xml', '.html', '.css', '.js'):
+            for enc in ('utf-8-sig', 'utf-8', 'cp1251', 'latin-1'):
+                try:
+                    text_out = data.decode(enc)
+                    break
+                except Exception:
+                    continue
+            if ext == '.csv' and text_out.strip():
+                try:
+                    sample = text_out[:4096]
+                    delim = ';' if sample.count(';') > sample.count(',') else ('\t' if sample.count('\t') > sample.count(',') else ',')
+                    rows = list(_csv.reader(_io.StringIO(text_out), delimiter=delim))[:500]
+                    if rows:
+                        max_c = max(len(r) for r in rows)
+                        parts = ['<div class="docx-table-wrap"><table class="docx-table">']
+                        for ri, row in enumerate(rows):
+                            tag = 'th' if ri == 0 else 'td'
+                            padded = row + [''] * (max_c - len(row))
+                            cells = ''.join(f'<{tag}>{_html.escape(c) if c != "" else "&nbsp;"}</{tag}>' for c in padded)
+                            parts.append(f'<tr>{cells}</tr>')
+                        parts.append('</table></div>')
+                        html_out = ''.join(parts)
+                except Exception:
+                    html_out = ''
+        elif ext == '.docx' or (ext == '.doc' and is_zip):
+            try:
+                html_out, text_out = _parse_docx_bytes(data)
+            except Exception:
+                text_out = ''
+                html_out = ''
+        elif ext == '.doc':
+            # Legacy binary Word 97–2003: аккуратно извлекаем читаемый UTF-16LE / CP1251 текст
+            try:
+                raw_u = data.decode('utf-16-le', errors='ignore')
+                chunks = [m.group(0).strip() for m in re.finditer(r'[A-Za-zА-Яа-яЁёӨөҮүҢң0-9 ,.;:!?«»"\'()\-–—/%+=]{12,}', raw_u)]
+                cleaned = [c for c in chunks if not any(tok in c for tok in ('Microsoft Word', 'Root Entry', 'WordDocument', 'Normal.dot', 'Times New Roman', 'Calibri'))]
+                if cleaned:
+                    text_out = '\n\n'.join(cleaned[:400])
+                    html_out = ''.join(f'<p>{_html.escape(p)}</p>' for p in cleaned[:400])
+            except Exception:
+                text_out = ''
+                html_out = ''
+        elif ext == '.xlsx' or (ext == '.xls' and is_zip):
+            try:
+                sheets_out, html_out, text_out = _parse_xlsx_bytes(data)
+            except Exception:
+                sheets_out = []
+                text_out = ''
+                html_out = ''
+        elif ext == '.xls':
+            # Часто в школах .xls — это на деле HTML-таблица или CSV из отчётов; проверяем, иначе даём текст
+            try:
+                head_txt = data[:1024].decode('utf-8', errors='ignore').lower()
+                if '<table' in head_txt or '<html' in head_txt:
+                    raw_s = data.decode('utf-8-sig', errors='ignore')
+                    text_out = re.sub(r'<[^>]+>', ' ', raw_s)
+                    html_out = raw_s[:MAX_HTML]
+                else:
+                    raw_u = data.decode('utf-16-le', errors='ignore')
+                    chunks = [m.group(0).strip() for m in re.finditer(r'[A-Za-zА-Яа-яЁёӨөҮүҢң0-9 ,.;:!?()\-/%+=]{4,}', raw_u)]
+                    cleaned = [c for c in chunks if not any(tok in c for tok in ('Root Entry', 'Workbook', 'SummaryInformation', 'Calibri', 'Arial'))]
+                    if cleaned:
+                        text_out = '\n'.join(cleaned[:300])
+            except Exception:
+                text_out = ''
+                html_out = ''
+        elif ext == '.pptx':
+            try:
+                html_out, text_out = _parse_pptx_bytes(data)
             except Exception:
                 text_out = ''
                 html_out = ''
@@ -642,9 +1079,10 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             'title': uf.title,
             'filename': fname,
             'ext': ext,
-            'text': text_out[:60000],
-            'html': html_out[:250000],
-            'has_text': bool(text_out.strip() or html_out.strip()),
+            'text': text_out[:MAX_TEXT],
+            'html': html_out,
+            'sheets': sheets_out,
+            'has_text': bool(text_out.strip() or html_out.strip() or sheets_out),
         })
 
     def perform_destroy(self, instance):

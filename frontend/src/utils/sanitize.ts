@@ -124,8 +124,8 @@ export function sanitizeWordHtml(rawHtml: string): string {
 
     Array.from(tpl.content.childNodes).forEach(cleanNode)
 
-    // Разворачиваем обычные div (оставляя div.page-break, div.word-frame и div.word-meta)
-    tpl.content.querySelectorAll('div:not(.page-break):not(.word-frame):not(.word-meta)').forEach(d => {
+    // Разворачиваем обычные div (оставляя служебные контейнеры предпросмотра и Word-редактора)
+    tpl.content.querySelectorAll('div:not(.page-break):not(.word-frame):not(.word-meta):not(.docx-table-wrap):not(.xlsx-sheet):not(.pptx-slide)').forEach(d => {
       const parent = d.parentNode
       if (!parent) return
       while (d.firstChild) parent.insertBefore(d.firstChild, d)

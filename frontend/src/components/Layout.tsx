@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, LayoutDashboard, PenTool, Presentation, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info, Database, Volume2, VolumeX, Music, FolderLock, BookOpenCheck, UsersRound, ListTree, TrendingUp, MessageSquare, Medal, Download, RefreshCw } from 'lucide-react'
+import { BookOpen, LayoutDashboard, PenTool, Presentation, FlaskConical, LogOut, Menu, X, User, ChevronLeft, PanelLeftClose, PanelLeft, Sun, Moon, Languages, Sparkles, Code2, FileText, Gamepad2, Accessibility, GraduationCap, Info, Database, Volume2, VolumeX, Music, FolderLock, BookOpenCheck, UsersRound, ListTree, TrendingUp, MessageSquare, Medal, Download, RefreshCw } from 'lucide-react'
 import A11yPanel from './A11yPanel'
 import { useState, useEffect, useRef } from 'react'
 import client, { mediaSrc } from '../api/client'
@@ -76,15 +76,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const isParent = me?.role === 'parent'
   // Админ-аккаунт: админские фичи + предметы/уроки/тесты/книжки + классы + игры.
   const adminLimited = me?.role === 'admin'
-  const ADMIN_ALLOWED = new Set(['/', '/dashboard', '/subjects', '/classes', '/my-lessons', '/games', '/about', '/programs', '/messages', '/portfolio', '/ai-assistant'])
+  const ADMIN_ALLOWED = new Set(['/', '/dashboard', '/subjects', '/tests', '/classes', '/my-lessons', '/games', '/about', '/programs', '/messages', '/portfolio', '/ai-assistant'])
   const PARENT_ALLOWED = new Set(['/', '/children', '/games', '/about', '/messages', '/portfolio'])
   const items = [
-    { to: '/', label: t('home'), icon: Sparkles },
+    ...(!me ? [{ to: '/', label: t('home'), icon: Sparkles }] : []),
     { to: '/dashboard', label: t('dashboard'), icon: LayoutDashboard },
     { to: '/subjects', label: t('subjects'), icon: BookOpen },
     // Мои уроки — приватные уроки учителя (у ученика раздела нет)
     ...(!student && !isParent ? [{ to: '/my-lessons', label: t('my_lessons'), icon: FolderLock }] : []),
     { to: '/presentations', label: t('presentations'), icon: Presentation },
+    { to: '/tests', label: t('tests'), icon: FlaskConical },
     { to: '/classes', label: t('classes'), icon: GraduationCap },
     ...(!student && !isParent ? [{ to: '/programs', label: t('prog_t'), icon: ListTree }] : []),
     ...(!student && !isParent ? [{ to: '/ai-assistant', label: t('ai_nav'), icon: Sparkles }] : []),
@@ -247,6 +248,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return ()=>window.removeEventListener('keydown', onKey)
   },[items, nav])
 
+  // Флагманский лендинг открывается во весь экран (без боковой панели) на /about и для гостей на /
+  const hasSession = Boolean(me || localStorage.getItem('token'))
+  if (loc.pathname === '/about' || (loc.pathname === '/' && !hasSession)) {
+    return (
+      <main id="main-content" className="min-h-screen bg-[#F7F5F0] dark:bg-[#07090F]">
+        {children}
+      </main>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex overflow-x-clip">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-xl focus:bg-indigo-600 focus:text-white">{t('skip_content')}</a>
@@ -271,8 +282,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
         <nav id="main-navigation" aria-label={t('main_navigation')} className="flex-1 p-3 space-y-1.5 overflow-auto scrollbar-thin">
           {items.map(it => (
-            <Link key={it.to} to={it.to} aria-current={isActive(it.to) ? 'page' : undefined} aria-label={it.label} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive(it.to) ? 'bg-indigo-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-100 dark:hover:border-slate-700'}`}>
-              <span className={`p-1.5 rounded-lg ${isActive(it.to) ? 'bg-white/15' : 'bg-slate-50 dark:bg-slate-800'}`}><it.icon size={16} /></span> {it.label}
+            <Link key={it.to} to={it.to} aria-current={isActive(it.to) ? 'page' : undefined} aria-label={it.label} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive(it.to) ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200/70 dark:hover:border-slate-700'}`}>
+              <span className={`p-1.5 rounded-lg ${isActive(it.to) ? 'bg-white/15 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}><it.icon size={16} /></span> {it.label}
             </Link>
           ))}
         </nav>
@@ -384,16 +395,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Link to="/lessons/new" className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors hidden sm:flex items-center gap-1.5">{t('create_lesson')}</Link>
             )}
             {me ? (
-              <Link to="/profile" className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-600 dark:bg-white dark:text-slate-900 text-white text-sm font-semibold shadow-md btn-hover">
+              <Link to="/profile" className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border dark:border-slate-700 dark:text-white text-white text-sm font-semibold shadow-sm btn-hover">
                 {me.avatar ? (
                   <img src={mediaSrc(me.avatar)} alt="" className="w-6 h-6 rounded-full object-cover shrink-0 ring-1 ring-white/40" />
                 ) : (
-                  <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">{(me.username||'U')[0].toUpperCase()}</div>
+                  <div className="w-6 h-6 rounded-full bg-white/20 dark:bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">{(me.username||'U')[0].toUpperCase()}</div>
                 )}
-                {me.username}
+                <span className="max-w-[120px] truncate">{me.username}</span>
               </Link>
             ) : (
-              <Link to="/login" className="hidden sm:inline px-4 py-2 rounded-xl bg-slate-100 hover:bg-white hover:shadow-md border border-transparent hover:border-slate-200 text-sm font-medium transition-all">{t('login')}</Link>
+              <Link to="/login" className="hidden sm:inline px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 text-sm font-semibold transition-all">{t('login')}</Link>
             )}
           </div>
         </header>

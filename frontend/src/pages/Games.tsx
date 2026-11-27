@@ -44,6 +44,11 @@ export default function Games() {
 
   const cards = [
     {
+      to: isHost ? '/mafia/host' : '/mafia', icon: '🕵️', title: 'Школьная Мафия Live',
+      desc: 'Логика, тактика и дедукция на весь класс: вход по PIN/QR, роли Мафия, Дон, Доктор, Шериф и Мирные под контролем учителя.',
+      best: '📡 PIN + QR Live', ready: true,
+    },
+    {
       to: '/games/blocade', icon: '🧱', title: t('games_blocade'),
       desc: t('games_blocade_desc'),
       best: blocadeBest ? `🏆 ${blocadeBest}` : null, ready: true,
@@ -108,8 +113,8 @@ export default function Games() {
   return (
     <div className="max-w-4xl mx-auto space-y-5">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="font-display font-bold text-2xl dark:text-white flex items-center gap-2">
-          <span className="p-2 rounded-xl bg-gradient-to-br from-indigo-500 to-amber-400 text-white"><Gamepad2 size={20} /></span> {t('games')} <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{cards.length}</span>
+        <h1 className="font-display font-bold text-2xl text-slate-900 dark:text-white flex items-center gap-2">
+          <span className="p-2 rounded-xl bg-gradient-to-br from-indigo-500 to-amber-400 text-white"><Gamepad2 size={20} /></span> {t('games')} <span className="text-sm font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">{cards.length}</span>
         </h1>
         <button onClick={toggleProjector} title={t('games_proj_hint')}
           aria-pressed={projector}

@@ -247,9 +247,9 @@ export default function LessonBuilder(){
 
   const handleFileBlockUpload=async(blockId:string, file:File)=>{
     if(!file) return
-    const allowed=['.pdf','.docx','.doc','.txt','.md','.csv','.png','.jpg','.jpeg','.webp','.gif','.ppt','.pptx']
+    const allowed=['.pdf','.docx','.doc','.xlsx','.xls','.csv','.txt','.md','.png','.jpg','.jpeg','.webp','.gif','.ppt','.pptx']
     const ext='.'+(file.name.split('.').pop()?.toLowerCase()||'')
-    if(!allowed.includes(ext)){ toast(`Формат ${ext} не поддерживается. Можно: PDF, Word (.docx), TXT, фото, PPTX`,'error'); return }
+    if(!allowed.includes(ext)){ toast(`Формат ${ext} не поддерживается. Можно: DOCX, Word (.doc), PDF, Excel (.xlsx, .xls, .csv), TXT, Фото (PNG, JPG, WEBP), PPTX`,'error'); return }
     if(file.size>100*1024*1024){ toast('Файл больше 100 MB','error'); return }
     setUploadingFile(blockId)
     try{
@@ -351,41 +351,41 @@ export default function LessonBuilder(){
   }
   // Предпросмотр блока — так же, как увидит ученик (LessonView), данные уже есть в options
   const renderPreviewBlock=(b:Block)=>{
-    if(b.type==='text') return <><div className="font-semibold mt-1">{b.data.title||t('lb_no_title')}</div><div className="whitespace-pre-wrap text-sm mt-1">{b.data.content||t('lb_empty')}</div></>
+    if(b.type==='text') return <><div className="font-semibold mt-1 text-slate-900 dark:text-white">{b.data.title||t('lb_no_title')}</div><div className="whitespace-pre-wrap text-sm mt-1 text-slate-700 dark:text-slate-300">{b.data.content||t('lb_empty')}</div></>
     if(b.type==='presentation'){
       const p=options.presentations.find((x:any)=>String(x.id)===String(b.data.presentation_id))
-      if(!b.data.presentation_id) return <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 mt-1">{t('lb_pres_not_picked')}</div>
-      if(!p) return <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-3 mt-1">{t('lb_pres_missing_a')}{String(b.data.presentation_id)}{t('lb_pres_missing_b')}</div>
-      return <Link to={withFrom(`/presentations/${p.id}`)} target="_blank" className="block mt-1 p-4 rounded-xl bg-indigo-600 text-white hover:shadow-lg transition"><div className="flex items-center gap-2 font-semibold"><Presentation size={20}/>{p.title}</div><div className="text-sm opacity-80">{p.slides_count ?? p.slides?.length ?? 0} {t('pres_slides')}{t('lb_open_arrow')}</div></Link>
+      if(!b.data.presentation_id) return <div className="text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl p-3 mt-1">{t('lb_pres_not_picked')}</div>
+      if(!p) return <div className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl p-3 mt-1">{t('lb_pres_missing_a')}{String(b.data.presentation_id)}{t('lb_pres_missing_b')}</div>
+      return <Link to={withFrom(`/presentations/${p.id}`)} target="_blank" className="block mt-1 p-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-lg transition"><div className="flex items-center gap-2 font-semibold"><Presentation size={20}/>{p.title}</div><div className="text-sm opacity-80">{p.slides_count ?? p.slides?.length ?? 0} {t('pres_slides')}{t('lb_open_arrow')}</div></Link>
     }
     if(b.type==='test'){
       const tst=options.tests.find((x:any)=>String(x.id)===String(b.data.test_id))
-      if(!b.data.test_id) return <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 mt-1">{t('lb_test_not_picked')}</div>
-      if(!tst) return <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-3 mt-1">{t('lb_test_missing_a')}{String(b.data.test_id)}{t('lb_test_missing_b')}</div>
-      return <Link to={withFrom(`/tests/${tst.id}/take`)} target="_blank" className="block mt-1 p-4 rounded-xl bg-amber-50 border border-amber-200 hover:bg-amber-100 transition"><div className="flex items-center gap-2 font-semibold"><FlaskConical size={20}/>{tst.title}</div><div className="text-sm text-slate-600">{t('lv_take_test')} {tst.questions_count ?? tst.questions?.length ?? 0} {t('lv_qs')} ↗</div></Link>
+      if(!b.data.test_id) return <div className="text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl p-3 mt-1">{t('lb_test_not_picked')}</div>
+      if(!tst) return <div className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl p-3 mt-1">{t('lb_test_missing_a')}{String(b.data.test_id)}{t('lb_test_missing_b')}</div>
+      return <Link to={withFrom(`/tests/${tst.id}/take`)} target="_blank" className="block mt-1 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition"><div className="flex items-center gap-2 font-semibold text-amber-900 dark:text-amber-200"><FlaskConical size={20}/>{tst.title}</div><div className="text-sm text-slate-600 dark:text-slate-300">{t('lv_take_test')} {tst.questions_count ?? tst.questions?.length ?? 0} {t('lv_qs')} ↗</div></Link>
     }
     if(b.type==='file'){
       const f=options.files.find((x:any)=>String(x.id)===String(b.data.file_id))
-      if(!b.data.file_id) return <div className="text-sm text-amber-700 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3 mt-1">{t('lb_file_not_picked')}</div>
-      if(!f) return <div className="text-sm text-red-700 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl p-3 mt-1">{t('lb_file_missing_a')}{String(b.data.file_id)}{t('lb_file_missing_b')}</div>
+      if(!b.data.file_id) return <div className="text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl p-3 mt-1">{t('lb_file_not_picked')}</div>
+      if(!f) return <div className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl p-3 mt-1">{t('lb_file_missing_a')}{String(b.data.file_id)}{t('lb_file_missing_b')}</div>
       return <div className="mt-2"><InlineFileReader file={f} defaultOpen={true} /></div>
     }
     if(b.type==='code'){
       const c=options.codes.find((x:any)=>String(x.id)===String(b.data.code_id))
-      if(!b.data.code_id) return <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 mt-1">{t('lb_code_not_picked')}</div>
-      if(!c) return <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-3 mt-1">{t('lb_code_missing_a')}{String(b.data.code_id)}{t('lb_code_missing_b')}</div>
-      return <Link to="/code" target="_blank" className="block mt-1 p-4 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition"><div className="flex items-center gap-2"><Code2 size={20}/>{c.title} — {c.language}</div><div className="text-sm opacity-70">{c.description?.slice(0,80)}</div></Link>
+      if(!b.data.code_id) return <div className="text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl p-3 mt-1">{t('lb_code_not_picked')}</div>
+      if(!c) return <div className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl p-3 mt-1">{t('lb_code_missing_a')}{String(b.data.code_id)}{t('lb_code_missing_b')}</div>
+      return <Link to="/code" target="_blank" className="block mt-1 p-4 rounded-xl bg-slate-900 dark:bg-slate-800 border dark:border-slate-700 text-white hover:bg-slate-800 dark:hover:bg-slate-700 transition"><div className="flex items-center gap-2"><Code2 size={20}/>{c.title} — {c.language}</div><div className="text-sm opacity-70">{c.description?.slice(0,80)}</div></Link>
     }
-    if(b.type==='board') return <div className="mt-1 p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2 text-sm"><PenTool size={16}/> {t('lb_board_hint')}</div>
+    if(b.type==='board') return <div className="mt-1 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-900 dark:text-emerald-200 flex items-center gap-2 text-sm"><PenTool size={16}/> {t('lb_board_hint')}</div>
     if(b.type==='video'){
       const raw=(b.data.url||'').trim()
-      if(!raw) return <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 mt-1">{t('lb_video_empty')}</div>
+      if(!raw) return <div className="text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl p-3 mt-1">{t('lb_video_empty')}</div>
       const url=toEmbedUrl(raw)
       const ok=url.startsWith('https://www.youtube.com/embed/')||url.startsWith('https://player.vimeo.com/')
-      if(!ok) return <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 mt-1">{t('lb_video_bad')} <code className="text-xs bg-white px-1 rounded">{raw.slice(0,60)}</code></div>
-      return <div className="aspect-video rounded-xl overflow-hidden border mt-1"><iframe src={url} className="w-full h-full" allowFullScreen sandbox="allow-scripts allow-same-origin allow-presentation" title="video"/></div>
+      if(!ok) return <div className="text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl p-3 mt-1">{t('lb_video_bad')} <code className="text-xs bg-white dark:bg-slate-800 px-1 rounded">{raw.slice(0,60)}</code></div>
+      return <div className="aspect-video rounded-xl overflow-hidden border dark:border-slate-700 mt-1"><iframe src={url} className="w-full h-full" allowFullScreen sandbox="allow-scripts allow-same-origin allow-presentation" title="video"/></div>
     }
-    return <div className="text-sm text-slate-500 mt-1">{t('lb_unknown_block_a')}{b.type}</div>
+    return <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('lb_unknown_block_a')}{b.type}</div>
   }
   const save=async()=>{
     const newErrors:{title?:string,subject?:string,blocks?:Record<string,string>} = {}
@@ -495,13 +495,13 @@ export default function LessonBuilder(){
         </div>
       )}
 
-      <div className="bg-slate-900 rounded-[24px] p-6 text-white">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <h1 className="text-2xl font-display font-bold flex items-center gap-2"><Sparkles size={20}/> {isNew?t('lb_hero_new'):t('lb_hero_edit')}</h1>
-            <p className="text-white/80 text-sm mt-1">{t('lb_hero_sub')}</p>
+      <div className="bg-slate-900 rounded-[24px] p-4 sm:p-6 text-white">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl sm:text-2xl font-display font-bold flex items-center gap-2"><Sparkles size={20} className="shrink-0"/> {isNew?t('lb_hero_new'):t('lb_hero_edit')}</h1>
+            <p className="text-white/80 text-xs sm:text-sm mt-1 leading-relaxed">{t('lb_hero_sub')}</p>
           </div>
-          <button onClick={()=>setPreview(!preview)} className="px-4 py-2 rounded-xl bg-white text-indigo-700 font-semibold flex items-center gap-2 text-sm"><Eye size={16}/>{preview?t('lb_editor'):t('lb_preview')}</button>
+          <button onClick={()=>setPreview(!preview)} className="self-start sm:self-auto px-4 py-2 min-h-[40px] rounded-xl bg-white text-indigo-700 font-semibold inline-flex items-center gap-2 text-sm shrink-0"><Eye size={16} className="shrink-0"/>{preview?t('lb_editor'):t('lb_preview')}</button>
         </div>
       </div>
 
@@ -576,7 +576,7 @@ export default function LessonBuilder(){
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Каждый блок — часть урока. Файлы, презентации и тесты можно загрузить и создать прямо здесь.</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-4">
               <button type="button" onClick={()=>addBlock('text')} className="p-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white flex flex-col items-center gap-1 text-sm font-bold shadow-sm transition"><Type size={20}/> Текст</button>
-              <button type="button" onClick={()=>addBlock('file')} className="p-3.5 rounded-xl bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-900/50 flex flex-col items-center gap-1 text-sm font-bold transition"><FileText size={20}/> Файл / PDF / Word</button>
+              <button type="button" onClick={()=>addBlock('file')} className="p-3.5 rounded-xl bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-900/50 flex flex-col items-center gap-1 text-sm font-bold transition"><FileText size={20}/> Файл (PDF, Word, Excel, Фото)</button>
               <button type="button" onClick={()=>addBlock('presentation')} className="p-3.5 rounded-xl bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-200 hover:bg-orange-100 dark:hover:bg-orange-900/50 flex flex-col items-center gap-1 text-sm font-bold transition"><Presentation size={20}/> Презентация</button>
               <button type="button" onClick={()=>addBlock('test')} className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200 hover:bg-rose-100 dark:hover:bg-rose-900/50 flex flex-col items-center gap-1 text-sm font-bold transition"><FlaskConical size={20}/> Тест</button>
               <button type="button" onClick={()=>addBlock('video')} className="p-3.5 rounded-xl bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-200 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex flex-col items-center gap-1 text-sm font-bold transition"><Video size={20}/> Видео (YouTube)</button>
@@ -615,16 +615,24 @@ export default function LessonBuilder(){
                       {/* Прямая загрузка файла с компьютера прямо здесь */}
                       <label className={`block p-4 rounded-2xl border-2 border-dashed text-center cursor-pointer transition ${uploadingFile===b.id ? 'bg-sky-50 dark:bg-sky-900/30 border-sky-400' : 'bg-sky-50/50 dark:bg-slate-800/70 border-sky-300 dark:border-slate-600 hover:border-indigo-500 hover:bg-sky-50 dark:hover:bg-slate-800'}`}>
                         <div className="flex items-center justify-center gap-2 text-sm font-bold text-indigo-700 dark:text-sky-300">
-                          {uploadingFile===b.id ? <><Loader2 size={18} className="animate-spin"/> Загружаю файл…</> : <><Upload size={18}/> Нажми, чтобы загрузить файл с компьютера (PDF, Word .docx, TXT, Фото)</>}
+                          {uploadingFile===b.id ? <><Loader2 size={18} className="animate-spin"/> Загружаю файл…</> : <><Upload size={18}/> Нажми, чтобы загрузить файл с компьютера</>}
                         </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                          Файл загрузится сразу сюда, привяжется к уроку и его можно будет читать прямо на странице урока!
+                        <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2" data-testid="lb-file-formats">
+                          <span className="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-[11px] font-bold">DOCX / Word (.doc)</span>
+                          <span className="px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 text-[11px] font-bold">PDF</span>
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold">Excel (.xlsx, .xls, .csv)</span>
+                          <span className="px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-bold">TXT / MD</span>
+                          <span className="px-2 py-0.5 rounded-md bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 text-[11px] font-bold">Фото (PNG, JPG, WEBP)</span>
+                          <span className="px-2 py-0.5 rounded-md bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 text-[11px] font-bold">PPTX</span>
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                          Файл загрузится сразу сюда, привяжется к уроку и полностью откроется прямо на странице урока!
                         </div>
                         <input
                           type="file"
                           className="hidden"
                           data-testid={`lb-file-upload-${b.id}`}
-                          accept=".pdf,.docx,.doc,.txt,.md,.csv,.png,.jpg,.jpeg,.webp,.gif,.ppt,.pptx"
+                          accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt,.md,.png,.jpg,.jpeg,.webp,.gif,.ppt,.pptx,image/*"
                           disabled={uploadingFile===b.id}
                           onChange={e=>{ const f=e.target.files?.[0]; if(f) handleFileBlockUpload(b.id, f); (e.target as HTMLInputElement).value='' }}
                         />
@@ -632,12 +640,12 @@ export default function LessonBuilder(){
 
                       {/* Или выбрать из ранее загруженных файлов */}
                       {options.files.length > 0 && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 shrink-0">Или выбери из загруженных:</span>
                           <select
                             value={b.data.file_id||''}
                             onChange={e=>{updateBlock(b.id,{file_id:e.target.value?Number(e.target.value):null}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}}
-                            className={`flex-1 px-3 py-2 rounded-xl border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 dark:text-white text-sm ${errors.blocks?.[b.id] ? 'border-red-400' : ''}`}
+                            className={`w-full sm:flex-1 min-w-0 px-3 py-2 rounded-xl border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 dark:text-white text-sm ${errors.blocks?.[b.id] ? 'border-red-400' : ''}`}
                           >
                             <option value="">— не выбран —</option>
                             {options.files.map((f:any)=><option key={f.id} value={f.id}>{f.title}</option>)}
@@ -658,19 +666,19 @@ export default function LessonBuilder(){
                   <div className="space-y-3">
                     {/* Выбранная */}
                     {!!b.data.presentation_id && options.presentations.find((p:any)=>String(p.id)===String(b.data.presentation_id)) && (
-                      <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl flex items-center justify-between gap-2">
+                      <div className="text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 p-2.5 rounded-xl flex items-center justify-between gap-2">
                         <span>✓ Выбрана: <b>{options.presentations.find((p:any)=>String(p.id)===String(b.data.presentation_id))?.title}</b> ({options.presentations.find((p:any)=>String(p.id)===String(b.data.presentation_id))?.slides_count ?? options.presentations.find((p:any)=>String(p.id)===String(b.data.presentation_id))?.slides?.length ?? 0} слайдов)</span>
                         <span className="flex items-center gap-2 shrink-0">
                           <Link to={withFrom(`/presentations/${b.data.presentation_id}`)} target="_blank" className="px-2.5 py-1 rounded-full bg-emerald-600 text-white font-semibold no-underline">Открыть ↗</Link>
-                          <button onClick={()=>updateBlock(b.id,{presentation_id:null})} className="text-xs underline">Сменить</button>
+                          <button type="button" onClick={()=>updateBlock(b.id,{presentation_id:null})} className="text-xs underline">Сменить</button>
                         </span>
                       </div>
                     )}
-                    {errors.blocks?.[b.id] && <div className="text-xs text-red-600">⚠ {errors.blocks?.[b.id]}</div>}
+                    {errors.blocks?.[b.id] && <div className="text-xs text-red-600 dark:text-red-400">⚠ {errors.blocks?.[b.id]}</div>}
                     {/* Вкладки */}
-                    <div className="flex gap-1 p-1 rounded-xl bg-slate-100 w-fit">
+                    <div className="flex flex-wrap items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 w-fit">
                       {(['select','upload','create'] as const).map(tab=>(
-                        <button key={tab} onClick={()=>setPresTabs(p=>({...p,[b.id]:tab}))} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${getPresTab(b.id)===tab?'bg-white shadow text-slate-900':'text-slate-500 hover:text-slate-700'}`}>
+                        <button type="button" key={tab} onClick={()=>setPresTabs(p=>({...p,[b.id]:tab}))} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${getPresTab(b.id)===tab?'bg-white dark:bg-slate-700 shadow text-slate-900 dark:text-white':'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
                           {tab==='select'?'Выбрать':tab==='upload'?'Загрузить':'Создать'}
                         </button>
                       ))}
@@ -679,56 +687,56 @@ export default function LessonBuilder(){
                     {getPresTab(b.id)==='select' && (
                       <div className="space-y-2">
                         {!subject ? (
-                          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">Сначала выбери предмет урока выше — покажу только презентации по <b>{selectedSubject?.name || 'выбранному предмету'}</b>. Это быстро помогает найти нужную.</div>
+                          <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-sm text-amber-800 dark:text-amber-200">Сначала выбери предмет урока выше — покажу только презентации по <b>{selectedSubject?.name || 'выбранному предмету'}</b>. Это быстро помогает найти нужную.</div>
                         ) : filteredPresentations.length===0 ? (
-                          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm">
-                            <div className="font-semibold text-amber-800">Нет презентаций по предмету «{selectedSubject?.name}»</div>
-                            <div className="text-xs text-amber-700 mt-1">Загрузи во вкладке «Загрузить» или создай новую — она автоматически привяжется к этому предмету.</div>
-                            <div className="text-xs text-slate-500 mt-1">Всего презентаций в системе: {options.presentations.length}</div>
+                          <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-sm">
+                            <div className="font-semibold text-amber-800 dark:text-amber-200">Нет презентаций по предмету «{selectedSubject?.name}»</div>
+                            <div className="text-xs text-amber-700 dark:text-amber-300 mt-1">Загрузи во вкладке «Загрузить» или создай новую — она автоматически привяжется к этому предмету.</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">Всего презентаций в системе: {options.presentations.length}</div>
                           </div>
                         ) : (
-                          <select value={b.data.presentation_id||''} onChange={e=>{updateBlock(b.id,{presentation_id:e.target.value?Number(e.target.value):null}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} className="w-full px-3 py-2.5 rounded-xl border bg-slate-50">
+                          <select value={b.data.presentation_id||''} onChange={e=>{updateBlock(b.id,{presentation_id:e.target.value?Number(e.target.value):null}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white">
                             <option value="">— выбери из {filteredPresentations.length} по предмету «{selectedSubject?.name}» —</option>
                             {filteredPresentations.map((p:any)=><option key={p.id} value={p.id}>{p.title} ({p.slides_count ?? p.slides?.length ?? 0} слайдов){p.subject_name? ` • ${p.subject_name}`:''}</option>)}
                           </select>
                         )}
-                        {subject && filteredPresentations.length>0 && <div className="text-xs text-slate-500">Показано {filteredPresentations.length} из {options.presentations.length} — фильтр по предмету урока «{selectedSubject?.name}». <button onClick={()=>refreshOptions()} className="underline">Обновить</button></div>}
-                        <div className="flex gap-2">
-                          <button onClick={()=>refreshOptions()} className="text-xs px-3 py-1.5 rounded-full bg-white border hover:bg-slate-50">↻ Обновить список</button>
-                          <Link to="/presentations" target="_blank" className="text-xs px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700">Все презентации →</Link>
+                        {subject && filteredPresentations.length>0 && <div className="text-xs text-slate-500 dark:text-slate-400">Показано {filteredPresentations.length} из {options.presentations.length} — фильтр по предмету урока «{selectedSubject?.name}». <button type="button" onClick={()=>refreshOptions()} className="underline">Обновить</button></div>}
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={()=>refreshOptions()} className="text-xs px-3 py-1.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">↻ Обновить список</button>
+                          <Link to="/presentations" target="_blank" className="text-xs px-3 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300">Все презентации →</Link>
                         </div>
                       </div>
                     )}
                     {getPresTab(b.id)==='upload' && (
                       <div className="space-y-2">
-                        <label className={`block p-4 rounded-xl border-2 border-dashed text-center cursor-pointer transition ${uploadingPres===b.id?'bg-orange-50 border-orange-300':'bg-orange-50/50 border-orange-200 hover:bg-orange-50 hover:border-orange-300'}`}>
-                          <div className="text-sm font-semibold text-orange-700">{uploadingPres===b.id ? '⏳ Загружаю и разбираю слайды...' : '⬆ Перетащи сюда .pptx/.pdf или кликни'}</div>
-                          <div className="text-xs text-orange-600/80 mt-1">Поддерживается .pptx .ppt .pdf до 50MB — слайды и картинки извлекутся автоматически (21 слайд из Ребусы)</div>
+                        <label className={`block p-4 rounded-xl border-2 border-dashed text-center cursor-pointer transition ${uploadingPres===b.id?'bg-orange-50 dark:bg-orange-950/40 border-orange-300 dark:border-orange-700':'bg-orange-50/50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800/60 hover:bg-orange-50 dark:hover:bg-orange-950/40 hover:border-orange-300'}`}>
+                          <div className="text-sm font-semibold text-orange-700 dark:text-orange-300">{uploadingPres===b.id ? '⏳ Загружаю и разбираю слайды...' : '⬆ Перетащи сюда .pptx/.pdf или кликни'}</div>
+                          <div className="text-xs text-orange-600/80 dark:text-orange-400/80 mt-1">Поддерживается .pptx .ppt .pdf до 50MB — слайды и картинки извлекутся автоматически</div>
                           <input type="file" className="hidden" accept=".ppt,.pptx,.pdf" onChange={e=>{ const f=e.target.files?.[0]; if(f) handlePresUpload(b.id,f); (e.target as HTMLInputElement).value=''}} disabled={uploadingPres===b.id}/>
                         </label>
-                        <div className="text-xs text-slate-500">После загрузки презентация появится в списке «Выбрать» и сразу привяжется к уроку.</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">После загрузки презентация появится в списке «Выбрать» и сразу привяжется к уроку.</div>
                       </div>
                     )}
                     {getPresTab(b.id)==='create' && (
-                      <div className="space-y-2 p-3 rounded-xl bg-indigo-50 border border-indigo-200">
-                        <div className="text-xs font-semibold text-indigo-800">Быстро создать пустую презентацию</div>
-                        <div className="flex gap-2">
-                          <input value={quickPresTitle} onChange={e=>setQuickPresTitle(e.target.value)} placeholder="Название, напр. Ребусы — 5 класс" className="flex-1 px-3 py-2 rounded-xl border bg-white text-sm"/>
-                          <button onClick={()=>handleQuickCreatePres(b.id)} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Создать и выбрать</button>
+                      <div className="space-y-2 p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60">
+                        <div className="text-xs font-semibold text-indigo-800 dark:text-indigo-200">Быстро создать пустую презентацию</div>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input value={quickPresTitle} onChange={e=>setQuickPresTitle(e.target.value)} placeholder="Название, напр. Ребусы — 5 класс" className="w-full sm:flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"/>
+                          <button type="button" onClick={()=>handleQuickCreatePres(b.id)} className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shrink-0">Создать и выбрать</button>
                         </div>
-                        <Link to="/presentations/new" target="_blank" className="text-xs text-indigo-600 underline">Открыть полный редактор →</Link>
+                        <Link to="/presentations/new" target="_blank" className="text-xs text-indigo-600 dark:text-indigo-400 underline">Открыть полный редактор →</Link>
                       </div>
                     )}
                     {!!b.data.presentation_id && !options.presentations.find((p:any)=>String(p.id)===String(b.data.presentation_id)) && (
                       optsLoading ? (
-                        <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded-xl">Загружаю список презентаций…</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 p-2 rounded-xl">Загружаю список презентаций…</div>
                       ) : (
-                        <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded-xl space-y-2">
+                        <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 p-2.5 rounded-xl space-y-2">
                           <div>Презентация id {String(b.data.presentation_id)} недоступна (удалена или нет доступа).</div>
                           <div className="flex flex-wrap gap-2">
-                            <button onClick={()=>{updateBlock(b.id,{presentation_id:null}); setPresTabs(p=>({...p,[b.id]:'select'}))}} className="px-2.5 py-1 rounded-full bg-white border font-semibold">Выбрать другую</button>
-                            <button onClick={()=>{setBlocks(bl=>bl.filter(x=>x.id!==b.id))}} className="px-2.5 py-1 rounded-full bg-red-50 border border-red-200 text-red-600 font-semibold">Удалить блок</button>
-                            <button onClick={()=>refreshOptions()} className="underline">обновить список</button>
+                            <button type="button" onClick={()=>{updateBlock(b.id,{presentation_id:null}); setPresTabs(p=>({...p,[b.id]:'select'}))}} className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border dark:border-slate-700 text-slate-800 dark:text-slate-100 font-semibold">Выбрать другую</button>
+                            <button type="button" onClick={()=>{setBlocks(bl=>bl.filter(x=>x.id!==b.id))}} className="px-2.5 py-1 rounded-full bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 font-semibold">Удалить блок</button>
+                            <button type="button" onClick={()=>refreshOptions()} className="underline">обновить список</button>
                           </div>
                         </div>
                       )
@@ -739,60 +747,60 @@ export default function LessonBuilder(){
                   <div className="space-y-3">
                     {/* Выбран */}
                     {!!b.data.test_id && options.tests.find((t:any)=>String(t.id)===String(b.data.test_id)) && (
-                      <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl flex items-center justify-between gap-2">
+                      <div className="text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 p-2.5 rounded-xl flex items-center justify-between gap-2">
                         <span>✓ Выбран тест: <b>{options.tests.find((t:any)=>String(t.id)===String(b.data.test_id))?.title}</b> ({options.tests.find((t:any)=>String(t.id)===String(b.data.test_id))?.questions_count ?? 0} вопр.)</span>
                         <span className="flex items-center gap-2 shrink-0">
                           <Link to={withFrom(`/tests/${b.data.test_id}/take`)} target="_blank" className="px-2.5 py-1 rounded-full bg-emerald-600 text-white font-semibold no-underline">Открыть ↗</Link>
-                          <button onClick={()=>updateBlock(b.id,{test_id:null})} className="text-xs underline">Сменить</button>
+                          <button type="button" onClick={()=>updateBlock(b.id,{test_id:null})} className="text-xs underline">Сменить</button>
                         </span>
                       </div>
                     )}
                     {!!b.data.test_id && !options.tests.find((t:any)=>String(t.id)===String(b.data.test_id)) && (
                       optsLoading ? (
-                        <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded-xl">Загружаю список тестов…</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 p-2 rounded-xl">Загружаю список тестов…</div>
                       ) : (
-                        <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded-xl space-y-2">
+                        <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 p-2.5 rounded-xl space-y-2">
                           <div>Тест id {String(b.data.test_id)} недоступен (удалён или нет доступа).</div>
                           <div className="flex flex-wrap gap-2">
-                            <button onClick={()=>updateBlock(b.id,{test_id:null})} className="px-2.5 py-1 rounded-full bg-white border font-semibold">Выбрать другой</button>
-                            <button onClick={()=>{setBlocks(bl=>bl.filter(x=>x.id!==b.id))}} className="px-2.5 py-1 rounded-full bg-red-50 border border-red-200 text-red-600 font-semibold">Удалить блок</button>
+                            <button type="button" onClick={()=>updateBlock(b.id,{test_id:null})} className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border dark:border-slate-700 text-slate-800 dark:text-slate-100 font-semibold">Выбрать другой</button>
+                            <button type="button" onClick={()=>{setBlocks(bl=>bl.filter(x=>x.id!==b.id))}} className="px-2.5 py-1 rounded-full bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 font-semibold">Удалить блок</button>
                           </div>
                         </div>
                       )
                     )}
-                    {errors.blocks?.[b.id] && <div className="text-xs text-red-600">⚠ {errors.blocks?.[b.id]}</div>}
+                    {errors.blocks?.[b.id] && <div className="text-xs text-red-600 dark:text-red-400">⚠ {errors.blocks?.[b.id]}</div>}
                     {!testInlineOpen[b.id] ? (
                       <>
-                        <select value={b.data.test_id||''} onChange={e=>{updateBlock(b.id,{test_id:e.target.value?Number(e.target.value):null}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} className={`w-full px-3 py-2.5 rounded-xl border bg-slate-50 ${errors.blocks?.[b.id] ? 'border-red-300 bg-red-50' : ''}`}>
+                        <select value={b.data.test_id||''} onChange={e=>{updateBlock(b.id,{test_id:e.target.value?Number(e.target.value):null}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white ${errors.blocks?.[b.id] ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/40' : ''}`}>
                           <option value="">— выбери готовый тест —</option>
                           {options.tests.map((t:any)=><option key={t.id} value={t.id}>{t.title} ({t.questions_count ?? t.questions?.length ?? 0} вопр.)</option>)}
                         </select>
                         <div className="flex flex-wrap gap-2">
-                          <button onClick={()=>{ setTestInlineOpen(p=>({...p,[b.id]:true})); setInlineTests(prev=>({...prev,[b.id]: getInlineTest(b.id)}))}} className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Создать тест прямо здесь</button>
-                          <Link to="/tests/new" target="_blank" className="px-3 py-2 rounded-xl bg-white border text-sm">Открыть конструктор тестов →</Link>
-                          <button onClick={()=>refreshOptions()} className="px-3 py-2 rounded-xl bg-slate-100 text-sm">↻ Обновить</button>
+                          <button type="button" onClick={()=>{ setTestInlineOpen(p=>({...p,[b.id]:true})); setInlineTests(prev=>({...prev,[b.id]: getInlineTest(b.id)}))}} className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold">Создать тест прямо здесь</button>
+                          <Link to="/tests/new" target="_blank" className="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm">Открыть конструктор тестов →</Link>
+                          <button type="button" onClick={()=>refreshOptions()} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 text-sm">↻ Обновить</button>
                         </div>
-                        <div className="text-xs text-slate-500">После создания тест сразу появится в списке и урок останется — не нужно уходить со страницы. Остальные блоки урока никуда не денутся.</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">После создания тест сразу появится в списке и урок останется — не нужно уходить со страницы. Остальные блоки урока никуда не денутся.</div>
                       </>
                     ) : (
-                      <div className="p-3 rounded-xl bg-slate-50 border space-y-3">
+                      <div className="p-3 sm:p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
                         <div className="flex items-center justify-between">
-                          <div className="text-sm font-bold">Новый тест для урока</div>
-                          <button onClick={()=>setTestInlineOpen(p=>({...p,[b.id]:false}))} className="min-h-[44px] px-3 py-2 text-sm font-semibold rounded-full bg-white border active:bg-slate-100">✕ Свернуть</button>
+                          <div className="text-sm font-bold text-slate-900 dark:text-white">Новый тест для урока</div>
+                          <button type="button" onClick={()=>setTestInlineOpen(p=>({...p,[b.id]:false}))} className="min-h-[40px] px-3 py-1.5 text-sm font-semibold rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700">✕ Свернуть</button>
                         </div>
                         {AI_FEATURES && (
-                        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 space-y-2" data-testid="lb-ai">
-                          <button onClick={()=>setLtAiOpen(p=>({...p,[b.id]:!p[b.id]}))}
-                            className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5" data-testid="lb-ai-btn">
+                        <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/70 dark:bg-emerald-950/30 p-3 space-y-2" data-testid="lb-ai">
+                          <button type="button" onClick={()=>setLtAiOpen(p=>({...p,[b.id]:!p[b.id]}))}
+                            className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 text-sm" data-testid="lb-ai-btn">
                             Создать вопросы автоматически {ltAiOpen[b.id] ? '▾' : '▸'}
                           </button>
                           {ltAiOpen[b.id] && (
                             <div className="space-y-2" data-testid="lb-ai-panel">
                               <textarea value={ltAiPrompt} onChange={e=>setLtAiPrompt(e.target.value)}
                                 placeholder="Например: тест на тему «Атомы» для 6 класса, простые вопросы, по-русски"
-                                className="w-full px-3 py-2 rounded-xl border bg-white text-sm min-h-[64px]" />
+                                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm min-h-[64px]" />
                               <div className="flex flex-wrap items-center gap-2">
-                                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                                <label className="text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                                   Вопросов (1–40):
                                   <input
                                     type="text"
@@ -812,7 +820,7 @@ export default function LessonBuilder(){
                                       setLtAiCountInput(String(n))
                                     }}
                                     placeholder="10"
-                                    className="w-16 px-2.5 py-1.5 rounded-lg border bg-white text-center font-bold text-slate-900"
+                                    className="w-16 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-center font-bold text-slate-900 dark:text-white"
                                   />
                                 </label>
                                 <div className="flex items-center gap-1">
@@ -821,66 +829,66 @@ export default function LessonBuilder(){
                                       key={n}
                                       type="button"
                                       onClick={() => { setLtAiCount(n); setLtAiCountInput(String(n)) }}
-                                      className={`px-2 py-1 rounded-md text-xs font-bold border transition ${ltAiCount === n && ltAiCountInput === String(n) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 hover:bg-emerald-50'}`}
+                                      className={`px-2 py-1 rounded-md text-xs font-bold border transition ${ltAiCount === n && ltAiCountInput === String(n) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-slate-700'}`}
                                     >
                                       {n}
                                     </button>
                                   ))}
                                 </div>
-                                <button onClick={()=>ltAiGenerate(b.id)} disabled={ltAiBusy}
-                                  className="ml-auto px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold disabled:opacity-50" data-testid="lb-ai-gen">
+                                <button type="button" onClick={()=>ltAiGenerate(b.id)} disabled={ltAiBusy}
+                                  className="ml-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm disabled:opacity-50" data-testid="lb-ai-gen">
                                   {ltAiBusy?'⏳ Думаю…':'Сгенерировать'}
                                 </button>
                               </div>
-                              {ltAiSrc && <div className={`text-[11px] font-bold px-2 py-1 rounded-lg w-fit ${ltAiSrc.startsWith('gemini') ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{ltAiSrc.startsWith('gemini') ? 'сгенерировано автоматически' : 'офлайн-генератор'}</div>}
-                              <div className="text-[11px] text-slate-500">Вопросы добавятся в список ниже — проверь и поправь, потом сохрани тест.</div>
+                              {ltAiSrc && <div className={`text-[11px] font-bold px-2 py-1 rounded-lg w-fit ${ltAiSrc.startsWith('gemini') ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300'}`}>{ltAiSrc.startsWith('gemini') ? 'сгенерировано автоматически' : 'офлайн-генератор'}</div>}
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400">Вопросы добавятся в список ниже — проверь и поправь, потом сохрани тест.</div>
                             </div>
                           )}
                         </div>
                         )}
-                        <input value={getInlineTest(b.id).title} onChange={e=>setInlineTests(prev=>({...prev,[b.id]:{...getInlineTest(b.id), title:e.target.value}}))} placeholder="Название теста, напр. Ребусы — проверка" className="w-full px-3 py-2 rounded-xl border bg-white text-sm font-semibold"/>
-                        <textarea value={getInlineTest(b.id).desc} onChange={e=>setInlineTests(prev=>({...prev,[b.id]:{...getInlineTest(b.id), desc:e.target.value}}))} placeholder="Описание (необязательно)" rows={2} className="w-full px-3 py-2 rounded-xl border bg-white text-sm"/>
-                        <div className="flex items-center gap-2 text-xs">
-                          <label>Проходной % <input type="number" value={getInlineTest(b.id).pass} onChange={e=>setInlineTests(prev=>({...prev,[b.id]:{...getInlineTest(b.id), pass: parseInt(e.target.value)||0}}))} className="w-16 px-2 py-1 rounded border ml-1"/></label>
+                        <input value={getInlineTest(b.id).title} onChange={e=>setInlineTests(prev=>({...prev,[b.id]:{...getInlineTest(b.id), title:e.target.value}}))} placeholder="Название теста, напр. Ребусы — проверка" className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm font-semibold"/>
+                        <textarea value={getInlineTest(b.id).desc} onChange={e=>setInlineTests(prev=>({...prev,[b.id]:{...getInlineTest(b.id), desc:e.target.value}}))} placeholder="Описание (необязательно)" rows={2} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm"/>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
+                          <label className="flex items-center gap-1">Проходной % <input type="number" value={getInlineTest(b.id).pass} onChange={e=>setInlineTests(prev=>({...prev,[b.id]:{...getInlineTest(b.id), pass: parseInt(e.target.value)||0}}))} className="w-16 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white ml-1"/></label>
                           <span className="text-slate-400">• урок не пропадёт, тест создастся отдельно</span>
                         </div>
                         <div className="space-y-3">
                           {getInlineTest(b.id).questions.map((q,qi)=>(
-                            <div key={qi} className="p-3 rounded-xl bg-white border space-y-2">
+                            <div key={qi} className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
                               <div className="flex gap-2">
                                 <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold shrink-0">{qi+1}</span>
                                 <textarea value={q.text} onChange={e=>setInlineTests(prev=>{
                                   const cur=getInlineTest(b.id); const qs=[...cur.questions]; qs[qi]={...qs[qi],text:e.target.value}; return {...prev,[b.id]:{...cur,questions:qs}}
-                                })} placeholder={`Вопрос ${qi+1}`} className="flex-1 px-2 py-1.5 rounded border text-sm font-medium" rows={2}/>
-                                <button onClick={()=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); return {...prev,[b.id]:{...cur,questions:cur.questions.filter((_,i)=>i!==qi)}}})} className="p-1.5 text-red-500">🗑</button>
+                                })} placeholder={`Вопрос ${qi+1}`} className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-medium" rows={2}/>
+                                <button type="button" onClick={()=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); return {...prev,[b.id]:{...cur,questions:cur.questions.filter((_,i)=>i!==qi)}}})} className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg">🗑</button>
                               </div>
-                              <div className="flex gap-2 text-xs">
-                                <select value={q.type} onChange={e=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); const qs=[...cur.questions]; qs[qi]={...qs[qi],type:e.target.value}; return {...prev,[b.id]:{...cur,questions:qs}}})} className="px-2 py-1 rounded border bg-slate-50">
+                              <div className="flex flex-wrap gap-2 text-xs text-slate-700 dark:text-slate-300">
+                                <select value={q.type} onChange={e=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); const qs=[...cur.questions]; qs[qi]={...qs[qi],type:e.target.value}; return {...prev,[b.id]:{...cur,questions:qs}}})} className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white">
                                   <option value="single">Один ответ</option><option value="multiple">Несколько</option><option value="true_false">Верно/Неверно</option>
                                 </select>
-                                <label className="flex items-center gap-1">Баллы <input type="number" value={q.points} onChange={e=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); const qs=[...cur.questions]; qs[qi]={...qs[qi],points:parseInt(e.target.value)||1}; return {...prev,[b.id]:{...cur,questions:qs}}})} className="w-14 px-2 py-1 rounded border"/></label>
+                                <label className="flex items-center gap-1">Баллы <input type="number" value={q.points} onChange={e=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); const qs=[...cur.questions]; qs[qi]={...qs[qi],points:parseInt(e.target.value)||1}; return {...prev,[b.id]:{...cur,questions:qs}}})} className="w-14 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"/></label>
                               </div>
-                              <div className="space-y-1">
+                              <div className="space-y-1.5">
                                 {q.options.map((o,oi)=>(
                                   <div key={oi} className="flex items-center gap-2">
-                                    <input type={q.type==='multiple'?'checkbox':'radio'} checked={o.is_correct} onChange={e=>setInlineTests(prev=>{
+                                    <input type={q.type==='multiple'?'checkbox':'radio'} checked={o.is_correct} className="accent-emerald-600" onChange={e=>setInlineTests(prev=>{
                                       const cur=getInlineTest(b.id); const qs=[...cur.questions];
                                       if(q.type==='single'){ qs[qi]={...qs[qi], options: qs[qi].options.map((op,idx)=>({...op,is_correct: idx===oi}))}
                                       } else { const opts=[...qs[qi].options]; opts[oi]={...opts[oi], is_correct:e.target.checked}; qs[qi]={...qs[qi], options:opts}}
                                       return {...prev,[b.id]:{...cur,questions:qs}}
                                     })} />
-                                    <input value={o.text} onChange={e=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); const qs=[...cur.questions]; const opts=[...qs[qi].options]; opts[oi]={...opts[oi], text:e.target.value}; qs[qi]={...qs[qi], options:opts}; return {...prev,[b.id]:{...cur,questions:qs}}})} className="flex-1 px-2 py-1.5 rounded border text-sm" placeholder={`Вариант ${oi+1}`}/>
-                                    <button onClick={()=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); const qs=[...cur.questions]; qs[qi]={...qs[qi], options: qs[qi].options.filter((_,i)=>i!==oi)}; return {...prev,[b.id]:{...cur,questions:qs}}})} className="text-xs">✕</button>
+                                    <input value={o.text} onChange={e=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); const qs=[...cur.questions]; const opts=[...qs[qi].options]; opts[oi]={...opts[oi], text:e.target.value}; qs[qi]={...qs[qi], options:opts}; return {...prev,[b.id]:{...cur,questions:qs}}})} className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm" placeholder={`Вариант ${oi+1}`}/>
+                                    <button type="button" onClick={()=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); const qs=[...cur.questions]; qs[qi]={...qs[qi], options: qs[qi].options.filter((_,i)=>i!==oi)}; return {...prev,[b.id]:{...cur,questions:qs}}})} className="text-xs px-1.5 py-1 text-slate-400 hover:text-red-500">✕</button>
                                   </div>
                                 ))}
-                                <button onClick={()=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); const qs=[...cur.questions]; qs[qi]={...qs[qi], options:[...qs[qi].options,{text:'Новый вариант',is_correct:false}]}; return {...prev,[b.id]:{...cur,questions:qs}}})} className="text-xs text-indigo-600">+ Вариант</button>
+                                <button type="button" onClick={()=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); const qs=[...cur.questions]; qs[qi]={...qs[qi], options:[...qs[qi].options,{text:'Новый вариант',is_correct:false}]}; return {...prev,[b.id]:{...cur,questions:qs}}})} className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold">+ Вариант</button>
                               </div>
                             </div>
                           ))}
-                          <button onClick={()=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); return {...prev,[b.id]:{...cur,questions:[...cur.questions,{text:'Новый вопрос',type:'single',points:1,options:[{text:'Вариант 1',is_correct:true},{text:'Вариант 2',is_correct:false}]}]}}})} className="w-full py-2 rounded-xl border-2 border-dashed text-sm font-medium">+ Добавить вопрос</button>
+                          <button type="button" onClick={()=>setInlineTests(prev=>{ const cur=getInlineTest(b.id); return {...prev,[b.id]:{...cur,questions:[...cur.questions,{text:'Новый вопрос',type:'single',points:1,options:[{text:'Вариант 1',is_correct:true},{text:'Вариант 2',is_correct:false}]}]}}})} className="w-full py-2 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-indigo-400 text-sm font-medium">+ Добавить вопрос</button>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={async()=>{
+                          <button type="button" onClick={async()=>{
                             const cur=getInlineTest(b.id)
                             if(!cur.title.trim()){ toast('Укажи название теста','error'); return}
                             if(!cur.questions.length || cur.questions.some(q=>!q.text.trim())){ toast('Заполни все вопросы','error'); return}
@@ -893,21 +901,21 @@ export default function LessonBuilder(){
                               setTestInlineOpen(p=>({...p,[b.id]:false}))
                               toast(`Тест "${newTest.title}" создан и выбран для урока ✓`,'success')
                             }catch(e:any){ toast(e?.response?.data?.detail||JSON.stringify(e?.response?.data)||'Ошибка создания теста','error')}
-                          }} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm">Создать тест и привязать к уроку</button>
-                          <button onClick={()=>setTestInlineOpen(p=>({...p,[b.id]:false}))} className="px-4 py-2.5 rounded-xl bg-white border text-sm">Отмена</button>
+                          }} className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm">Создать тест и привязать к уроку</button>
+                          <button type="button" onClick={()=>setTestInlineOpen(p=>({...p,[b.id]:false}))} className="px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm">Отмена</button>
                         </div>
-                        <div className="text-xs text-slate-500">Важно: урок не пропадёт — после создания теста ты останешься в конструкторе урока, просто выбери предмет и нажми «Опубликовать урок».</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">Важно: урок не пропадёт — после создания теста ты останешься в конструкторе урока, просто выбери предмет и нажми «Опубликовать урок».</div>
                       </div>
                     )}
                   </div>
                 )}
                 {b.type==='code' && (
                   <div className="space-y-2">
-                    <select value={b.data.code_id||''} onChange={e=>{updateBlock(b.id,{code_id:e.target.value?Number(e.target.value):null}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} className={`w-full px-3 py-2.5 rounded-xl border bg-slate-50 ${errors.blocks?.[b.id] ? 'border-red-300 bg-red-50' : ''}`}>
+                    <select value={b.data.code_id||''} onChange={e=>{updateBlock(b.id,{code_id:e.target.value?Number(e.target.value):null}); if(errors.blocks?.[b.id]) setErrors(prev=>({...prev, blocks:{...prev.blocks!, [b.id]:''}}))}} className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white ${errors.blocks?.[b.id] ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/40' : ''}`}>
                       <option value="">Выбери задачу</option>
                       {options.codes.map((c:any)=><option key={c.id} value={c.id}>{c.title} ({c.language})</option>)}
                     </select>
-                    {errors.blocks?.[b.id] && <div className="text-xs text-red-600">⚠ {errors.blocks?.[b.id]}</div>}
+                    {errors.blocks?.[b.id] && <div className="text-xs text-red-600 dark:text-red-400">⚠ {errors.blocks?.[b.id]}</div>}
                   </div>
                 )}
                 {b.type==='board' && <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/25 border border-emerald-200 dark:border-emerald-800 text-sm dark:text-emerald-200 flex items-center gap-2"><PenTool size={16}/> Личная доска 2D/3D — ученик откроет интерактивную доску с графиками, геометрией и 3D-фигурами.</div>}

@@ -16,9 +16,11 @@ from apps.accounts.ws_auth import JWTQueryAuthMiddleware  # noqa: E402
 def _ws_patterns():
     from apps.code.consumers import RunConsumer
     from apps.assessments.live_quiz import LiveQuizConsumer
+    from apps.assessments.live_mafia import MafiaConsumer
     return [
         path('ws/run/', RunConsumer.as_asgi()),
         path('ws/quiz/<str:pin>/', LiveQuizConsumer.as_asgi()),
+        path('ws/mafia/<str:pin>/', MafiaConsumer.as_asgi()),
     ]
 
 

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import client from '../api/client'
 import PdfModal from './PdfModal'
+import PdfViewer from './PdfViewer'
 import { sanitizeWordHtml } from '../utils/sanitize'
 import {
   FileText, Download, Maximize2, Eye, EyeOff, Loader2,
-  ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Image as ImageIcon,
+  Image as ImageIcon, FileSpreadsheet, Presentation,
   Sun, Moon, X
 } from 'lucide-react'
 
@@ -18,79 +19,19 @@ type FileObj = {
   size?: number
 }
 
+type ExcelSheet = {
+  name: string
+  html: string
+  rows_count: number
+  cols_count: number
+  truncated?: boolean
+}
+
 function getExt(f: FileObj): string {
   const src = f.file || f.url || f.title || ''
   const clean = src.split('?')[0].toLowerCase()
   const idx = clean.lastIndexOf('.')
   return idx >= 0 ? clean.slice(idx) : ''
-}
-
-function InlinePdfCanvas({ blobUrl, scale, pageNum, onNumPages }: { blobUrl: string; scale: number; pageNum: number; onNumPages: (n: number) => void }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const [pdfDoc, setPdfDoc] = useState<any>(null)
-  const [err, setErr] = useState('')
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setErr('')
-    ;(async () => {
-      try {
-        const pdfjs: any = await import('pdfjs-dist')
-        const workerMod: any = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
-        if (pdfjs.GlobalWorkerOptions) {
-          pdfjs.GlobalWorkerOptions.workerSrc = workerMod.default || workerMod
-        }
-        const task = pdfjs.getDocument({ url: blobUrl })
-        const doc = await task.promise
-        if (!cancelled) {
-          setPdfDoc(doc)
-          onNumPages(doc.numPages || 1)
-          setLoading(false)
-        }
-      } catch {
-        if (!cancelled) {
-          setErr('Не удалось отобразить PDF встроенно — открой во весь экран или скачай файл.')
-          setLoading(false)
-        }
-      }
-    })()
-    return () => { cancelled = true }
-  }, [blobUrl, onNumPages])
-
-  useEffect(() => {
-    if (!pdfDoc) return
-    let cancelled = false
-    let renderTask: any = null
-    pdfDoc.getPage(pageNum).then((page: any) => {
-      if (cancelled || !canvasRef.current) return
-      const canvas = canvasRef.current
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      const viewport = page.getViewport({ scale: scale * dpr })
-      const cssVp = page.getViewport({ scale })
-      canvas.width = Math.floor(viewport.width)
-      canvas.height = Math.floor(viewport.height)
-      canvas.style.width = `${Math.floor(cssVp.width)}px`
-      canvas.style.height = `${Math.floor(cssVp.height)}px`
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
-      renderTask = page.render({ canvasContext: ctx, viewport })
-      renderTask.promise.catch(() => {})
-    }).catch(() => {})
-    return () => {
-      cancelled = true
-      try { renderTask?.cancel?.() } catch {}
-    }
-  }, [pdfDoc, pageNum, scale])
-
-  if (loading) return <div className="py-10 flex items-center justify-center gap-2 text-sm text-slate-400"><Loader2 size={18} className="animate-spin" /> Открываю PDF…</div>
-  if (err) return <div className="p-4 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 rounded-xl">{err}</div>
-  return (
-    <div className="overflow-auto max-h-[580px] bg-slate-200/80 dark:bg-slate-950 rounded-xl p-3 flex justify-center border dark:border-slate-700">
-      <canvas ref={canvasRef} className="shadow-xl rounded-lg bg-white max-w-full h-auto" />
-    </div>
-  )
 }
 
 const DOC_SHEET_CSS = `
@@ -101,8 +42,8 @@ const DOC_SHEET_CSS = `
 .edu-doc-sheet p { margin: 0.45em 0; }
 .edu-doc-sheet ul { list-style: disc; padding-left: 1.6em; margin: 0.5em 0; }
 .edu-doc-sheet li { margin: 0.25em 0; }
-.edu-doc-sheet .docx-table-wrap { overflow-x: auto; margin: 0.9em 0; }
-.edu-doc-sheet table, .edu-doc-sheet .docx-table { width: 100%; border-collapse: collapse; font-family: Inter, system-ui, sans-serif; font-size: 0.92em; margin: 0.6em 0; }
+.edu-doc-sheet .docx-table-wrap { overflow-x: auto; margin: 0.9em 0; border-radius: 10px; }
+.edu-doc-sheet table, .edu-doc-sheet .docx-table { width: 100%; border-collapse: collapse; font-family: Inter, system-ui, sans-serif; font-size: 0.9em; margin: 0.4em 0; }
 .edu-doc-sheet th, .edu-doc-sheet td { border: 1px solid #cbd5e1; padding: 7px 10px; vertical-align: top; text-align: left; }
 .edu-doc-sheet th { background: #f1f5f9; font-weight: 700; }
 .edu-doc-sheet.edu-doc-dark th, .edu-doc-sheet.edu-doc-dark td { border-color: #334155; }
@@ -110,44 +51,54 @@ const DOC_SHEET_CSS = `
 .edu-doc-sheet .docx-img { max-width: 100%; height: auto; border-radius: 8px; margin: 0.75em auto; display: block; box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
 .edu-doc-sheet .docx-link { color: #2563eb; text-decoration: underline; }
 .edu-doc-sheet.edu-doc-dark .docx-link { color: #60a5fa; }
+.edu-doc-sheet .pptx-slide { border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 20px; margin: 0 0 14px; background: #f8fafc; }
+.edu-doc-sheet.edu-doc-dark .pptx-slide { border-color: #334155; background: #0f172a; }
 `
 
 export default function InlineFileReader({ file, defaultOpen = true }: { file: FileObj; defaultOpen?: boolean }) {
   const ext = getExt(file)
   const isPdf = ext === '.pdf' || (file.mime_type || '').includes('pdf')
   const isImg = ['.png', '.jpg', '.jpeg', '.webp', '.gif'].includes(ext) || (file.mime_type || '').startsWith('image/')
-  const isTextDoc = ['.docx', '.txt', '.md', '.csv', '.py', '.json'].includes(ext)
+  const isExcel = ['.xlsx', '.xls', '.csv'].includes(ext) || (file.mime_type || '').includes('spreadsheet') || (file.mime_type || '').includes('excel')
+  const isWord = ['.docx', '.doc'].includes(ext) || (file.mime_type || '').includes('word')
+  const isPptx = ['.pptx', '.ppt'].includes(ext)
+  const isTextDoc = isWord || isExcel || isPptx || ['.txt', '.md', '.py', '.json', '.xml', '.css', '.js'].includes(ext)
 
   const [open, setOpen] = useState(defaultOpen)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [docText, setDocText] = useState<string | null>(null)
   const [docHtml, setDocHtml] = useState<string>('')
+  const [sheets, setSheets] = useState<ExcelSheet[]>([])
+  const [activeSheet, setActiveSheet] = useState(0)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
   const [fullOpen, setFullOpen] = useState(false)
   const [docFullOpen, setDocFullOpen] = useState(false)
   const [paperDark, setPaperDark] = useState(false)
   const [docFontPx, setDocFontPx] = useState(15)
-  const [pageNum, setPageNum] = useState(1)
-  const [numPages, setNumPages] = useState(1)
-  const [scale, setScale] = useState(1.1)
   const loadedIdRef = useRef<number | null>(null)
+  const blobUrlRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (loadedIdRef.current !== null && loadedIdRef.current !== file.id) {
       loadedIdRef.current = null
-      setBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null })
+      const oldUrl = blobUrlRef.current
+      blobUrlRef.current = null
+      if (oldUrl) {
+        setTimeout(() => URL.revokeObjectURL(oldUrl), 2500)
+      }
+      setBlobUrl(null)
       setDocText(null)
       setDocHtml('')
+      setSheets([])
+      setActiveSheet(0)
       setErr('')
-      setPageNum(1)
-      setNumPages(1)
     }
   }, [file.id])
 
   useEffect(() => {
     if (!open || !(isPdf || isImg || isTextDoc)) return
-    if (loadedIdRef.current === file.id) return
+    if (loadedIdRef.current === file.id && (blobUrlRef.current || !isPdf && !isImg)) return
     let cancelled = false
     setLoading(true)
     setErr('')
@@ -159,14 +110,22 @@ export default function InlineFileReader({ file, defaultOpen = true }: { file: F
           const raw = r.data as Blob
           const b = isPdf && raw.type !== 'application/pdf' ? new Blob([raw], { type: 'application/pdf' }) : raw
           const nextUrl = URL.createObjectURL(b)
+          const oldUrl = blobUrlRef.current
+          blobUrlRef.current = nextUrl
           loadedIdRef.current = file.id
-          setBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return nextUrl })
+          setBlobUrl(nextUrl)
+          if (oldUrl && oldUrl !== nextUrl) {
+            setTimeout(() => URL.revokeObjectURL(oldUrl), 2000)
+          }
         } else if (isTextDoc) {
           const r = await client.get(`/files/${file.id}/preview_text/`)
           if (cancelled) return
           loadedIdRef.current = file.id
           setDocText(r.data?.text || '')
           setDocHtml(r.data?.html ? sanitizeWordHtml(r.data.html) : '')
+          const rawSheets: ExcelSheet[] = Array.isArray(r.data?.sheets) ? r.data.sheets : []
+          setSheets(rawSheets.map(s => ({ ...s, html: sanitizeWordHtml(s.html || '') })))
+          setActiveSheet(0)
         }
       } catch {
         if (!cancelled) setErr('Не удалось загрузить предпросмотр — попробуй скачать файл.')
@@ -179,9 +138,15 @@ export default function InlineFileReader({ file, defaultOpen = true }: { file: F
 
   useEffect(() => {
     return () => {
-      if (blobUrl) URL.revokeObjectURL(blobUrl)
+      // При размонтировании (в т.ч. React StrictMode) сбрасываем loadedIdRef, чтобы при повторном монтировании создался свежий blob URL
+      loadedIdRef.current = null
+      const urlToRevoke = blobUrlRef.current
+      blobUrlRef.current = null
+      if (urlToRevoke) {
+        setTimeout(() => URL.revokeObjectURL(urlToRevoke), 1500)
+      }
     }
-  }, [blobUrl])
+  }, [])
 
   const downloadFile = async () => {
     try {
@@ -200,10 +165,22 @@ export default function InlineFileReader({ file, defaultOpen = true }: { file: F
   const sizeLabel = file.size ? `${(file.size / 1024).toFixed(1)} KB` : ''
   const fileName = file.title.includes('.') ? file.title : `${file.title}${ext}`
 
+  const kindMeta = isPdf
+    ? { bg: 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300', label: 'PDF-документ', Icon: FileText }
+    : isImg
+      ? { bg: 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300', label: 'Фото / изображение', Icon: ImageIcon }
+      : isExcel
+        ? { bg: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', label: 'Таблица Excel', Icon: FileSpreadsheet }
+        : isPptx
+          ? { bg: 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300', label: 'Презентация', Icon: Presentation }
+          : { bg: 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300', label: isWord ? 'Документ Word' : 'Текстовый документ', Icon: FileText }
+
+  const activeSheetObj = sheets.length > 0 ? (sheets[activeSheet] || sheets[0]) : null
+
   const renderDocSheet = (isModal = false) => (
     <div
       className={`rounded-xl border shadow-md overflow-y-auto ${
-        isModal ? 'flex-1 p-6 sm:p-10' : 'max-h-[540px] p-5 sm:p-8'
+        isModal ? 'flex-1 p-5 sm:p-8' : 'max-h-[600px] p-4 sm:p-7'
       } ${
         paperDark
           ? 'bg-slate-900 text-slate-100 border-slate-700'
@@ -212,13 +189,15 @@ export default function InlineFileReader({ file, defaultOpen = true }: { file: F
     >
       <style>{DOC_SHEET_CSS}</style>
       <div
-        className={`edu-doc-sheet mx-auto max-w-[740px] ${paperDark ? 'edu-doc-dark' : ''}`}
+        className={`edu-doc-sheet mx-auto ${isExcel ? 'max-w-full' : 'max-w-[780px]'} ${paperDark ? 'edu-doc-dark' : ''}`}
         style={{ fontSize: `${docFontPx}px` }}
       >
-        {docHtml ? (
-          <div dangerouslySetInnerHTML={{ __html: sanitizeWordHtml(docHtml) }} />
+        {activeSheetObj ? (
+          <div dangerouslySetInnerHTML={{ __html: activeSheetObj.html }} />
+        ) : docHtml ? (
+          <div dangerouslySetInnerHTML={{ __html: docHtml }} />
         ) : (
-          <div className="whitespace-pre-wrap">
+          <div className="whitespace-pre-wrap font-sans">
             {(docText || '').trim() || 'Документ не содержит текстового содержимого — используй кнопку «Скачать».'}
           </div>
         )}
@@ -231,12 +210,8 @@ export default function InlineFileReader({ file, defaultOpen = true }: { file: F
       {/* Заголовок и кнопки действий */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex items-center gap-3 min-w-0">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-            isPdf ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300'
-              : isImg ? 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300'
-                : 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
-          }`}>
-            {isImg ? <ImageIcon size={20} /> : <FileText size={20} />}
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${kindMeta.bg}`}>
+            <kindMeta.Icon size={20} />
           </div>
           <div className="min-w-0">
             <div className="font-bold text-sm dark:text-white truncate">{file.title}</div>
@@ -265,7 +240,7 @@ export default function InlineFileReader({ file, defaultOpen = true }: { file: F
               <Maximize2 size={13} /> Во весь экран
             </button>
           )}
-          {(isTextDoc && (docHtml || docText !== null)) && (
+          {(isTextDoc && (sheets.length > 0 || docHtml || docText !== null)) && (
             <button
               type="button"
               onClick={() => setDocFullOpen(true)}
@@ -294,57 +269,30 @@ export default function InlineFileReader({ file, defaultOpen = true }: { file: F
           )}
           {err && <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-xs text-amber-700 dark:text-amber-300">{err}</div>}
 
-          {/* PDF */}
+          {/* PDF — все страницы лентой, автоподгон по ширине, zoom, HD PyMuPDF fallback */}
           {!loading && isPdf && blobUrl && (
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border dark:border-slate-700 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    disabled={pageNum <= 1}
-                    onClick={() => setPageNum(p => Math.max(1, p - 1))}
-                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 dark:text-white disabled:opacity-40"
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span className="font-bold dark:text-white px-1">Стр. {pageNum} / {numPages}</span>
-                  <button
-                    type="button"
-                    disabled={pageNum >= numPages}
-                    onClick={() => setPageNum(p => Math.min(numPages, p + 1))}
-                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 dark:text-white disabled:opacity-40"
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button type="button" onClick={() => setScale(s => Math.max(0.6, +(s - 0.15).toFixed(2)))} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 dark:text-white"><ZoomOut size={14} /></button>
-                  <span className="font-mono font-bold dark:text-slate-300">{Math.round(scale * 100)}%</span>
-                  <button type="button" onClick={() => setScale(s => Math.min(2.2, +(s + 0.15).toFixed(2)))} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 dark:text-white"><ZoomIn size={14} /></button>
-                </div>
-              </div>
-              <InlinePdfCanvas blobUrl={blobUrl} scale={scale} pageNum={pageNum} onNumPages={setNumPages} />
-            </div>
+            <PdfViewer blobUrl={blobUrl} fileId={file.id} maxHeightClass="max-h-[720px]" initialMode="all" />
           )}
 
-          {/* Картинка */}
+          {/* Фото / картинка */}
           {!loading && isImg && blobUrl && (
             <div className="rounded-xl overflow-hidden bg-slate-900/5 dark:bg-slate-950 border dark:border-slate-700 flex justify-center p-2">
               <img
                 src={blobUrl}
                 alt={file.title}
                 onClick={() => setFullOpen(true)}
-                className="max-h-[460px] object-contain rounded-lg cursor-zoom-in"
+                className="max-h-[540px] max-w-full object-contain rounded-lg cursor-zoom-in"
               />
             </div>
           )}
 
-          {/* Word .docx / .txt / .md / .csv — оформленный лист документа */}
-          {!loading && isTextDoc && (docHtml || docText !== null) && (
+          {/* Word / Excel / CSV / PPTX / TXT */}
+          {!loading && isTextDoc && (sheets.length > 0 || docHtml || docText !== null) && (
             <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border dark:border-slate-700 text-xs">
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
-                  📄 Документ (оригинальное форматирование и таблицы)
+                  {kindMeta.label}
+                  {activeSheetObj ? ` • ${activeSheetObj.rows_count} стр. × ${activeSheetObj.cols_count} кол.` : ''}
                 </span>
                 <div className="flex items-center gap-1.5">
                   <button
@@ -374,6 +322,27 @@ export default function InlineFileReader({ file, defaultOpen = true }: { file: F
                   </button>
                 </div>
               </div>
+
+              {/* Вкладки листов Excel */}
+              {sheets.length > 1 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5" data-testid="excel-sheet-tabs">
+                  {sheets.map((sh, i) => (
+                    <button
+                      key={`${sh.name}-${i}`}
+                      type="button"
+                      onClick={() => setActiveSheet(i)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border transition ${
+                        activeSheet === i
+                          ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {sh.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {renderDocSheet(false)}
             </div>
           )}
@@ -386,18 +355,19 @@ export default function InlineFileReader({ file, defaultOpen = true }: { file: F
           title={file.title}
           fileName={fileName}
           blobUrl={blobUrl}
+          fileId={file.id}
           isImage={isImg}
           onClose={() => setFullOpen(false)}
         />
       )}
 
-      {/* Полноэкранный просмотрщик Word / TXT */}
+      {/* Полноэкранный просмотрщик Word / Excel / TXT / PPTX */}
       {docFullOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex flex-col p-3 sm:p-6">
-          <div className="max-w-4xl w-full mx-auto flex-1 flex flex-col gap-3 min-h-0">
+          <div className="max-w-5xl w-full mx-auto flex-1 flex flex-col gap-3 min-h-0">
             <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900 text-white px-4 py-2.5 rounded-2xl border border-slate-700 shrink-0">
               <span className="font-bold text-sm truncate flex items-center gap-2">
-                <FileText size={16} className="text-blue-400 shrink-0" /> {file.title}
+                <kindMeta.Icon size={16} className="text-blue-400 shrink-0" /> {file.title}
               </span>
               <div className="flex items-center gap-1.5">
                 <button type="button" onClick={() => setDocFontPx(s => Math.max(12, s - 1))} className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold">A−</button>
@@ -413,6 +383,22 @@ export default function InlineFileReader({ file, defaultOpen = true }: { file: F
                 </button>
               </div>
             </div>
+            {sheets.length > 1 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto shrink-0">
+                {sheets.map((sh, i) => (
+                  <button
+                    key={`${sh.name}-${i}`}
+                    type="button"
+                    onClick={() => setActiveSheet(i)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${
+                      activeSheet === i ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    {sh.name}
+                  </button>
+                ))}
+              </div>
+            )}
             {renderDocSheet(true)}
           </div>
         </div>

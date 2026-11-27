@@ -119,13 +119,13 @@ export default function QuizBuilder({ lessons = [], onSaved }: { lessons?: any[]
         className="w-full h-16 px-3 py-2 rounded-xl border bg-indigo-50/50 dark:bg-slate-700 dark:text-white text-sm" />
       )}
       {bQs.map((q, qi) => (
-        <div key={qi} className="border dark:border-slate-600 rounded-xl p-3 space-y-2">
+        <div key={qi} className="border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2 bg-slate-50/50 dark:bg-slate-900/40">
           <div className="flex gap-2">
             <input value={q.text} onChange={e => setBQs(b => b.map((x, i) => i === qi ? { ...x, text: e.target.value } : x))}
               placeholder="Текст вопроса" aria-label={`Вопрос ${qi + 1}`}
-              className="flex-1 px-3 py-2 min-h-[44px] rounded-xl border bg-slate-50 dark:bg-slate-700 dark:text-white font-semibold" />
-            <button onClick={() => setBQs(b => b.filter((_, i) => i !== qi))} aria-label="Удалить вопрос"
-              className="p-2 rounded-xl bg-red-50 text-red-600 min-h-[44px] min-w-[44px]"><Trash2 size={16} /></button>
+              className="flex-1 px-3 py-2 min-h-[44px] rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold" />
+            <button type="button" onClick={() => setBQs(b => b.filter((_, i) => i !== qi))} aria-label="Удалить вопрос"
+              className="p-2 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/50 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 min-h-[44px] min-w-[44px] flex items-center justify-center"><Trash2 size={16} /></button>
           </div>
           {q.options.map((o, oi) => (
             <div key={oi} className="flex items-center gap-2">
@@ -134,13 +134,13 @@ export default function QuizBuilder({ lessons = [], onSaved }: { lessons?: any[]
                 aria-label="Правильный ответ" className="w-5 h-5 accent-emerald-600" />
               <input value={o.text} onChange={e => setBQs(b => b.map((x, i) => i === qi ? { ...x, options: x.options.map((op, j) => j === oi ? { ...op, text: e.target.value } : op) } : x))}
                 placeholder={`Вариант ${oi + 1}`} aria-label={`Вариант ${oi + 1}`}
-                className="flex-1 px-3 py-2 min-h-[44px] rounded-xl border bg-slate-50 dark:bg-slate-700 dark:text-white text-sm" />
+                className="flex-1 px-3 py-2 min-h-[44px] rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm" />
             </div>
           ))}
         </div>
       ))}
       {AI_FEATURES && genSource && (
-        <div className={`text-xs font-bold px-3 py-2 rounded-xl ${genSource.startsWith('gemini') ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+        <div className={`text-xs font-bold px-3 py-2 rounded-xl border ${genSource.startsWith('gemini') ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'}`}>
           {genSource.startsWith('gemini') ? '⚡ Сгенерировано автоматически' : '🔧 Офлайн-режим'}
         </div>
       )}

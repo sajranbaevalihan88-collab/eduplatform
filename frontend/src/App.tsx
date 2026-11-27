@@ -4,10 +4,24 @@ import Layout from './components/Layout'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { ThemeProvider, AccessibilityProvider, ToastContainer } from './context/UIContext'
 import { LangProvider } from './context/LangContext'
-import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import ErrorBoundary from './components/ErrorBoundary'
+
+function HomeRoute() {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'))
+  useEffect(() => {
+    const sync = () => setToken(localStorage.getItem('token'))
+    window.addEventListener('storage', sync)
+    window.addEventListener('auth-change', sync as any)
+    return () => {
+      window.removeEventListener('storage', sync)
+      window.removeEventListener('auth-change', sync as any)
+    }
+  }, [])
+  if (!token) return <About />
+  return <Navigate to={getRole() === 'parent' ? '/children' : '/dashboard'} replace />
+}
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'))
@@ -95,6 +109,8 @@ const ConnectFour = lazy(() => import('./pages/ConnectFour'))
 const Blocade = lazy(() => import('./pages/Blocade'))
 const LiveQuizHost = lazy(() => import('./pages/LiveQuizHost'))
 const LiveQuizPlay = lazy(() => import('./pages/LiveQuizPlay'))
+const MafiaHost = lazy(() => import('./pages/MafiaHost'))
+const MafiaPlay = lazy(() => import('./pages/MafiaPlay'))
 
 export default function App() {
   return (
@@ -105,7 +121,7 @@ export default function App() {
             <ErrorBoundary label="страница">
               <Suspense fallback={<div className="p-8"><div className="skeleton h-32 rounded-2xl" /></div>}>
               <Routes>
-                <Route path="/" element={<Landing />} />
+                <Route path="/" element={<HomeRoute />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/login" element={<Login />} />
@@ -155,6 +171,8 @@ export default function App() {
                 <Route path="/games/blocade" element={<Blocade />} />
                 <Route path="/live" element={<LiveQuizPlay />} />
                 <Route path="/live/host" element={<TeacherRoute><LiveQuizHost /></TeacherRoute>} />
+                <Route path="/mafia" element={<MafiaPlay />} />
+                <Route path="/mafia/host" element={<TeacherRoute><MafiaHost /></TeacherRoute>} />
                 <Route path="/s/:token" element={<SharedView />} />
                 <Route path="/editor" element={<VSCodeEditor />} />
                 <Route path="/sql" element={<SqlLab />} />

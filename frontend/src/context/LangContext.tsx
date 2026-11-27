@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { setDomTranslateLang } from './autoTranslate'
 
 export type Lang = 'ru' | 'en' | 'kg'
 const VALID_LANGS: Lang[] = ['ru', 'en', 'kg']
@@ -2295,7 +2296,11 @@ const Ctx = createContext<{ lang: Lang, t: (k: string) => string, setLang: (l: L
 
 export function LangProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLang] = useState<Lang>(initialLang)
-  useEffect(() => { try { localStorage.setItem('lang', lang) } catch { }; document.documentElement.lang = lang }, [lang])
+  useEffect(() => {
+    try { localStorage.setItem('lang', lang) } catch { }
+    document.documentElement.lang = lang
+    setDomTranslateLang(lang)
+  }, [lang])
   const t = (k: string) => dict[lang][k] || dict['ru'][k] || k
   return <Ctx.Provider value={{ lang, t, setLang }}>{children}</Ctx.Provider>
 }

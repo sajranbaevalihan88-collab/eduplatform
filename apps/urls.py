@@ -6,6 +6,7 @@ from apps.catalog.views import SubjectViewSet, CourseViewSet
 from apps.content.views import UploadedFileViewSet, PresentationViewSet, SlideViewSet
 from apps.assessments.views import TestViewSet, AttemptViewSet, WordGenView
 from apps.assessments.live_quiz import LiveQuizCreateView, LiveQuizCheckView
+from apps.assessments.live_mafia import MafiaCreateView, MafiaCheckView
 from apps.lessons.views import LessonViewSet
 from apps.code.views import CodeTaskViewSet, CodeSubmissionViewSet, SharedCodeView
 from apps.board.views import BoardViewSet
@@ -67,5 +68,7 @@ urlpatterns = [
     path('ai/teacher-assistant/', TeacherAIAssistantView.as_view(), name='ai-teacher-assistant'),
     path('live-quiz/create/', LiveQuizCreateView.as_view(), name='live-quiz-create'),
     path('live-quiz/check/<str:pin>/', LiveQuizCheckView.as_view(), name='live-quiz-check'),
+    path('live-mafia/create/', MafiaCreateView.as_view(), name='live-mafia-create'),
+    path('live-mafia/check/<str:pin>/', MafiaCheckView.as_view(), name='live-mafia-check'),
     path('', include(router.urls)),
 ]

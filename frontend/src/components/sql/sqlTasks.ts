@@ -241,16 +241,17 @@ function normCell(v: any): string {
   return s.toLowerCase()
 }
 
-function normRows(rows: any[][]): string[] {
+function normRows(rows: readonly unknown[][]): string[] {
   return (rows || []).map((r) => (Array.isArray(r) ? r.map(normCell).join('\u0001') : normCell(r)))
 }
 
 export function evaluateSqlLocal(
-  tests: SqlTestSpec[],
+  tests: readonly SqlTestSpec[],
   sqlCode: string,
-  columns: string[],
-  rows: any[][],
-  errorMsg = ''
+  columns: readonly string[],
+  rows: readonly unknown[][],
+  errorMsg = '',
+  maxScore = 100
 ): { passed: boolean; passedTests: number; totalTests: number; score: number; results: SqlCheckResult[] } {
   const cleanSql = (sqlCode || '').replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
   const actualCols = (columns || []).map((c) => String(c).trim().toLowerCase())
@@ -317,6 +318,7 @@ export function evaluateSqlLocal(
   const totalTests = results.length
   const passedTests = results.filter((r) => r.passed).length
   const passed = totalTests > 0 ? passedTests === totalTests : !errorMsg
-  const score = totalTests > 0 ? Math.round((passedTests / totalTests) * 100) : passed ? 100 : 0
+  const cap = maxScore > 0 ? maxScore : 100
+  const score = totalTests > 0 ? Math.round((passedTests / totalTests) * cap) : passed ? cap : 0
   return { passed, passedTests, totalTests, score, results }
 }

@@ -87,13 +87,13 @@ export default function Login(){
             </button>
           </div>
           {isReg && <select value={form.role} onChange={e=>setForm({...form,role:e.target.value})} className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white dark:[color-scheme:dark]"><option value="student">{t('login_student')}</option></select>}
-          {error && <div role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 whitespace-pre-wrap">{error}</div>}
-          <button disabled={busy} className="w-full min-h-[48px] py-2.5 rounded-xl bg-indigo-600 text-white font-bold disabled:opacity-60 flex items-center justify-center gap-2">
+          {error && <div role="alert" className="p-3 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/70 text-sm text-red-700 dark:text-red-300 whitespace-pre-wrap">{error}</div>}
+          <button disabled={busy} className="w-full min-h-[48px] py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold disabled:opacity-60 flex items-center justify-center gap-2 transition">
             {busy ? (<><span className="dot-typing inline-flex gap-1"><span className="w-1.5 h-1.5 rounded-full bg-white inline-block"/><span className="w-1.5 h-1.5 rounded-full bg-white inline-block"/><span className="w-1.5 h-1.5 rounded-full bg-white inline-block"/></span> {t('login_doing')}</>) : (isReg ? t('login_btn_reg') : t('login_submit'))}
           </button>
         </form>
-        <button onClick={()=>{setIsReg(!isReg); setError('')}} className="w-full mt-3 text-sm text-indigo-600 font-medium">{isReg?t('login_to_in'):t('login_to_reg')}</button>
-        <div className="mt-6 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-slate-700">{t('login_hint')}</div>
+        <button onClick={()=>{setIsReg(!isReg); setError('')}} className="w-full mt-3 text-sm text-indigo-600 dark:text-indigo-400 hover:underline font-medium">{isReg?t('login_to_in'):t('login_to_reg')}</button>
+        <div className="mt-6 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-xs text-slate-700 dark:text-emerald-200">{t('login_hint')}</div>
       </div>
     </div>
   )

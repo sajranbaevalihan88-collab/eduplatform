@@ -265,7 +265,7 @@ export default function SubjectDetail(){
               {l.description && <p className="text-sm text-slate-500 line-clamp-2 mt-1">{l.description}</p>}
               <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
                 <span>{l.blocks_count ?? 0} {t('subj_blocks')}</span>
-                {canEdit(l) && <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 font-semibold">{l.is_public?t('subj_public'):t('subj_private')}</span>}
+                {canEdit(l) && <span className="px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-300 font-semibold">{l.is_public?t('subj_public'):t('subj_private')}</span>}
               </div>
             </Link>
           ))}
@@ -278,7 +278,7 @@ export default function SubjectDetail(){
           {fp.map(p=>(
             <Link key={p.id} to={`/presentations/${p.id}`} className="bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border p-4 hover:shadow-md transition block">
               <div className="flex items-center gap-2">
-                <span className="p-2 rounded-xl bg-orange-50 text-orange-500"><PresIcon size={16}/></span>
+                <span className="p-2 rounded-xl bg-orange-50 dark:bg-orange-950/50 text-orange-500 dark:text-orange-400"><PresIcon size={16}/></span>
                 <h3 className="font-bold line-clamp-2 dark:text-white">{p.title}</h3>
               </div>
               <div className="mt-3 text-xs text-slate-400">{p.slides_count ?? p.slides?.length ?? 0} {t('pres_slides_short')}</div>
@@ -350,9 +350,9 @@ export default function SubjectDetail(){
             {fb.map(b=>(
               <div key={b.id} onClick={()=>openBook(b)} className="cursor-pointer text-left bg-white dark:bg-slate-900 dark:border dark:border-slate-800 rounded-2xl border p-4 hover:shadow-md transition">
                 <div className="flex items-start gap-2">
-                  <span className="p-2 rounded-xl bg-cyan-50 text-cyan-600 shrink-0"><BookOpen size={16}/></span>
+                  <span className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-950/50 text-cyan-600 dark:text-cyan-400 shrink-0"><BookOpen size={16}/></span>
                   <h3 className="font-bold line-clamp-2 flex-1 dark:text-white">{b.title}</h3>
-                  {canDeleteFile(b) && <button onClick={e=>delBook(e,b)} className="p-1.5 rounded-lg bg-red-50 text-red-600 shrink-0"><Trash2 size={14}/></button>}
+                  {canDeleteFile(b) && <button onClick={e=>delBook(e,b)} className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 shrink-0"><Trash2 size={14}/></button>}
                 </div>
                 <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
                   <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 font-semibold">{getBookFormatLabel(b)}</span>

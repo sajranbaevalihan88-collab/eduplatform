@@ -9,7 +9,7 @@ def upload_path(instance, filename):
     # безопасное имя: uuid + санитизированное расширение
     ext = os.path.splitext(filename)[1].lower()
     # только разрешенные расширения
-    allowed = ['.pptx','.ppt','.docx','.doc','.pdf','.png','.jpg','.jpeg','.gif','.webp','.txt','.md','.csv']
+    allowed = ['.pptx','.ppt','.docx','.doc','.xlsx','.xls','.pdf','.png','.jpg','.jpeg','.gif','.webp','.txt','.md','.csv']
     if ext not in allowed:
         ext = '.bin'
     safe_name = f"{uuid.uuid4().hex}{ext}"
@@ -38,7 +38,7 @@ class UploadedFile(models.Model):
         if self.file:
             ext = os.path.splitext(self.file.name)[1].lower()
             if ext in ['.pptx','.ppt']: self.file_type='presentation'
-            elif ext in ['.docx','.doc','.txt','.md','.csv']: self.file_type='document'
+            elif ext in ['.docx','.doc','.xlsx','.xls','.txt','.md','.csv']: self.file_type='document'
             elif ext in ['.pdf']: self.file_type='pdf'
             elif ext in ['.png','.jpg','.jpeg','.gif','.webp']: self.file_type='image'
             try: self.size = self.file.size

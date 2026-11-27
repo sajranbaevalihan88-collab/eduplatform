@@ -36,17 +36,23 @@ def _visible_classrooms(user):
 
 def _pay_qr_data_uri(room):
     """QR-код с реквизитами оплаты курса (PNG data-URI). Сканируется любым банковским приложением."""
-    import base64, io
-    import qrcode
-    price = str(room.price) if room.price is not None else '0'
-    text = (f"Оплата курса «{room.title}» — {price} сом\n"
-            f"Реквизиты: {room.payment_details or 'уточните у учителя'}\n"
-            f"Код класса: {room.code_fmt}\n"
-            f"EduPlatform")
-    img = qrcode.make(text, box_size=8, border=2)
-    buf = io.BytesIO()
-    img.save(buf, format='PNG')
-    return 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
+    try:
+        import base64, io
+        import qrcode
+    except Exception:
+        return ''
+    try:
+        price = str(room.price) if room.price is not None else '0'
+        text = (f"Оплата курса «{room.title}» — {price} сом\n"
+                f"Реквизиты: {room.payment_details or 'уточните у учителя'}\n"
+                f"Код класса: {room.code_fmt}\n"
+                f"EduPlatform")
+        img = qrcode.make(text, box_size=8, border=2)
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        return 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        return ''
 
 
 class ClassroomPagination(DefaultPagination):

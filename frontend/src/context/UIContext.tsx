@@ -21,7 +21,7 @@ export function ToastContainer(){
   return (
     <div className="fixed bottom-[calc(72px+env(safe-area-inset-bottom))] lg:bottom-4 left-4 right-4 sm:left-auto sm:right-4 z-[70] flex flex-col gap-2 max-w-full sm:max-w-[360px]" role="status" aria-live="polite">
       {toasts.map(t=>(
-        <div key={t.id} className={`px-4 py-3 rounded-xl shadow-lg border text-sm font-medium ${t.type==='error'?'bg-red-50 border-red-200 text-red-700': t.type==='success'?'bg-emerald-50 border-emerald-200 text-emerald-700':'bg-white border-slate-200 text-slate-700'}`}>
+        <div key={t.id} className={`px-4 py-3 rounded-xl shadow-lg border text-sm font-medium ${t.type==='error'?'bg-red-50 border-red-200 text-red-700 dark:bg-red-950/90 dark:border-red-800 dark:text-red-200': t.type==='success'?'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/90 dark:border-emerald-800 dark:text-emerald-200':'bg-white border-slate-200 text-slate-700 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100'}`}>
           {t.msg}
         </div>
       ))}

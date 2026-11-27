@@ -20,10 +20,14 @@ body { touch-action: manipulation; padding-bottom: env(safe-area-inset-bottom); 
 }
 /* Стандарт тап-зоны ≥44px для критичных кнопок (по классам точечно на этапах 2-5) */
 .tap44 { min-width: 44px; min-height: 44px; }
+html { color-scheme: light; }
+html.dark { color-scheme: dark; }
+
 /* Стандарт мобильной модалки: внутри экрана + прокрутка */
 .modal-safe { max-height: 85dvh; overflow-y: auto; }
 .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
+.dark .scrollbar-thin::-webkit-scrollbar-thumb { background: #475569; }
 * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
 /* Профессиональные радиусы: чуть спокойнее, чем «пузырьковые» дефолты Tailwind */
@@ -110,7 +114,11 @@ body { touch-action: manipulation; padding-bottom: env(safe-area-inset-bottom); 
 .card-hover:hover { 
   transform: translateY(-2px); 
   box-shadow: 0 8px 24px -10px rgba(15,23,42,0.12), 0 4px 10px -6px rgba(15,23,42,0.06); 
-  border-color: rgba(37,99,235,0.18);
+  border-color: rgba(37,99,235,0.22);
+}
+.dark .card-hover:hover {
+  box-shadow: 0 10px 28px -10px rgba(0,0,0,0.55), 0 4px 12px -6px rgba(0,0,0,0.4);
+  border-color: rgba(99,102,241,0.42);
 }
 .card-hover:active { transform: translateY(0); transition-duration: 0.12s; }
 
@@ -130,6 +138,7 @@ body { touch-action: manipulation; padding-bottom: env(safe-area-inset-bottom); 
 /* Иконка бренда — один сплошной цвет (Никаких «AI»-градиентов) */
 
 .skeleton { background: linear-gradient(90deg,#f1f5f9 25%,#e8eef5 37%,#f1f5f9 63%); background-size:500px 100%; animation: shimmer 1.6s ease infinite; }
+.dark .skeleton { background: linear-gradient(90deg,#1e293b 25%,#334155 37%,#1e293b 63%); background-size:500px 100%; }
 
 .focus-ring:focus { outline:none; box-shadow: 0 0 0 3px rgba(37,99,235,0.18); border-color: rgba(37,99,235,0.6); }
 .focus-ring:focus-visible { box-shadow: 0 0 0 3px rgba(37,99,235,0.26); }
@@ -306,7 +315,7 @@ html, body {
 img, video, svg, canvas, iframe { max-width: 100%; }
 
 @media (max-width: 767px) {
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([data-compact-input]),
   select, textarea { font-size: 16px !important; }
   .monaco-editor textarea, .monaco-editor input { font-size: inherit !important; }
   /* Таблицы и код внутри карточек не распирают ширину экрана телефона */
@@ -336,6 +345,14 @@ textarea {
 
 :root { --a11y-focus: #2563eb; }
 :focus-visible { outline: 3px solid var(--a11y-focus) !important; outline-offset: 3px; border-radius: 8px; }
+/* Программный фокус на landmark/заголовок при SPA-переходе (для скринридеров) не рисует синюю рамку поверх контента */
+main#main-content:focus,
+main#main-content:focus-visible,
+#main-content h1[tabindex="-1"]:focus,
+#main-content h1[tabindex="-1"]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
 
 /* 1. Белый (Светлый контраст — максимально близок к оригиналу сайта, но с повышенной чёткостью) */
 html.poor-vision {

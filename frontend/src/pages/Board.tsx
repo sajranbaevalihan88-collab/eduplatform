@@ -1,11 +1,17 @@
-import { useEffect, useRef, useState, lazy, Suspense } from 'react'
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import client from '../api/client'
 import { useLang } from '../context/LangContext'
-import { Tldraw, AssetRecordType, exportToBlob } from 'tldraw'
+import { Tldraw, AssetRecordType, exportToBlob, createShapeId, toFixed } from 'tldraw'
 import 'tldraw/tldraw.css'
-import { Save, Plus, Maximize2, Download, Trash2, PenTool, PanelLeft, MoreHorizontal, X, Home, FolderOpen } from 'lucide-react'
+import {
+  Save, Plus, Maximize2, Download, Trash2, PenTool, PanelLeft, MoreHorizontal,
+  X, Home, FolderOpen, TrendingUp, Image as ImageIcon, Highlighter, Pencil,
+  Grid3X3, Sparkles, ChevronDown,
+} from 'lucide-react'
 import { extractPages, isLegacyBoardMeta, importLegacyPages } from '../board/legacy'
+import { PenStrokeShapeUtil, type PenPoint } from '../board/PenStrokeShapeUtil'
+import GraphBuilderModal from '../board/GraphBuilderModal'
 
 const Board3D = lazy(() => import('../components/Board3D'))
 
@@ -26,8 +32,24 @@ const TLDRAW_ASSET_URLS = {
   },
 }
 
-// ——— (старая геометрия разрезания удалена — ластик теперь работает как в Paint) ———
-type Pt = { x: number; y: number }
+const CUSTOM_SHAPE_UTILS = [PenStrokeShapeUtil]
+
+const PEN_SWATCHES = [
+  '#0f172a', '#ffffff', '#ef4444', '#f97316', '#eab308',
+  '#10b981', '#06b6d4', '#2563eb', '#7c3aed', '#ec4899',
+]
+
+const PEN_SIZE_PRESETS = [2, 5, 12, 24]
+
+type BgStyle = 'plain' | 'grid' | 'lines' | 'dots' | 'chalk'
+
+const BG_OPTIONS: { id: BgStyle; label: string; dot: string }[] = [
+  { id: 'plain', label: 'Белая', dot: '#ffffff' },
+  { id: 'grid', label: 'Клетка', dot: '#e0e7ff' },
+  { id: 'lines', label: 'Линейка', dot: '#dbeafe' },
+  { id: 'dots', label: 'Точки', dot: '#e2e8f0' },
+  { id: 'chalk', label: 'Меловая', dot: '#113325' },
+]
 
 function readDraft2(): { snap: any; title: string } | null {
   try {
@@ -35,7 +57,7 @@ function readDraft2(): { snap: any; title: string } | null {
     if (!raw) return null
     const d = JSON.parse(raw)
     if (d?.snap?.document?.store || d?.snap?.store) return d
-  } catch {}
+  } catch { }
   return null
 }
 
@@ -59,18 +81,83 @@ export default function Board() {
   const [hideSidebarLocal, setHideSidebarLocal] = useState(false)
   const [showBoards, setShowBoards] = useState(false)
   const [showActions, setShowActions] = useState(false)
+  const [bgStyle, setBgStyle] = useState<BgStyle>('grid')
+  const [bgMenuOpen, setBgMenuOpen] = useState(false)
+  const [graphOpen, setGraphOpen] = useState(false)
+  const [laserOn, setLaserOn] = useState(false)
   const [toast, setToast] = useState('')
   const toastTimer = useRef<any>(null)
+  const imgInputRef = useRef<HTMLInputElement | null>(null)
+  const bgMenuRef = useRef<HTMLDivElement | null>(null)
   const langRef = useRef(lang)
   langRef.current = lang
+
+  // Регулируемый карандаш/маркер: произвольный цвет HEX + плавный размер 1..40 px
+  const [penColor, setPenColor] = useState<string>('#0f172a')
+  const [penSize, setPenSize] = useState<number>(4)
+  const [penMode, setPenMode] = useState<'pen' | 'highlighter'>('pen')
+  const [activeToolId, setActiveToolId] = useState<string>('draw')
+  // На телефоне панель карандаша стартует свёрнутой в аккуратную кнопку, чтобы не перекрывать холст и меню Page 1
+  const [penPanelOpen, setPenPanelOpen] = useState<boolean>(() => {
+    try { return !window.matchMedia('(max-width: 639px)').matches } catch { return true }
+  })
+
+  const penColorRef = useRef(penColor)
+  penColorRef.current = penColor
+  const penSizeRef = useRef(penSize)
+  penSizeRef.current = penSize
+  const penModeRef = useRef(penMode)
+  penModeRef.current = penMode
+  const activeToolRef = useRef(activeToolId)
+  activeToolRef.current = activeToolId
+
+  const drawingRef = useRef<{
+    shapeId: any
+    originX: number
+    originY: number
+    points: PenPoint[]
+    markId: string
+    raf: number
+    pendingPt: PenPoint | null
+  } | null>(null)
+
+  const isCustomPenActive = mode === '2d' && activeToolId === 'draw'
+
   useEffect(() => {
-    try { editorRef.current?.user.updateUserPreferences({ locale: lang === 'en' ? 'en' : 'ru' }) } catch {}
+    try { editorRef.current?.user.updateUserPreferences({ locale: lang === 'en' ? 'en' : 'ru' }) } catch { }
   }, [lang])
+
+  useEffect(() => {
+    if (!bgMenuOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (bgMenuRef.current && !bgMenuRef.current.contains(e.target as Node)) setBgMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [bgMenuOpen])
+
+  // При выборе тёмной «Меловой» доски автоматически переключаем чёрный карандаш на белый мел (и наоборот)
+  const selectBgStyle = (next: BgStyle) => {
+    setBgStyle(next)
+    setBgMenuOpen(false)
+    if (next === 'chalk' && (penColor === '#0f172a' || penColor === '#000000')) {
+      setPenColor('#ffffff')
+    } else if (next !== 'chalk' && penColor === '#ffffff') {
+      setPenColor('#0f172a')
+    }
+  }
 
   const showToast = (msg: string) => {
     setToast(msg)
     if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToast(''), 3000)
+    toastTimer.current = setTimeout(() => setToast(''), 2800)
+  }
+
+  const activatePenTool = (nextMode?: 'pen' | 'highlighter') => {
+    if (nextMode) setPenMode(nextMode)
+    setLaserOn(false)
+    setActiveToolId('draw')
+    try { editorRef.current?.setCurrentTool('draw') } catch { }
   }
 
   const addImageAsset = (editor: any, src: string, w: number, h: number, name: string, mime = 'image/png') => {
@@ -86,15 +173,14 @@ export default function Board() {
 
   const flushDraft = () => {
     if (!editorRef.current || !dirtyRef.current) return
-    // не дёргаем снапшот прямо во время рисования — иначе подлагивания
-    try { if (editorRef.current.getInstanceState().isDrawing) { lastDrawRef.current = performance.now(); return } } catch {}
+    try { if (drawingRef.current || editorRef.current.getInstanceState().isDrawing) { lastDrawRef.current = performance.now(); return } } catch { }
     if (performance.now() - lastDrawRef.current < 2500) return
     const doFlush = () => {
       try {
         if (!editorRef.current) return
         const snap = editorRef.current.getSnapshot()
         localStorage.setItem(DRAFT_KEY, JSON.stringify({ fmt: 2, snap, title: title || t('board_new'), savedAt: Date.now() }))
-      } catch {}
+      } catch { }
     }
     try {
       const ric = (window as any).requestIdleCallback
@@ -107,13 +193,26 @@ export default function Board() {
 
   const onMount = (editor: any) => {
     editorRef.current = editor
-    ;(window as any).__tlEd = editor
-    try { editor.user.updateUserPreferences({ locale: langRef.current === 'en' ? 'en' : 'ru' }) } catch {}
-    try { editor.updateInstanceState({ isGridMode: false }) } catch {}
-    // отладочное меню tldraw («Show toast», «Create 100 shapes», Debug Flags…) — только для разработчиков
-    try { editor.updateInstanceState({ debugMode: false } as any) } catch {}
-    // батчим: на каждый кадр максимум один колбэк — иначе на больших досках кисть отстаёт
+      ; (window as any).__tlEd = editor
+    try { editor.user.updateUserPreferences({ locale: langRef.current === 'en' ? 'en' : 'ru' }) } catch { }
+    try { editor.updateInstanceState({ isGridMode: false }) } catch { }
+    try { editor.updateInstanceState({ debugMode: false } as any) } catch { }
+    // По умолчанию сразу активен удобный регулируемый карандаш
+    try { editor.setCurrentTool('draw') } catch { }
+    setActiveToolId('draw')
+
     let pending = 0
+    editor.store.listen(() => {
+      try {
+        const cur = editor.getCurrentToolId()
+        if (cur && cur !== activeToolRef.current) {
+          activeToolRef.current = cur
+          setActiveToolId(cur)
+          setLaserOn(cur === 'laser')
+        }
+      } catch { }
+    }, { scope: 'session' })
+
     editor.store.listen(() => {
       if (pending) return
       pending = requestAnimationFrame(() => {
@@ -121,6 +220,7 @@ export default function Board() {
         dirtyRef.current = true
       })
     }, { scope: 'document' })
+
     if (pendingImport) {
       const pi = pendingImport
       setPendingImport(null)
@@ -128,10 +228,9 @@ export default function Board() {
       importLegacyPages(editor, pi.pages, pi.target, (n: number) => langRef.current === 'en' ? `Sheet ${n}` : `Лист ${n}`)
       return
     }
-    // черновик грузим вручную: битый снапшот не должен ронять всю доску
     if (initSnap) {
       try { editor.loadSnapshot(initSnap); setDraft(true) } catch {
-        try { localStorage.removeItem(DRAFT_KEY) } catch {}
+        try { localStorage.removeItem(DRAFT_KEY) } catch { }
         setInitSnap(null)
         setDraft(false)
       }
@@ -139,13 +238,12 @@ export default function Board() {
   }
 
   useEffect(() => {
-    client.get('/boards/').then((r: any) => setBoards(Array.isArray(r.data) ? r.data : r.data.results || [])).catch(() => {})
+    client.get('/boards/').then((r: any) => setBoards(Array.isArray(r.data) ? r.data : r.data.results || [])).catch(() => { })
     const iv = setInterval(flushDraft, 30000)
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isFullscreen) { setShowActions(false); setIsFullscreen(false) }
       if (e.key === 'Escape') {
-        clipToolRef.current = null; setClipToolS(null); setAxesOpen(false)
-        partToolRef.current = false; setPartToolS(false)
+        if (graphOpen) { setGraphOpen(false); return }
+        if (isFullscreen) { setShowActions(false); setIsFullscreen(false) }
       }
     }
     const onVis = () => {
@@ -153,9 +251,10 @@ export default function Board() {
         try {
           const snap = editorRef.current?.getSnapshot()
           if (snap) localStorage.setItem(DRAFT_KEY, JSON.stringify({ fmt: 2, snap, title: title || t('board_new'), savedAt: Date.now() }))
-        } catch {}
+        } catch { }
       }
     }
+    window.addEventListener('keydown', onKey)
     document.addEventListener('visibilitychange', onVis)
     return () => {
       clearInterval(iv)
@@ -165,17 +264,124 @@ export default function Board() {
         try {
           const snap = editorRef.current?.getSnapshot()
           if (snap) localStorage.setItem(DRAFT_KEY, JSON.stringify({ fmt: 2, snap, title: title || t('board_new'), savedAt: Date.now() }))
-        } catch {}
+        } catch { }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFullscreen, title])
+  }, [isFullscreen, title, graphOpen])
+
+  // ——— Плавное рисование нашим регулируемым карандашом / маркером поверх tldraw ———
+  const onCanvasPointerDown = (e: React.PointerEvent) => {
+    if (mode !== '2d' || activeToolRef.current !== 'draw') return
+    if (e.button !== 0 && e.pointerType === 'mouse') return
+    if (!e.isPrimary) return
+    const ed = editorRef.current
+    if (!ed) return
+    const target = e.target as Element | null
+    if (!target || !target.closest('.tl-canvas')) return
+    // Не перехватываем клики по UI-элементам tldraw или нашему тулбару
+    if (target.closest('.tlui-layout, [data-pen-panel], button, input')) return
+
+    e.preventDefault()
+    e.stopPropagation()
+    try { (e.currentTarget as Element).setPointerCapture(e.pointerId) } catch { }
+
+    let pagePt: PenPoint = { x: 0, y: 0 }
+    try { pagePt = ed.screenToPage({ x: e.clientX, y: e.clientY }) } catch { }
+
+    const shapeId = createShapeId()
+    const markId = 'pen-' + Math.random().toString(36).slice(2, 8)
+    const effectiveWidth = penModeRef.current === 'highlighter'
+      ? Math.max(12, Math.round(penSizeRef.current * 2.2))
+      : penSizeRef.current
+
+    try { ed.mark(markId) } catch { }
+    try {
+      ed.createShape({
+        id: shapeId,
+        type: 'pen-stroke',
+        x: toFixed(pagePt.x),
+        y: toFixed(pagePt.y),
+        props: {
+          color: penColorRef.current,
+          strokeWidth: effectiveWidth,
+          isHighlighter: penModeRef.current === 'highlighter',
+          points: [{ x: 0, y: 0 }],
+        },
+      })
+    } catch {
+      return
+    }
+
+    drawingRef.current = {
+      shapeId,
+      originX: pagePt.x,
+      originY: pagePt.y,
+      points: [{ x: 0, y: 0 }],
+      markId,
+      raf: 0,
+      pendingPt: null,
+    }
+    dirtyRef.current = true
+    lastDrawRef.current = performance.now()
+  }
+
+  const flushPenMove = () => {
+    const d = drawingRef.current
+    const ed = editorRef.current
+    if (!d || !ed || !d.pendingPt) return
+    const pt = d.pendingPt
+    d.pendingPt = null
+    const lx = toFixed(pt.x - d.originX)
+    const ly = toFixed(pt.y - d.originY)
+    const last = d.points[d.points.length - 1]
+    if (last && Math.hypot(lx - last.x, ly - last.y) < 1.2) return
+    d.points = [...d.points, { x: lx, y: ly }]
+    try {
+      ed.updateShape({
+        id: d.shapeId,
+        type: 'pen-stroke',
+        props: { points: d.points },
+      })
+    } catch { }
+    lastDrawRef.current = performance.now()
+  }
+
+  const onCanvasPointerMove = (e: React.PointerEvent) => {
+    const d = drawingRef.current
+    if (!d || !editorRef.current) return
+    e.preventDefault()
+    e.stopPropagation()
+    try {
+      const pagePt = editorRef.current.screenToPage({ x: e.clientX, y: e.clientY })
+      d.pendingPt = { x: pagePt.x, y: pagePt.y }
+      if (!d.raf) {
+        d.raf = requestAnimationFrame(() => {
+          if (drawingRef.current) drawingRef.current.raf = 0
+          flushPenMove()
+        })
+      }
+    } catch { }
+  }
+
+  const finishPenStroke = (e?: React.PointerEvent) => {
+    const d = drawingRef.current
+    if (!d) return
+    if (d.raf) { cancelAnimationFrame(d.raf); d.raf = 0 }
+    flushPenMove()
+    drawingRef.current = null
+    if (e) {
+      try { (e.currentTarget as Element).releasePointerCapture(e.pointerId) } catch { }
+    }
+    try { editorRef.current?.squashToMark(d.markId) } catch { }
+    dirtyRef.current = true
+  }
 
   const save = async () => {
     if (!editorRef.current) return
     try {
       const editor = editorRef.current
-      try { editor.deselectAll() } catch {}
+      try { editor.deselectAll() } catch { }
       const snap = editor.getSnapshot()
       if (JSON.stringify(snap).length > 3500000) {
         showToast(t('board_too_big'))
@@ -197,8 +403,8 @@ export default function Board() {
       }
       dirtyRef.current = false
       setDraft(false)
-      try { localStorage.removeItem(DRAFT_KEY) } catch {}
-      try { localStorage.removeItem('board-draft-v1') } catch {}
+      try { localStorage.removeItem(DRAFT_KEY) } catch { }
+      try { localStorage.removeItem('board-draft-v1') } catch { }
       client.get('/boards/').then((r: any) => setBoards(Array.isArray(r.data) ? r.data : r.data.results || []))
       showToast(t('board_saved'))
     } catch (e: any) {
@@ -221,20 +427,16 @@ export default function Board() {
     const t2 = b?.data?.tldraw
     const snap = t2 && (t2.store || t2.document?.store) ? t2 : null
     if (snap && editorRef.current) {
-      try {
-        editorRef.current.loadSnapshot(snap)
-      } catch {
-        showToast(t('board_save_err'))
-      }
+      try { editorRef.current.loadSnapshot(snap) } catch { showToast(t('board_save_err')) }
       dirtyRef.current = true
-      try { editorRef.current.zoomToFit({ animationDuration: 0 }) } catch {}
+      try { editorRef.current.zoomToFit({ animationDuration: 0 }) } catch { }
     }
   }
 
   const newBoard = () => {
     if (dirtyRef.current && !window.confirm(t('board_new_confirm'))) return
-    try { localStorage.removeItem(DRAFT_KEY) } catch {}
-    try { localStorage.removeItem('board-draft-v1') } catch {}
+    try { localStorage.removeItem(DRAFT_KEY) } catch { }
+    try { localStorage.removeItem('board-draft-v1') } catch { }
     dirtyRef.current = false
     setDraft(false)
     setBoardId(null)
@@ -242,7 +444,6 @@ export default function Board() {
     setPendingImport(null)
     setTitle(t('board_new'))
     setResetKey(k => k + 1)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const download = async () => {
@@ -250,14 +451,19 @@ export default function Board() {
     if (!editor) return
     try {
       editor.deselectAll()
-      const blob = await exportToBlob({ editor, ids: editor.getCurrentPageShapeIds(), format: 'png', opts: { background: true, scale: 1, padding: 32 } as any })
+      const blob = await exportToBlob({
+        editor,
+        ids: editor.getCurrentPageShapeIds(),
+        format: 'png',
+        opts: { background: true, scale: 1, padding: 32 } as any,
+      })
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
       a.download = `board-${Date.now()}.png`
       document.body.appendChild(a)
       a.click()
       a.remove()
-    } catch (e: any) {
+    } catch {
       showToast(t('board_save_err'))
     }
   }
@@ -265,9 +471,8 @@ export default function Board() {
   const clearPage = () => {
     const editor = editorRef.current
     if (!editor) return
-    try { editor.deleteShapes(Array.from(editor.getCurrentPageShapeIds()) as any) } catch {}
+    try { editor.deleteShapes(Array.from(editor.getCurrentPageShapeIds()) as any) } catch { }
     dirtyRef.current = true
-    setClipTool(null)
   }
 
   const on3dSnapshot = (dataUrl: string) => {
@@ -279,250 +484,13 @@ export default function Board() {
         const natW = img.naturalWidth || 1200
         const natH = img.naturalHeight || 700
         const scale = 1400 / Math.max(1, natW)
-        const w = Math.round(natW * scale)
-        const h = Math.round(natH * scale)
-        addImageAsset(editor, dataUrl, w, h, `3d-${Date.now()}`)
+        addImageAsset(editor, dataUrl, Math.round(natW * scale), Math.round(natH * scale), `3d-${Date.now()}`)
         setMode('2d')
         dirtyRef.current = true
         showToast(t('bd3_saved'))
-      } catch {}
+      } catch { }
     }
     img.src = dataUrl
-  }
-
-  type ClipKind = 'cube' | 'sphere' | 'cylinder' | 'cone' | 'pyramid' | 'prism' | 'axes' | 'protractor'
-  type BgStyle = 'plain' | 'grid' | 'lines' | 'dots' | 'chalk'
-  type AxesCfg = { range: number; step: number; labels: boolean }
-  const [bgStyle, setBgStyle] = useState<BgStyle>('grid')
-  const [graphOpen, setGraphOpen] = useState(false)
-  const [graphExpr, setGraphExpr] = useState('x^2 - 3')
-  const [shapesOpen, setShapesOpen] = useState(false)
-  const [formulasOpen, setFormulasOpen] = useState(false)
-  const [laserOn, setLaserOn] = useState(false)
-  const imgInputRef = useRef<HTMLInputElement | null>(null)
-
-  const QUICK_FORMULAS = [
-    'a² + b² = c²',
-    'D = b² − 4ac',
-    'x = (−b ± √D) / 2a',
-    'S = π · r²',
-    'C = 2 · π · r',
-    '(a + b)² = a² + 2ab + b²',
-    'v = s / t',
-    'F = m · a',
-    'U = I · R',
-    'H₂O + CO₂ → H₂CO₃',
-  ]
-
-  // Безопасный рекурсивный парсер формулы y = f(x) без eval и new Function
-  const evalMathExpr = (raw: string, xVal: number): number => {
-    const src = raw
-      .toLowerCase()
-      .replace(/,/g, '.')
-      .replace(/\s+/g, '')
-    if (!src || src.length > 160) return NaN
-    const FUNCS: Record<string, (v: number) => number> = {
-      sin: Math.sin,
-      cos: Math.cos,
-      tan: Math.tan,
-      abs: Math.abs,
-      sqrt: Math.sqrt,
-      log: Math.log,
-      exp: Math.exp,
-      floor: Math.floor,
-      ceil: Math.ceil,
-    }
-    let pos = 0
-    const peek = () => src[pos] || ''
-    const parseExpr = (): number => {
-      let left = parseTerm()
-      while (peek() === '+' || peek() === '-') {
-        const op = src[pos++]
-        const right = parseTerm()
-        left = op === '+' ? left + right : left - right
-      }
-      return left
-    }
-    const parseTerm = (): number => {
-      let left = parsePower()
-      while (peek() === '*' || peek() === '/' || peek() === '(' || /[a-z]/.test(peek())) {
-        if (peek() === '*' || peek() === '/') {
-          const op = src[pos++]
-          const right = parsePower()
-          left = op === '*' ? left * right : left / right
-        } else {
-          // Неявное умножение: 2x, 3(x+1), 2sin(x)
-          left = left * parsePower()
-        }
-      }
-      return left
-    }
-    const parsePower = (): number => {
-      const base = parseUnary()
-      if (peek() === '^') {
-        pos++
-        return Math.pow(base, parsePower())
-      }
-      return base
-    }
-    const parseUnary = (): number => {
-      if (peek() === '+') { pos++; return parseUnary() }
-      if (peek() === '-') { pos++; return -parseUnary() }
-      return parsePrimary()
-    }
-    const parsePrimary = (): number => {
-      if (peek() === '(') {
-        pos++
-        const val = parseExpr()
-        if (peek() !== ')') return NaN
-        pos++
-        return val
-      }
-      const numMatch = src.slice(pos).match(/^(?:\d+\.?\d*|\.\d+)/)
-      if (numMatch) {
-        pos += numMatch[0].length
-        return Number(numMatch[0])
-      }
-      const idMatch = src.slice(pos).match(/^[a-z]+/)
-      if (idMatch) {
-        const id = idMatch[0]
-        pos += id.length
-        if (id === 'x') return xVal
-        if (id === 'pi') return Math.PI
-        if (id === 'e') return Math.E
-        if (id in FUNCS) {
-          if (peek() !== '(') return NaN
-          pos++
-          const arg = parseExpr()
-          if (peek() !== ')') return NaN
-          pos++
-          return FUNCS[id](arg)
-        }
-        return NaN
-      }
-      return NaN
-    }
-    try {
-      const y = parseExpr()
-      if (pos !== src.length) return NaN
-      return typeof y === 'number' && Number.isFinite(y) ? y : NaN
-    } catch {
-      return NaN
-    }
-  }
-
-  const placeFunctionGraph = () => {
-    const editor = editorRef.current
-    if (!editor || !graphExpr.trim()) return
-    const range = axesCfgRef.current.range || 10
-    const size = 560
-    const c = document.createElement('canvas')
-    c.width = size
-    c.height = size
-    const ctx = c.getContext('2d')!
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, size, size)
-    const pad = 42
-    const plotW = size - pad * 2
-    const mid = size / 2
-    const pxPerUnit = plotW / (range * 2)
-
-    // Лёгкая сетка
-    ctx.strokeStyle = '#e2e8f0'
-    ctx.lineWidth = 1
-    const step = range <= 10 ? 1 : range <= 20 ? 2 : 5
-    for (let v = -range; v <= range; v += step) {
-      const gx = mid + v * pxPerUnit
-      const gy = mid - v * pxPerUnit
-      ctx.beginPath(); ctx.moveTo(gx, pad); ctx.lineTo(gx, size - pad); ctx.stroke()
-      ctx.beginPath(); ctx.moveTo(pad, gy); ctx.lineTo(size - pad, gy); ctx.stroke()
-    }
-    // Оси X и Y
-    ctx.strokeStyle = '#0f172a'
-    ctx.lineWidth = 2.2
-    ctx.beginPath()
-    ctx.moveTo(pad, mid); ctx.lineTo(size - pad, mid)
-    ctx.moveTo(mid, pad); ctx.lineTo(mid, size - pad)
-    ctx.stroke()
-
-    // Подписи делений
-    ctx.fillStyle = '#475569'
-    ctx.font = 'bold 11px system-ui'
-    ctx.textAlign = 'center'
-    for (let v = -range; v <= range; v += step) {
-      if (v === 0) continue
-      const gx = mid + v * pxPerUnit
-      const gy = mid - v * pxPerUnit
-      ctx.fillText(String(v), gx, mid + 15)
-      ctx.textAlign = 'right'
-      ctx.fillText(String(v), mid - 7, gy + 4)
-      ctx.textAlign = 'center'
-    }
-    ctx.fillStyle = '#0f172a'
-    ctx.font = 'bold 14px system-ui'
-    ctx.fillText('X', size - pad + 14, mid + 5)
-    ctx.fillText('Y', mid + 14, pad - 8)
-
-    // График функции y = f(x)
-    ctx.strokeStyle = clipColorRef.current || '#4f46e5'
-    ctx.lineWidth = 3.5
-    ctx.lineJoin = 'round'
-    ctx.beginPath()
-    let started = false
-    let validPts = 0
-    for (let px = 0; px <= plotW; px += 1.5) {
-      const xv = (px - plotW / 2) / pxPerUnit
-      const yv = evalMathExpr(graphExpr.trim(), xv)
-      if (!Number.isFinite(yv) || Math.abs(yv) > range * 1.35) {
-        started = false
-        continue
-      }
-      const cy = mid - yv * pxPerUnit
-      const cx = pad + px
-      if (!started) { ctx.moveTo(cx, cy); started = true } else { ctx.lineTo(cx, cy) }
-      validPts++
-    }
-    ctx.stroke()
-
-    // Заголовок формулы
-    ctx.fillStyle = '#4f46e5'
-    ctx.font = 'bold 16px system-ui'
-    ctx.textAlign = 'left'
-    ctx.fillText(`y = ${graphExpr.trim()}`, pad, 24)
-
-    if (validPts < 2) {
-      showToast('Не удалось построить график — проверь формулу (напр. x^2 - 3 или sin(x)*4)')
-      return
-    }
-    addImageAsset(editor, c.toDataURL('image/png'), 420, 420, `graph-${Date.now()}`)
-    dirtyRef.current = true
-    setGraphOpen(false)
-    showToast(`График y = ${graphExpr.trim()} добавлен на доску ✓`)
-  }
-
-  const placeFormulaCard = (formula: string) => {
-    const editor = editorRef.current
-    if (!editor) return
-    const c = document.createElement('canvas')
-    c.width = 460
-    c.height = 110
-    const ctx = c.getContext('2d')!
-    ctx.fillStyle = '#fef9c3'
-    ctx.strokeStyle = '#eab308'
-    ctx.lineWidth = 4
-    ctx.beginPath()
-    ctx.roundRect(4, 4, 452, 102, 18)
-    ctx.fill()
-    ctx.stroke()
-    ctx.fillStyle = '#0f172a'
-    ctx.font = 'bold 34px Georgia, serif'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(formula, 230, 56)
-    addImageAsset(editor, c.toDataURL('image/png'), 280, 68, `formula-${Date.now()}`)
-    dirtyRef.current = true
-    setFormulasOpen(false)
-    showToast(`Формула «${formula}» добавлена ✓`)
   }
 
   const onInsertImageFile = (file: File | null) => {
@@ -537,7 +505,7 @@ export default function Board() {
         const ratio = Math.min(1, maxW / Math.max(1, img.naturalWidth))
         addImageAsset(editor, dataUrl, Math.round(img.naturalWidth * ratio), Math.round(img.naturalHeight * ratio), file.name, file.type || 'image/png')
         dirtyRef.current = true
-        showToast(`Картинка «${file.name}» вставлена на доску ✓`)
+        showToast(`Картинка «${file.name}» вставлена ✓`)
       }
       img.src = dataUrl
     }
@@ -549,424 +517,8 @@ export default function Board() {
     if (!editor) return
     const next = !laserOn
     setLaserOn(next)
-    setClipTool(null)
-    setPartTool(false)
-    try { editor.setCurrentTool(next ? 'laser' : 'draw') } catch {}
-  }
-
-  const PALETTE = ['#0f172a', '#64748b', '#94a3b8', '#ffffff', '#78716c', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#16a34a', '#10b981', '#14b8a6', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#ec4899', '#ef4444', '#dc2626', '#1e3a8a', '#047857', '#7c2d12', '#111827']
-  const shade = (hex: string, k: number): string => {
-    const n = parseInt(hex.slice(1), 16)
-    let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
-    if (k > 1) {
-      r = r + (255 - r) * (k - 1)
-      g = g + (255 - g) * (k - 1)
-      b = b + (255 - b) * (k - 1)
-    } else {
-      r = r * k; g = g * k; b = b * k
-    }
-    const f = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')
-    return '#' + f(r) + f(g) + f(b)
-  }
-  const clipColorRef = useRef<string>('#3b6ce0')
-  const [clipColor, setClipColorS] = useState<string>('#3b6ce0')
-  const setClipColor = (c: string) => { clipColorRef.current = c; setClipColorS(c) }
-  const drawClip = (kind: ClipKind): { url: string; w: number; h: number } => {
-    const cfg = axesCfgRef.current
-    const base = clipColorRef.current
-    const cc = {
-      light: shade(base, 1.7),
-      light2: shade(base, 1.45),
-      mid: base,
-      dark: shade(base, 0.55),
-      edge: shade(base, 0.4),
-    }
-    if (kind === 'axes') {
-      const per = 30
-      const size = Math.round(cfg.range * 2 * per + 100)
-      const c = document.createElement('canvas')
-      c.width = size
-      c.height = size
-      const x = c.getContext('2d')!
-      const mid = size / 2
-      x.strokeStyle = base
-      x.fillStyle = base
-      x.lineWidth = 2.5
-      x.beginPath()
-      x.moveTo(10, mid); x.lineTo(size - 10, mid)
-      x.moveTo(mid, 10); x.lineTo(mid, size - 10)
-      x.stroke()
-      const head = (cx: number, cy: number, a: number, b: number, p: number, q: number) => {
-        x.beginPath(); x.moveTo(cx, cy); x.lineTo(a, b); x.lineTo(p, q); x.closePath(); x.fill()
-      }
-      head(size - 10, mid, size - 26, mid - 7, size - 26, mid + 7)
-      head(10, mid, 26, mid - 7, 26, mid + 7)
-      head(mid, 10, mid - 7, 26, mid + 7, 26)
-      head(mid, size - 10, mid - 7, size - 26, mid + 7, size - 26)
-      x.font = '12px system-ui'
-      x.lineWidth = 1.5
-      const fmtNum = (v: number) => {
-        const r = Math.round(v * 100) / 100
-        return Math.abs(r - Math.round(r)) < 1e-9 ? String(Math.round(r)) : String(r)
-      }
-      const maxI = Math.round(cfg.range / cfg.step)
-      for (let i = 1; i <= maxI; i++) {
-        for (const sgn of [-1, 1]) {
-          const v = Math.round(i * cfg.step * sgn * 10) / 10
-          if (Math.abs(v) > cfg.range + 1e-9) continue
-          const dx = mid + v * per
-          const dy = mid - v * per
-          x.beginPath(); x.moveTo(dx, mid - 4); x.lineTo(dx, mid + 4); x.stroke()
-          x.beginPath(); x.moveTo(mid - 4, dy); x.lineTo(mid + 4, dy); x.stroke()
-          if (cfg.labels && v !== 0) {
-            x.textAlign = 'center'
-            x.fillText(fmtNum(v), dx, mid + 18)
-            x.textAlign = 'right'
-            x.fillText(fmtNum(v), mid - 8, dy + 4)
-          }
-        }
-      }
-      if (cfg.labels) {
-        x.textAlign = 'left'
-        x.fillText('0', mid + 8, mid + 18)
-        x.font = 'bold 14px system-ui'
-        x.fillText('X', size - 26, mid + 22)
-        x.fillText('Y', mid + 12, 20)
-      }
-      return { url: c.toDataURL('image/png'), w: size, h: size }
-    }
-    if (kind === 'protractor') {
-      const c = document.createElement('canvas')
-      c.width = 360
-      c.height = 200
-      const x = c.getContext('2d')!
-      const cx = 180, cy = 180, R = 155
-      x.fillStyle = 'rgba(59, 130, 246, 0.12)'
-      x.strokeStyle = base
-      x.lineWidth = 3
-      x.beginPath()
-      x.arc(cx, cy, R, Math.PI, 0)
-      x.closePath()
-      x.fill()
-      x.stroke()
-      x.beginPath()
-      x.arc(cx, cy, 42, Math.PI, 0)
-      x.stroke()
-      x.fillStyle = base
-      x.font = 'bold 11px system-ui'
-      x.textAlign = 'center'
-      for (let deg = 0; deg <= 180; deg += 5) {
-        const rad = Math.PI - (deg * Math.PI) / 180
-        const len = deg % 30 === 0 ? 18 : deg % 10 === 0 ? 12 : 7
-        x.lineWidth = deg % 30 === 0 ? 2 : 1.1
-        x.beginPath()
-        x.moveTo(cx + Math.cos(rad) * R, cy - Math.sin(rad) * R)
-        x.lineTo(cx + Math.cos(rad) * (R - len), cy - Math.sin(rad) * (R - len))
-        x.stroke()
-        if (deg % 30 === 0) {
-          x.fillText(`${deg}°`, cx + Math.cos(rad) * (R - 29), cy - Math.sin(rad) * (R - 29) + 4)
-        }
-      }
-      x.beginPath(); x.arc(cx, cy, 4, 0, Math.PI * 2); x.fill()
-      return { url: c.toDataURL('image/png'), w: 360, h: 200 }
-    }
-    const c = document.createElement('canvas')
-    c.width = 240
-    c.height = 240
-    const x = c.getContext('2d')!
-    const grad = x.createLinearGradient(30, 30, 210, 210)
-    grad.addColorStop(0, cc.light2)
-    grad.addColorStop(1, cc.mid)
-    x.strokeStyle = cc.edge
-    x.lineWidth = 6
-    x.lineJoin = 'round'
-    if (kind === 'cube') {
-      x.beginPath(); x.moveTo(70, 90); x.lineTo(130, 60); x.lineTo(190, 90); x.lineTo(130, 120); x.closePath(); x.fillStyle = cc.light; x.fill(); x.stroke()
-      x.beginPath(); x.moveTo(70, 90); x.lineTo(70, 150); x.lineTo(130, 180); x.lineTo(130, 120); x.closePath(); x.fillStyle = grad; x.fill(); x.stroke()
-      x.beginPath(); x.moveTo(190, 90); x.lineTo(190, 150); x.lineTo(130, 180); x.lineTo(130, 120); x.closePath(); x.fillStyle = cc.dark; x.fill(); x.stroke()
-    } else if (kind === 'sphere') {
-      x.beginPath(); x.arc(120, 120, 62, 0, Math.PI * 2); x.fillStyle = grad; x.fill(); x.stroke()
-      x.beginPath(); x.ellipse(120, 120, 62, 20, 0, Math.PI, 0); x.strokeStyle = 'rgba(255,255,255,.55)'; x.lineWidth = 4; x.stroke()
-      x.beginPath(); x.ellipse(120, 120, 24, 62, 0, 0, Math.PI * 2); x.strokeStyle = 'rgba(255,255,255,.35)'; x.stroke()
-    } else if (kind === 'cylinder') {
-      x.fillStyle = grad
-      x.beginPath(); x.moveTo(78, 88); x.lineTo(78, 160); x.lineTo(162, 160); x.lineTo(162, 88); x.closePath(); x.fill(); x.stroke()
-      x.beginPath(); x.ellipse(120, 160, 42, 18, 0, 0, Math.PI); x.fillStyle = cc.dark; x.fill(); x.stroke()
-      x.beginPath(); x.ellipse(120, 88, 42, 18, 0, 0, Math.PI * 2); x.fillStyle = cc.light; x.fill(); x.stroke()
-    } else if (kind === 'cone') {
-      x.beginPath(); x.moveTo(120, 50); x.lineTo(168, 164); x.lineTo(72, 164); x.closePath(); x.fillStyle = grad; x.fill(); x.stroke()
-      x.beginPath(); x.ellipse(120, 164, 48, 20, 0, 0, Math.PI); x.fillStyle = cc.dark; x.fill(); x.stroke()
-    } else if (kind === 'pyramid') {
-      x.beginPath(); x.moveTo(120, 46); x.lineTo(196, 150); x.lineTo(120, 172); x.closePath(); x.fillStyle = cc.dark; x.fill(); x.stroke()
-      x.beginPath(); x.moveTo(120, 46); x.lineTo(44, 150); x.lineTo(120, 172); x.closePath(); x.fillStyle = grad; x.fill(); x.stroke()
-    } else {
-      x.beginPath(); x.moveTo(70, 150); x.lineTo(104, 70); x.lineTo(138, 150); x.lineTo(104, 196); x.closePath(); x.fillStyle = grad; x.fill(); x.stroke()
-      x.beginPath(); x.moveTo(70, 150); x.lineTo(104, 196); x.lineTo(172, 160); x.lineTo(138, 114); x.closePath(); x.fillStyle = cc.dark; x.fill(); x.stroke()
-      x.beginPath(); x.moveTo(104, 70); x.lineTo(138, 114); x.lineTo(172, 160); x.lineTo(138, 78); x.closePath(); x.fillStyle = cc.light; x.fill(); x.stroke()
-    }
-    return { url: c.toDataURL('image/png'), w: 240, h: 240 }
-  }
-
-  const assetCacheRef = useRef<Map<string, string>>(new Map())
-  const ensureAsset = (editor: any, key: string, url: string, w: number, h: number) => {
-    let id = assetCacheRef.current.get(key)
-    if (!id) {
-      const asset = AssetRecordType.create({
-        id: AssetRecordType.createId(),
-        type: 'image',
-        props: { src: url, w, h, name: key, mimeType: 'image/png', isAnimated: false },
-      })
-      editor.createAssets([asset])
-      id = asset.id
-      assetCacheRef.current.set(key, id)
-    }
-    return id
-  }
-  const placeClipRange = (kind: ClipKind, x0: number, y0: number, x1: number, y1: number) => {
-    const editor = editorRef.current
-    if (!editor) return
-    try {
-      const { url, w: aw, h: ah } = drawCached(kind)
-      let w = Math.abs(x1 - x0)
-      let h = Math.abs(y1 - y0)
-      let x = Math.min(x0, x1)
-      let y = Math.min(y0, y1)
-      if (w < 24 && h < 24) {
-        w = 240; h = 240
-        x = x0 - 120; y = y0 - 120
-      }
-      const key = kind === 'axes' ? `axes:${axesCfgRef.current.range}:${axesCfgRef.current.step}:${axesCfgRef.current.labels}:${clipColorRef.current}` : `${kind}:${clipColorRef.current}`
-      const id = ensureAsset(editor, key, url, aw, ah)
-      editor.createShape({ type: 'image', x, y, props: { assetId: id, w, h } as any })
-      dirtyRef.current = true
-    } catch {}
-  }
-
-  const clipToolRef = useRef<ClipKind | null>(null)
-  const [clipTool, setClipToolS] = useState<ClipKind | null>(null)
-  const setClipTool = (k: ClipKind | null) => { clipToolRef.current = k; setClipToolS(k) }
-  const axesCfgRef = useRef<AxesCfg>({ range: 10, step: 1, labels: true })
-  const [axesCfg, setAxesCfg] = useState<AxesCfg>(axesCfgRef.current)
-  const [axesOpen, setAxesOpen] = useState(false)
-  const setAxes = (p: Partial<AxesCfg>) => {
-    axesCfgRef.current = { ...axesCfgRef.current, ...p }
-    setAxesCfg(axesCfgRef.current)
-  }
-  type ClipDrag = { x0: number; y0: number; px: number; py: number; box: DOMRect; kind: ClipKind }
-  const clipDragRef = useRef<ClipDrag | null>(null)
-  const justPlacedRef = useRef(0)
-  const ghostRef = useRef<HTMLDivElement | null>(null)
-  const ghostImgRef = useRef<HTMLImageElement | null>(null)
-  const ghostCacheRef = useRef<Map<string, { url: string; w: number; h: number }>>(new Map())
-  const drawCached = (kind: ClipKind) => {
-    const key = kind === 'axes' ? `axes:${axesCfgRef.current.range}:${axesCfgRef.current.step}:${axesCfgRef.current.labels}:${clipColorRef.current}` : `${kind}:${clipColorRef.current}`
-    let r = ghostCacheRef.current.get(key)
-    if (!r) { r = drawClip(kind); ghostCacheRef.current.set(key, r) }
-    return r
-  }
-  const ghostHide = () => {
-    const g = ghostRef.current
-    if (g) g.classList.add('hidden')
-  }
-  const ghostPreview = (kind: ClipKind, cx: number, cy: number) => {
-    const g = ghostRef.current
-    if (!g) return
-    const box = g.parentElement!.getBoundingClientRect()
-    const r = drawCached(kind)
-    const img = ghostImgRef.current
-    if (img) {
-      const key = kind === 'axes' ? `axes:${axesCfgRef.current.range}:${axesCfgRef.current.step}:${axesCfgRef.current.labels}:${clipColorRef.current}` : `${kind}:${clipColorRef.current}`
-      if (img.dataset.k !== key) { img.src = r.url; img.dataset.k = key }
-      img.style.display = ''
-    }
-    g.classList.remove('hidden')
-    g.style.outline = 'none'
-    g.style.background = 'transparent'
-    g.style.left = Math.round(cx - box.left - r.w / 2) + 'px'
-    g.style.top = Math.round(cy - box.top - r.h / 2) + 'px'
-    g.style.width = r.w + 'px'
-    g.style.height = r.h + 'px'
-  }
-  const ghostDrag = (d: ClipDrag, cx: number, cy: number) => {
-    const g = ghostRef.current
-    if (!g) return
-    const img = ghostImgRef.current
-    if (img) img.style.display = 'none'
-    g.classList.remove('hidden')
-    g.style.outline = '2px dashed rgba(79,70,229,.95)'
-    g.style.background = 'rgba(99,102,241,.07)'
-    const x1 = cx - d.box.left
-    const y1 = cy - d.box.top
-    g.style.left = Math.min(d.x0 - d.box.left, x1) + 'px'
-    g.style.top = Math.min(d.y0 - d.box.top, y1) + 'px'
-    g.style.width = Math.abs(cx - d.x0) + 'px'
-    g.style.height = Math.abs(cy - d.y0) + 'px'
-  }
-  const onAreaPointerDown = (e: React.PointerEvent) => {
-    if (partToolRef.current) { onPartDown(e); return }
-    const k = clipToolRef.current
-    if (!k || !editorRef.current) return
-    const el = e.target as Element
-    if (!el || !el.closest('.tl-canvas')) return
-    if (!e.isPrimary) return
-    e.preventDefault()
-    e.stopPropagation()
-    try { (e.currentTarget as Element).setPointerCapture(e.pointerId) } catch {}
-    let page: any = { x: 0, y: 0 }
-    try { page = editorRef.current.screenToPage({ x: e.clientX, y: e.clientY }) } catch {}
-    const box = (e.currentTarget as Element).getBoundingClientRect()
-    clipDragRef.current = { x0: e.clientX, y0: e.clientY, px: page.x, py: page.y, box, kind: k }
-    ghostDrag(clipDragRef.current, e.clientX, e.clientY)
-  }
-  const onAreaPointerMove = (e: React.PointerEvent) => {
-    if (partToolRef.current) { onPartMove(e); return }
-    const k = clipToolRef.current
-    if (!k) { ghostHide(); return }
-    const d = clipDragRef.current
-    if (d) ghostDrag(d, e.clientX, e.clientY)
-    else ghostPreview(k, e.clientX, e.clientY)
-  }
-  const onAreaPointerUp = (e: React.PointerEvent) => {
-    const d = clipDragRef.current
-    if (d) {
-      clipDragRef.current = null
-      ghostHide()
-      let p2: any = null
-      try { p2 = editorRef.current?.screenToPage({ x: e.clientX, y: e.clientY }) } catch {}
-      if (!p2) return
-      try { (e.currentTarget as Element).releasePointerCapture(e.pointerId) } catch {}
-      const quick = Math.hypot(e.clientX - d.x0, e.clientY - d.y0) <= 12
-      if (quick) {
-        let hit: any = null
-        try { hit = editorRef.current?.getShapeAtPoint?.({ x: p2.x, y: p2.y }, { hitInside: true, hitLabels: true } as any) } catch {}
-        if (hit) { justPlacedRef.current = 0; setClipTool(null); return }
-      }
-      placeClipRange(d.kind, d.px, d.py, p2.x, p2.y)
-      justPlacedRef.current = performance.now()
-      return
-    }
-    if (partToolRef.current) onPartUp()
-  }
-  const onAreaClickCapture = (e: React.MouseEvent) => {
-    if (!clipToolRef.current) return
-    if (performance.now() - justPlacedRef.current < 450) return
-    const el = e.target as Element
-    if (!el) return
-    if (el.closest('[data-clipbtn]')) return
-    if (el.closest('.tl-canvas')) return
-    setClipTool(null)
-    ghostHide()
-  }
-  const onAreaKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape' && clipToolRef.current) {
-      e.stopPropagation()
-      setClipTool(null)
-      ghostHide()
-    }
-    if (e.key === 'Escape' && partToolRef.current) {
-      e.stopPropagation()
-      if (partDragRef.current) { try { editorRef.current?.squashToMark(partDragRef.current.markId) } catch {} partDragRef.current = null }
-      setPartTool(false)
-    }
-  }
-
-  // ——— Ластик: стирает как в Paint — рисует штрих цветом фона поверх рисунка ———
-  const [partTool, setPartToolS] = useState(false)
-  const partToolRef = useRef(false)
-  type PartDrag = { pts: Pt[]; markId: string }
-  const partDragRef = useRef<PartDrag | null>(null)
-  const partPendingRef = useRef<Pt | null>(null)
-  const partRafRef = useRef(0)
-  const setPartTool = (v: boolean) => {
-    partToolRef.current = v
-    setPartToolS(v)
-    if (v) setClipTool(null)
-  }
-  const eraseShapeRef = useRef<string | null>(null)
-  const eraseStartRef = useRef<Pt>({ x: 0, y: 0 })
-  const ERASE_W = 26
-  const partSweep = (p: Pt) => {
-    const ed = editorRef.current
-    if (!ed) return
-    try {
-      if (!eraseShapeRef.current) {
-        // первый касание — создаём штрих-маску цветом фона
-        const id = ('shape:eraser' + Math.random().toString(36).slice(2, 8)) as any
-        ed.createShape({
-          id,
-          type: 'draw',
-          x: p.x, y: p.y,
-          props: { color: 'white', size: 'xl', segments: [{ type: 'free', points: [{ x: 0, y: 0 }] }] } as any,
-        } as any)
-        eraseShapeRef.current = id as string
-        eraseStartRef.current = p
-        dirtyRef.current = true
-        return
-      }
-      const id = eraseShapeRef.current
-      const shape = ed.getShape(id)
-      if (!shape) { eraseShapeRef.current = null; return }
-      const segs: any[] = shape.props.segments
-      const seg = segs[segs.length - 1]
-      const pts: any[] = seg.points
-      const lx = p.x - eraseStartRef.current.x
-      const ly = p.y - eraseStartRef.current.y
-      if (pts.length && Math.hypot((pts[pts.length - 1].x as number) - lx, (pts[pts.length - 1].y as number) - ly) < ERASE_W / 4) return
-      pts.push({ x: lx, y: ly })
-      ed.updateShape({ id, type: 'draw', props: { ...shape.props, segments: [{ type: 'free', points: pts }] } } as any)
-      dirtyRef.current = true
-    } catch {}
-  }
-  const queueSweep = (p: Pt) => {
-    // сглаживаем: одна стирка на кадр, иначе на больших досках съезжает по кадрам
-    partPendingRef.current = p
-    if (partRafRef.current) return
-    partRafRef.current = requestAnimationFrame(() => {
-      partRafRef.current = 0
-      const pt = partPendingRef.current
-      partPendingRef.current = null
-      if (pt) partSweep(pt)
-    })
-  }
-  const onPartDown = (e: React.PointerEvent) => {
-    const ed = editorRef.current
-    if (!ed) return
-    const el = e.target as Element
-    if (!el || !el.closest('.tl-canvas')) return
-    if (!e.isPrimary) return
-    e.preventDefault()
-    e.stopPropagation()
-    try { (e.currentTarget as Element).setPointerCapture(e.pointerId) } catch {}
-    let page: Pt = { x: 0, y: 0 }
-    try { page = ed.screenToPage({ x: e.clientX, y: e.clientY }) } catch {}
-    const markId = 'part-erase-' + Math.random().toString(36).slice(2, 8)
-    partDragRef.current = { pts: [page], markId }
-    try { ed.mark(markId) } catch {}
-    eraseShapeRef.current = null
-    partSweep(page)
-  }
-  const onPartMove = (e: React.PointerEvent) => {
-    if (!partToolRef.current) return
-    const d = partDragRef.current
-    if (!d) return
-    const ed = editorRef.current
-    if (!ed) return
-    try {
-      const page = ed.screenToPage({ x: e.clientX, y: e.clientY })
-      const lastPt = d.pts[d.pts.length - 1]
-      if (Math.hypot(page.x - lastPt.x, page.y - lastPt.y) < ERASE_W / 8) return
-      d.pts.push(page)
-      queueSweep(page)
-    } catch {}
-  }
-  const onPartUp = () => {
-    const d = partDragRef.current
-    if (!d) return
-    partDragRef.current = null
-    eraseShapeRef.current = null
-    try { if (partRafRef.current) { cancelAnimationFrame(partRafRef.current); partRafRef.current = 0 } } catch {}
-    partPendingRef.current = null
-    try { editorRef.current?.squashToMark(d.markId) } catch {}
+    setActiveToolId(next ? 'laser' : 'draw')
+    try { editor.setCurrentTool(next ? 'laser' : 'draw') } catch { }
   }
 
   const bgPatternStyle: React.CSSProperties =
@@ -974,70 +526,221 @@ export default function Board() {
       ? {}
       : bgStyle === 'grid'
         ? {
-            backgroundImage: 'linear-gradient(to right, rgba(99,102,241,0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(99,102,241,0.14) 1px, transparent 1px)',
-            backgroundSize: '28px 28px',
-          }
+          backgroundImage: 'linear-gradient(to right, rgba(99,102,241,0.13) 1px, transparent 1px), linear-gradient(to bottom, rgba(99,102,241,0.13) 1px, transparent 1px)',
+          backgroundSize: '28px 28px',
+        }
         : bgStyle === 'lines'
           ? {
-              backgroundImage: 'linear-gradient(to bottom, rgba(59,130,246,0.2) 1px, transparent 1px)',
-              backgroundSize: '100% 34px',
-            }
+            backgroundImage: 'linear-gradient(to bottom, rgba(59,130,246,0.2) 1px, transparent 1px)',
+            backgroundSize: '100% 34px',
+          }
           : bgStyle === 'dots'
             ? {
-                backgroundImage: 'radial-gradient(rgba(71,85,105,0.28) 1.5px, transparent 1.5px)',
-                backgroundSize: '24px 24px',
-              }
+              backgroundImage: 'radial-gradient(rgba(71,85,105,0.28) 1.5px, transparent 1.5px)',
+              backgroundSize: '24px 24px',
+            }
             : {
-                backgroundColor: '#113325',
-                backgroundImage: 'linear-gradient(to right, rgba(255,255,255,0.07) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.07) 1px, transparent 1px)',
-                backgroundSize: '32px 32px',
-              }
+              backgroundColor: '#113325',
+              backgroundImage: 'linear-gradient(to right, rgba(255,255,255,0.07) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.07) 1px, transparent 1px)',
+              backgroundSize: '32px 32px',
+            }
+
+  const tldrawComponents = useMemo(() => {
+    if (mode === '3d') {
+      return {
+        Toolbar: null, StylePanel: null, TopPanel: null, SharePanel: null, NavigationPanel: null,
+        PageMenu: null, MainMenu: null, ActionsMenu: null, HelpMenu: null, ContextMenu: null,
+        QuickActions: null, KeyboardShortcutsDialog: null, MenuPanel: null, HelperButtons: null, ZoomMenu: null,
+      } as any
+    }
+    // Когда активен наш регулируемый карандаш, скрываем стандартную панель tldraw (S/M/L/XL),
+    // чтобы справа была одна удобная панель с плавным размером 1–40 px и палитрой любых цветов.
+    // Для стрелок, текста и фигур tldraw его панель стилей появляется автоматически.
+    return isCustomPenActive
+      ? ({ SharePanel: null, DebugMenu: null, DebugPanel: null, StylePanel: null } as any)
+      : ({ SharePanel: null, DebugMenu: null, DebugPanel: null } as any)
+  }, [mode, isCustomPenActive])
+
+  const currentBgLabel = BG_OPTIONS.find(b => b.id === bgStyle)?.label || 'Клетка'
+  const effectivePreviewPx = penMode === 'highlighter'
+    ? Math.min(28, Math.max(10, Math.round(penSize * 1.4)))
+    : Math.min(28, Math.max(3, penSize))
 
   const tldrawArea = (
     <div
-      className={`relative rounded-2xl border overflow-hidden ${bgStyle === 'chalk' && mode === '2d' ? 'bg-[#113325] [&_.tl-background]:!bg-transparent' : bgStyle !== 'plain' && mode === '2d' ? 'bg-white [&_.tl-background]:!bg-transparent' : 'bg-white'} ${isFullscreen ? 'flex-1 min-h-0' : 'h-full w-full'} ${clipTool ? '[&_.tl-container]:!cursor-crosshair' : ''} ${partTool ? '[&_.tl-canvas]:!cursor-cell' : ''}`}
+      className={`relative rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden ${bgStyle === 'chalk' && mode === '2d'
+        ? 'bg-[#113325] [&_.tl-background]:!bg-transparent'
+        : bgStyle !== 'plain' && mode === '2d'
+          ? 'bg-white [&_.tl-background]:!bg-transparent'
+          : 'bg-white'
+        } ${isFullscreen ? 'flex-1 min-h-0' : 'h-full w-full'} ${isCustomPenActive ? '[&_.tl-canvas]:!cursor-crosshair' : ''}`}
       style={bgPatternStyle}
-      onPointerDownCapture={onAreaPointerDown}
-      onPointerMoveCapture={mode === '2d' && (clipTool || partTool) ? onAreaPointerMove : undefined}
-      onPointerUpCapture={mode === '2d' && (clipTool || partTool) ? onAreaPointerUp : undefined}
-      onClickCapture={onAreaClickCapture}
-      onKeyDown={onAreaKeyDown}
+      onPointerDownCapture={onCanvasPointerDown}
+      onPointerMoveCapture={onCanvasPointerMove}
+      onPointerUpCapture={finishPenStroke}
+      onPointerCancelCapture={finishPenStroke}
     >
-      <div ref={ghostRef} className="hidden absolute z-20 pointer-events-none rounded" style={{ overflow: 'visible' }}>
-        <img ref={ghostImgRef} alt="" draggable={false} className="select-none pointer-events-none opacity-50 max-w-none" />
-      </div>
       <div className="absolute inset-0">
         <Tldraw
           key={resetKey}
           assetUrls={TLDRAW_ASSET_URLS}
+          shapeUtils={CUSTOM_SHAPE_UTILS}
           onMount={onMount}
-          components={mode === '3d' ? ({
-            Toolbar: null, StylePanel: null, TopPanel: null, SharePanel: null, NavigationPanel: null,
-            PageMenu: null, MainMenu: null, ActionsMenu: null, HelpMenu: null, ContextMenu: null,
-            QuickActions: null, KeyboardShortcutsDialog: null, MenuPanel: null, HelperButtons: null, ZoomMenu: null,
-          } as any) : ({ SharePanel: null, DebugMenu: null } as any)}
+          components={tldrawComponents}
         />
       </div>
-      {partTool && mode === '2d' && (
-        <div data-testid="bd2-part-hint" className="absolute right-3 bottom-16 z-30 pointer-events-none px-3 py-1.5 rounded-full bg-emerald-900/90 text-white text-xs font-medium shadow-lg">
-          🧽 {t('bd2_part_hint')} · {t('bd2_part_exit')}
-        </div>
-      )}
+
+      {/* Плавающая панель карандаша: плавный размер 1–40 px + выбор любого цвета */}
       {mode === '2d' && (
-        <button data-testid="bd2-partbtn" onPointerDown={e => e.stopPropagation()}
-          onClick={() => setPartTool(!partTool)} title={t('bd2_part_hint')}
-          className={`absolute z-30 bottom-3 right-3 w-12 h-12 rounded-2xl text-xl flex items-center justify-center shadow-lg border transition-colors ${partTool ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white/95 dark:bg-slate-800/95 dark:text-white border-slate-200 dark:border-slate-600'}`}>
-          🧽
-        </button>
-      )}
-      {clipTool && mode === '2d' && (
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-16 z-30 pointer-events-none px-3 py-1.5 rounded-full bg-slate-900/90 text-white text-xs font-medium shadow-lg">
-          {t('bd2_click_place')}{clipTool === 'axes' ? ` ±${axesCfg.range} (${t('bd2_axes_step_short')} ${axesCfg.step})` : ''}
+        <div
+          data-pen-panel="1"
+          onPointerDown={e => e.stopPropagation()}
+          className={`absolute right-2.5 sm:right-3 z-30 select-none ${penPanelOpen ? 'top-14 sm:top-3' : 'top-2.5 sm:top-3'}`}
+        >
+          {penPanelOpen ? (
+            <div className="w-[228px] sm:w-[236px] max-w-[calc(100vw-24px)] rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700/80 shadow-xl p-3 space-y-3">
+              {/* Переключатель Карандаш / Маркер */}
+              <div className="flex items-center gap-1.5">
+                <div className="flex-1 grid grid-cols-2 p-0.5 rounded-xl bg-slate-100 dark:bg-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => activatePenTool('pen')}
+                    className={`py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition ${isCustomPenActive && penMode === 'pen'
+                      ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
+                      }`}
+                  >
+                    <Pencil size={13} /> Карандаш
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => activatePenTool('highlighter')}
+                    className={`py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition ${isCustomPenActive && penMode === 'highlighter'
+                      ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-300 shadow-sm'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
+                      }`}
+                  >
+                    <Highlighter size={13} /> Маркер
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPenPanelOpen(false)}
+                  aria-label="Свернуть панель карандаша"
+                  className="w-7 h-7 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center shrink-0"
+                  title="Свернуть"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* Регулируемый размер карандаша (1–40 px) */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-600 dark:text-slate-300">Размер</span>
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                      <span
+                        className="rounded-full transition-all"
+                        style={{
+                          width: `${effectivePreviewPx}px`,
+                          height: `${effectivePreviewPx}px`,
+                          backgroundColor: penColor,
+                          opacity: penMode === 'highlighter' ? 0.45 : 1,
+                          border: penColor.toLowerCase() === '#ffffff' ? '1px solid #94a3b8' : undefined,
+                        }}
+                      />
+                    </span>
+                    <span className="font-mono font-bold text-slate-800 dark:text-white w-10 text-right">
+                      {penSize} px
+                    </span>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={40}
+                  value={penSize}
+                  onChange={e => { setPenSize(Number(e.target.value)); activatePenTool() }}
+                  aria-label="Размер карандаша"
+                  className="w-full accent-indigo-600 cursor-pointer h-2 rounded-lg"
+                />
+                <div className="grid grid-cols-4 gap-1">
+                  {PEN_SIZE_PRESETS.map(sz => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => { setPenSize(sz); activatePenTool() }}
+                      className={`py-1 rounded-lg text-[11px] font-mono font-bold border transition ${penSize === sz
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                        }`}
+                    >
+                      {sz}px
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Цвет карандаша: быстрые цвета + выбор любого цвета */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-600 dark:text-slate-300">Цвет</span>
+                  <label className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 cursor-pointer hover:border-indigo-400 transition">
+                    <input
+                      type="color"
+                      value={penColor}
+                      onChange={e => { setPenColor(e.target.value); activatePenTool() }}
+                      aria-label="Выбрать произвольный цвет карандаша"
+                      className="w-4 h-4 rounded border-0 bg-transparent cursor-pointer p-0"
+                    />
+                    <span className="font-mono text-[11px] font-semibold text-slate-700 dark:text-slate-200 uppercase">
+                      {penColor}
+                    </span>
+                  </label>
+                </div>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {PEN_SWATCHES.map(hex => {
+                    const selected = penColor.toLowerCase() === hex.toLowerCase()
+                    return (
+                      <button
+                        key={hex}
+                        type="button"
+                        onClick={() => { setPenColor(hex); activatePenTool() }}
+                        aria-label={`Цвет ${hex}`}
+                        className={`h-7 rounded-lg border transition-transform ${selected
+                          ? 'ring-2 ring-indigo-500 ring-offset-1 dark:ring-offset-slate-900 scale-105 border-slate-400'
+                          : 'border-slate-300/80 dark:border-slate-600 hover:scale-105'
+                          }`}
+                        style={{ backgroundColor: hex }}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => { setPenPanelOpen(true); activatePenTool() }}
+              className="px-2.5 sm:px-3 py-2 min-h-[38px] rounded-xl bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700 shadow-lg text-xs font-bold text-slate-800 dark:text-white flex items-center gap-1.5 sm:gap-2 hover:border-indigo-400 transition"
+              title="Открыть настройки карандаша"
+            >
+              <span
+                className="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0"
+                style={{ backgroundColor: penColor }}
+              />
+              {penMode === 'highlighter' ? <Highlighter size={13} className="text-amber-500 shrink-0" /> : <Pencil size={13} className="text-indigo-600 dark:text-indigo-400 shrink-0" />}
+              <span className="hidden sm:inline">{penMode === 'highlighter' ? 'Маркер' : 'Карандаш'} ·</span>
+              <span className="font-mono">{penSize}px</span>
+            </button>
+          )}
         </div>
       )}
+
       {mode === '3d' && (
         <div className="absolute inset-0 z-10 bg-slate-100">
-          <Suspense fallback={<div className="h-full flex items-center justify-center text-slate-400 text-sm">...</div>}>
+          <Suspense fallback={<div className="h-full flex items-center justify-center text-slate-400 text-sm">Загрузка 3D…</div>}>
             <Board3D onSnapshot={on3dSnapshot} />
           </Suspense>
         </div>
@@ -1047,30 +750,33 @@ export default function Board() {
 
   if (isFullscreen) {
     return (
-      <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col">
-        <div className="h-14 sm:h-12 shrink-0 bg-blue-900 text-white flex items-center gap-2 sm:gap-3 px-2 sm:px-4">
-          <span className="font-bold hidden sm:inline">{t('board_fullscreen')}</span>
-          <span className="text-xs text-white/70 hidden sm:inline">{title} • {mode === '2d' ? '2D' : '3D'}</span>
+      <div className="fixed inset-0 z-50 bg-slate-50 dark:bg-slate-950 flex flex-col">
+        <div className="h-14 sm:h-12 shrink-0 bg-slate-900 text-white flex items-center gap-2 sm:gap-3 px-2 sm:px-4">
           <button onClick={() => nav('/')} aria-label={t('home')} title={t('home')}
-            className="shrink-0 w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center">
-            <Home size={20} />
+            className="shrink-0 w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center">
+            <Home size={18} />
           </button>
-          <button onClick={() => { setShowActions(false); setIsFullscreen(false) }} aria-label={t('board_exit_esc')}
-            className="sm:hidden shrink-0 w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center">
-            <X size={20} />
-          </button>
+          <span className="font-bold hidden sm:inline text-sm">{title}</span>
+          <div className="hidden sm:flex p-0.5 rounded-lg bg-white/10 text-xs font-bold">
+            <button onClick={() => { flushDraft(); setMode('2d') }} className={`px-2.5 py-1 rounded-md ${mode === '2d' ? 'bg-white text-slate-900' : 'text-white/75'}`}>2D</button>
+            <button onClick={() => { flushDraft(); setMode('3d') }} className={`px-2.5 py-1 rounded-md ${mode === '3d' ? 'bg-white text-slate-900' : 'text-white/75'}`}>3D</button>
+          </div>
           <input value={title} onChange={e => setTitle(e.target.value)} aria-label={t('board_title')}
-            className="sm:hidden flex-1 min-w-0 px-3 py-2 rounded-xl bg-white/10 text-white text-sm font-medium placeholder:text-white/50" />
+            className="sm:hidden flex-1 min-w-0 px-3 py-1.5 rounded-xl bg-white/10 text-white text-sm font-medium placeholder:text-white/50" />
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={save} aria-label={t('save')} className="px-3 sm:px-4 py-2.5 min-h-[44px] min-w-[44px] rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center gap-1">
-              <Save size={17} /> <span className="hidden sm:inline">{t('save')}</span>
+            {mode === '2d' && (
+              <button onClick={() => setGraphOpen(true)} className="hidden sm:flex px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold items-center gap-1.5">
+                <TrendingUp size={15} /> График
+              </button>
+            )}
+            <button onClick={save} aria-label={t('save')} className="px-3.5 py-2 min-h-[38px] rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5">
+              <Save size={15} /> <span className="hidden sm:inline">{t('save')}</span>
             </button>
             <button onClick={() => setShowActions(v => !v)} aria-label={t('board_actions')} aria-expanded={showActions}
-              className="sm:hidden w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center">
-              <MoreHorizontal size={21} />
+              className="sm:hidden w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+              <MoreHorizontal size={20} />
             </button>
-            <button onClick={() => nav('/')} className="hidden sm:flex px-4 py-2.5 min-h-[44px] rounded-lg bg-white text-slate-900 font-bold">{t('home')}</button>
-            <button onClick={() => setIsFullscreen(false)} className="hidden sm:flex px-4 py-2.5 min-h-[44px] rounded-lg bg-white text-slate-900 font-bold">{t('board_exit_esc')}</button>
+            <button onClick={() => setIsFullscreen(false)} className="hidden sm:flex px-3.5 py-2 min-h-[38px] rounded-lg bg-white text-slate-900 text-xs font-bold">{t('board_exit_esc')}</button>
           </div>
         </div>
         <div className="flex-1 min-h-0 p-2 flex flex-col">{tldrawArea}</div>
@@ -1081,218 +787,248 @@ export default function Board() {
             <div className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-white dark:bg-slate-900 p-4 pb-[calc(16px+env(safe-area-inset-bottom))] shadow-2xl">
               <div className="flex items-center justify-between mb-3">
                 <span className="font-bold dark:text-white">{t('board_actions')}</span>
-                <button onClick={() => setShowActions(false)} aria-label={t('board_hide')} className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white flex items-center justify-center"><X size={19} /></button>
+                <button onClick={() => setShowActions(false)} aria-label={t('board_hide')} className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-white flex items-center justify-center"><X size={18} /></button>
               </div>
               <div className="grid grid-cols-2 gap-2 p-1 mb-3 rounded-xl bg-slate-100 dark:bg-slate-800">
                 <button onClick={() => { flushDraft(); setMode('2d'); setShowActions(false) }} className={`min-h-[44px] rounded-lg text-sm font-bold ${mode === '2d' ? 'bg-white dark:bg-slate-700 dark:text-white shadow' : 'text-slate-500'}`}>{t('board_2d')}</button>
                 <button onClick={() => { flushDraft(); setMode('3d'); setShowActions(false) }} className={`min-h-[44px] rounded-lg text-sm font-bold ${mode === '3d' ? 'bg-white dark:bg-slate-700 dark:text-white shadow' : 'text-slate-500'}`}>{t('board_3d')}</button>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => { flushDraft(); setShowActions(false); setIsFullscreen(false); setShowBoards(true) }} className="min-h-[52px] px-3 rounded-xl border dark:border-slate-700 dark:text-white text-sm font-bold">🗂 {t('board_mine_short')}</button>
-                <button onClick={() => { setMode('2d'); setClipTool('axes'); setShowActions(false) }} className={`min-h-[52px] px-3 rounded-xl border text-sm font-bold ${clipTool === 'axes' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>{t('bd2_axes')}</button>
-                <button onClick={() => { newBoard(); setShowActions(false) }} className="min-h-[52px] px-3 rounded-xl bg-orange-500 text-white text-sm font-bold flex items-center justify-center gap-1.5"><Plus size={17} />{t('board_new')}</button>
-                <button onClick={() => { download(); setShowActions(false) }} className="min-h-[52px] px-3 rounded-xl border dark:border-slate-700 dark:text-white text-sm font-bold flex items-center justify-center gap-1.5"><Download size={17} />{t('board_download')}</button>
-                <button onClick={() => { clearPage(); setShowActions(false) }} className="col-span-2 min-h-[48px] px-3 rounded-xl border text-amber-700 border-amber-200 bg-amber-50 text-sm font-bold flex items-center justify-center gap-1.5"><Trash2 size={17} />{t('board_clear_sheet')}</button>
+                <button onClick={() => { setMode('2d'); setShowActions(false); setGraphOpen(true) }} className="min-h-[48px] px-3 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-sm font-bold flex items-center justify-center gap-1.5"><TrendingUp size={16} /> График и оси</button>
+                <button onClick={() => { flushDraft(); setShowActions(false); setIsFullscreen(false); setShowBoards(true) }} className="min-h-[48px] px-3 rounded-xl border dark:border-slate-700 dark:text-white text-sm font-bold">🗂 {t('board_mine_short')}</button>
+                <button onClick={() => { newBoard(); setShowActions(false) }} className="min-h-[48px] px-3 rounded-xl bg-orange-500 text-white text-sm font-bold flex items-center justify-center gap-1.5"><Plus size={16} />{t('board_new')}</button>
+                <button onClick={() => { download(); setShowActions(false) }} className="min-h-[48px] px-3 rounded-xl border dark:border-slate-700 dark:text-white text-sm font-bold flex items-center justify-center gap-1.5"><Download size={16} />PNG</button>
+                <button onClick={() => { clearPage(); setShowActions(false) }} className="col-span-2 min-h-[44px] px-3 rounded-xl border text-rose-600 border-rose-200 bg-rose-50 text-sm font-bold flex items-center justify-center gap-1.5"><Trash2 size={16} />{t('board_clear_sheet')}</button>
               </div>
             </div>
           </div>
         )}
-        {toast && <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[1200] px-4 py-3 rounded-xl bg-slate-900 text-white text-sm shadow-xl">{toast}</div>}
+        <GraphBuilderModal
+          open={graphOpen}
+          onClose={() => setGraphOpen(false)}
+          onInsert={(url, sz, label) => {
+            if (!editorRef.current) return
+            addImageAsset(editorRef.current, url, sz, sz, `graph-${Date.now()}`)
+            dirtyRef.current = true
+            showToast(`${label} добавлен на доску ✓`)
+          }}
+        />
+        {toast && <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[1200] px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm shadow-xl">{toast}</div>}
       </div>
     )
   }
 
   return (
     <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950 relative overflow-hidden">
-      <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200/60 dark:border-slate-700/60">
-        <button onClick={() => nav('/')} aria-label={t('home')} title={t('home')}
-          className="p-2.5 min-h-[44px] min-w-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-600 text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-center">
-          <Home size={18} />
+      {/* Единая чистая верхняя панель без лишнего нагромождения */}
+      <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200/70 dark:border-slate-800">
+        <button
+          onClick={() => nav('/')}
+          aria-label={t('home')}
+          title={t('home')}
+          className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center shrink-0"
+        >
+          <Home size={16} />
         </button>
-        <span className="p-1.5 rounded-lg bg-blue-600 text-white hidden sm:inline-flex"><PenTool size={16} /></span>
-        <input value={title} onChange={e => setTitle(e.target.value)} className="px-3 py-1.5 rounded-lg border bg-white dark:bg-slate-800 dark:text-white text-sm font-medium min-w-[120px] max-w-[200px]" />
-        {draft && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-bold" title={t('board_draft_hint')}>{t('board_draft_chip')}</span>}
-        <div className="flex p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800">
-          <button onClick={() => { flushDraft(); setMode('2d') }} className={`px-3 py-2 min-h-[44px] min-w-[56px] rounded-md text-sm font-bold ${mode === '2d' ? 'bg-white dark:bg-slate-700 shadow' : 'text-slate-500'}`}>{t('board_2d')}</button>
-          <button onClick={() => { flushDraft(); setMode('3d') }} className={`px-3 py-2 min-h-[44px] min-w-[56px] rounded-md text-sm font-bold ${mode === '3d' ? 'bg-white dark:bg-slate-700 shadow' : 'text-slate-500'}`}>{t('board_3d')}</button>
-        </div>
-        <div className="ml-auto flex items-center gap-2 flex-wrap">
-          <span className="md:hidden text-xs text-slate-400">{boards.length}</span>
-          <button onClick={() => { setHideSidebarLocal(v => !v); window.dispatchEvent(new CustomEvent('toggle-sidebar')) }} className="p-2.5 min-h-[44px] min-w-[44px] rounded-lg border text-sm bg-white dark:bg-slate-800 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-center" title={hideSidebarLocal ? t('board_show_menu') : t('board_hide_tabs')}><PanelLeft size={18} /></button>
-          <button onClick={() => { flushDraft(); setIsFullscreen(true) }} className="px-3 py-2 min-h-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 flex items-center gap-1.5 text-sm font-medium"><Maximize2 size={16} /> {t('board_fullscreen_btn')}</button>
-          <button onClick={newBoard} className="px-3.5 py-2 min-h-[44px] rounded-lg bg-orange-500 text-white font-bold flex items-center gap-1.5 text-sm hover:bg-orange-400"><Plus size={16} /> {t('board_new')}</button>
-          <button onClick={download} className="px-3 py-2 min-h-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-1.5 text-sm text-slate-700"><Download size={16} /> {t('board_download')}</button>
-          <button onClick={clearPage} className="p-2.5 min-h-[44px] min-w-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-red-600 flex items-center justify-center"><Trash2 size={16} /></button>
-          <button onClick={() => setShowBoards(v => !v)} className="px-3 py-2 min-h-[44px] rounded-lg bg-white dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 text-sm font-medium flex items-center gap-1.5"><FolderOpen size={16} /> {t('board_mine')} <span className="px-1.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px]">{boards.length}</span></button>
-          <button onClick={save} className="px-4 py-2 min-h-[44px] rounded-lg bg-blue-600 text-white font-bold flex items-center gap-1.5 text-sm hover:bg-blue-700"><Save size={16} /> {t('save')}</button>
-        </div>
-      </div>
-      {mode === '2d' && !isFullscreen && (
-        <div className="shrink-0 flex flex-wrap gap-1.5 items-center bg-white dark:bg-slate-800 border-b border-slate-200/60 dark:border-slate-700/60 px-3 py-1.5" data-testid="bd2-toolbar">
-          {/* Выбор фона школьной доски */}
-          <div className="inline-flex rounded-lg border dark:border-slate-700 overflow-hidden text-xs font-bold">
-            {([
-              ['plain', '⬜ Белая'],
-              ['grid', '▦ Клетка'],
-              ['lines', '☰ Линейка'],
-              ['dots', '🎯 Точки'],
-              ['chalk', '🟩 Меловая'],
-            ] as Array<[BgStyle, string]>).map(([k, label]) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setBgStyle(k)}
-                className={`px-2.5 py-2 min-h-[38px] transition ${bgStyle === k ? 'bg-indigo-600 text-white' : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
 
-          {/* Штамп осей X/Y */}
-          <button data-clipbtn onClick={() => { setClipTool(clipTool === 'axes' ? null : 'axes'); setAxesOpen(o => !o); setGraphOpen(false); setShapesOpen(false); setFormulasOpen(false) }} title={t('bd2_axes')} className={`px-3 py-1.5 min-h-[38px] rounded-lg text-xs font-bold border ${clipTool === 'axes' ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-amber-50 dark:bg-slate-900 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-slate-700'}`}>📐 {t('bd2_axes')}</button>
+        <button
+          onClick={() => { setHideSidebarLocal(v => !v); window.dispatchEvent(new CustomEvent('toggle-sidebar')) }}
+          className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center shrink-0"
+          title={hideSidebarLocal ? t('board_show_menu') : t('board_hide_tabs')}
+        >
+          <PanelLeft size={16} />
+        </button>
 
-          {/* Построитель графиков функций y = f(x) */}
-          <button type="button" onClick={() => { setGraphOpen(o => !o); setAxesOpen(false); setShapesOpen(false); setFormulasOpen(false) }} className={`px-3 py-1.5 min-h-[38px] rounded-lg text-xs font-bold border ${graphOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-sky-50 dark:bg-slate-900 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-slate-700'}`}>📈 График y=f(x)</button>
+        <input
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 dark:text-white text-sm font-semibold w-[140px] sm:w-[175px] focus:outline-none focus:border-indigo-500"
+        />
+        {draft && (
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-bold" title={t('board_draft_hint')}>
+            {t('board_draft_chip')}
+          </span>
+        )}
 
-          {/* 2D Геометрия + Транспортир */}
-          <button data-clipbtn type="button" onClick={() => { setShapesOpen(o => !o); setAxesOpen(false); setGraphOpen(false); setFormulasOpen(false) }} className={`px-3 py-1.5 min-h-[38px] rounded-lg text-xs font-bold border ${shapesOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-emerald-50 dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-slate-700'}`}>🧊 2D-Фигуры & Транспортир</button>
-
-          {/* Формулы-стикеры */}
-          <button type="button" onClick={() => { setFormulasOpen(o => !o); setAxesOpen(false); setGraphOpen(false); setShapesOpen(false) }} className={`px-3 py-1.5 min-h-[38px] rounded-lg text-xs font-bold border ${formulasOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-yellow-50 dark:bg-slate-900 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-slate-700'}`}>∑ Формулы</button>
-
-          {/* Вставка картинки */}
-          <input ref={imgInputRef} type="file" accept="image/*" className="hidden" onChange={e => { onInsertImageFile(e.target.files?.[0] || null); (e.target as HTMLInputElement).value = '' }} />
-          <button type="button" onClick={() => imgInputRef.current?.click()} className="px-3 py-1.5 min-h-[38px] rounded-lg text-xs font-bold border bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-700 hover:border-indigo-400">🖼️ Картинка</button>
-
-          {/* Лазерная указка + Undo/Redo + По размеру */}
-          <button type="button" onClick={toggleLaserTool} className={`px-3 py-1.5 min-h-[38px] rounded-lg text-xs font-bold border ${laserOn ? 'bg-rose-600 text-white border-rose-500 shadow' : 'bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-700'}`}>🔴 Указка</button>
-          <div className="ml-auto flex items-center gap-1">
-            <button type="button" onClick={() => { try { editorRef.current?.undo() } catch {} }} title="Отменить (Ctrl+Z)" className="px-2.5 py-1.5 min-h-[38px] rounded-lg border dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white text-xs font-bold">↩</button>
-            <button type="button" onClick={() => { try { editorRef.current?.redo() } catch {} }} title="Повторить (Ctrl+Y)" className="px-2.5 py-1.5 min-h-[38px] rounded-lg border dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white text-xs font-bold">↪</button>
-            <button type="button" onClick={() => { try { editorRef.current?.zoomToFit() } catch {} }} title="Вместить всё" className="px-2.5 py-1.5 min-h-[38px] rounded-lg border dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white text-xs font-bold">🔍 100%</button>
-          </div>
-        </div>
-      )}
-
-      {/* Построитель графиков функций */}
-      {mode === '2d' && graphOpen && !isFullscreen && (
-        <div className="shrink-0 bg-sky-50/80 dark:bg-slate-800 border-b dark:border-slate-700 px-3 py-2 flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-bold dark:text-white">y =</span>
-          <input
-            value={graphExpr}
-            onChange={e => setGraphExpr(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && placeFunctionGraph()}
-            placeholder="x^2 - 3, sin(x)*4, 2*x + 1…"
-            className="w-48 px-3 py-1.5 rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-900 dark:text-white font-mono font-bold"
-          />
-          {['x^2 - 3', '2*x + 1', 'sin(x)*4', 'cos(x)*4', '1/x', 'sqrt(x)*2'].map(preset => (
-            <button key={preset} type="button" onClick={() => setGraphExpr(preset)} className="px-2 py-1 rounded-md bg-white dark:bg-slate-900 border dark:border-slate-700 dark:text-slate-200 font-mono">
-              {preset}
-            </button>
-          ))}
-          <button type="button" onClick={placeFunctionGraph} className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold">
-            📈 Построить на доске
+        {/* Переключатель 2D / 3D */}
+        <div className="flex p-0.5 rounded-xl bg-slate-100 dark:bg-slate-800 shrink-0">
+          <button
+            onClick={() => { flushDraft(); setMode('2d') }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${mode === '2d' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+          >
+            2D Доска
+          </button>
+          <button
+            onClick={() => { flushDraft(); setMode('3d') }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${mode === '3d' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+          >
+            3D Фигуры
           </button>
         </div>
-      )}
 
-      {/* Панель 2D-штампов фигур и транспортира */}
-      {mode === '2d' && shapesOpen && !isFullscreen && (
-        <div data-clipbtn className="shrink-0 bg-emerald-50/70 dark:bg-slate-800 border-b dark:border-slate-700 px-3 py-2 flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-bold text-slate-600 dark:text-slate-300">Выбери фигуру и кликни на доске:</span>
-          {([
-            ['cube', '🧊 Куб'],
-            ['sphere', '🌐 Сфера'],
-            ['cylinder', '🛢️ Цилиндр'],
-            ['cone', '🔺 Конус'],
-            ['pyramid', '⛺ Пирамида'],
-            ['prism', '🔷 Призма'],
-            ['protractor', '📐 Транспортир 180°'],
-          ] as Array<[ClipKind, string]>).map(([k, label]) => (
-            <button
-              key={k}
-              data-clipbtn
-              type="button"
-              onClick={() => { setClipTool(clipTool === k ? null : k); setPartTool(false); setLaserOn(false) }}
-              className={`px-3 py-1.5 rounded-lg font-bold border ${clipTool === k ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-900 dark:text-white dark:border-slate-700'}`}
-            >
-              {label}
-            </button>
-          ))}
-          <input type="color" value={clipColor} onChange={e => setClipColor(e.target.value)} title="Цвет фигуры" className="w-8 h-8 rounded border cursor-pointer" />
-        </div>
-      )}
+        {/* Инструменты 2D — только самое полезное, компактно в одну строку */}
+        {mode === '2d' && (
+          <>
+            <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
 
-      {/* Панель быстрых школьных формул */}
-      {mode === '2d' && formulasOpen && !isFullscreen && (
-        <div className="shrink-0 bg-amber-50/80 dark:bg-slate-800 border-b dark:border-slate-700 px-3 py-2 flex flex-wrap items-center gap-1.5 text-xs">
-          <span className="font-bold text-slate-600 dark:text-slate-300">Кликни формулу — вставится стикером:</span>
-          {QUICK_FORMULAS.map(f => (
-            <button key={f} type="button" onClick={() => placeFormulaCard(f)} className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-amber-300 dark:border-slate-700 dark:text-amber-200 font-serif font-bold hover:bg-amber-100">
-              {f}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {mode === '2d' && axesOpen && !isFullscreen && (
-        <div data-clipbtn className="shrink-0 bg-white dark:bg-slate-800 border-b border-slate-200/60 dark:border-slate-700/60 px-3 py-2 flex flex-wrap items-center gap-2.5 text-sm">
-          <span className="text-xs font-bold text-slate-500">{t('bd2_axes')}</span>
-          <label className="flex items-center gap-2 text-xs font-medium dark:text-slate-200">
-            {t('bd2_axes_range')}
-            <select value={axesCfg.range} onChange={e => setAxes({ range: Number(e.target.value) })} className="px-2 py-1.5 rounded-md border bg-white dark:bg-slate-900 dark:text-white min-h-[40px]">
-              {[5, 10, 15, 20, 30, 50].map(r => <option key={r} value={r}>±{r}</option>)}
-            </select>
-          </label>
-          <label className="flex items-center gap-2 text-xs font-medium dark:text-slate-200">
-            {t('bd2_axes_step')}
-            <select value={axesCfg.step} onChange={e => setAxes({ step: Number(e.target.value) })} className="px-2 py-1.5 rounded-md border bg-white dark:bg-slate-900 dark:text-white min-h-[40px]">
-              {[0.5, 1, 2, 5].map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </label>
-          <label className="flex items-center gap-1.5 text-xs font-medium dark:text-slate-200">
-            <input type="checkbox" checked={axesCfg.labels} onChange={e => setAxes({ labels: e.target.checked })} className="w-5 h-5" />
-            {t('bd2_axes_labels')}
-          </label>
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-medium dark:text-slate-200">{t('bd3_color')}:</span>
-            <div className="flex flex-wrap gap-1.5 max-w-[260px]">
-              {PALETTE.map(cc => (
-                <button key={cc} onClick={() => setClipColor(cc)} className={`w-9 h-9 rounded border ${clipColor === cc ? 'border-2 border-slate-900 dark:border-white' : 'border-slate-300'}`} style={{ background: cc }} />
-              ))}
+            {/* Компактный выбор фона доски */}
+            <div className="relative" ref={bgMenuRef}>
+              <button
+                type="button"
+                onClick={() => setBgMenuOpen(v => !v)}
+                className="px-3 py-1.5 min-h-[36px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5"
+              >
+                <Grid3X3 size={14} />
+                <span>Фон: {currentBgLabel}</span>
+                <ChevronDown size={13} className="opacity-60" />
+              </button>
+              {bgMenuOpen && (
+                <div className="absolute left-0 top-full mt-1.5 z-[600] w-44 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl p-1 space-y-0.5">
+                  {BG_OPTIONS.map(opt => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => selectBgStyle(opt.id)}
+                      className={`w-full px-2.5 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 transition ${bgStyle === opt.id
+                        ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
+                        : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
+                    >
+                      <span className="w-4 h-4 rounded border border-slate-300 shrink-0" style={{ backgroundColor: opt.dot }} />
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <input type="color" value={clipColor} onChange={e => setClipColor(e.target.value)} title={t('bd2_custom_color')} className="w-10 h-10 rounded border cursor-pointer bg-white p-0.5" />
-          </div>
-          <button onClick={() => setClipTool('axes')} className="px-4 py-2.5 rounded-lg bg-amber-500 text-white font-bold min-h-[44px] text-sm">{t('bd2_axes_place')}</button>
+
+            <button
+              type="button"
+              onClick={() => setGraphOpen(true)}
+              className="px-3 py-1.5 min-h-[36px] rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center gap-1.5 transition"
+            >
+              <TrendingUp size={14} /> График и оси
+            </button>
+
+            <input
+              ref={imgInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => { onInsertImageFile(e.target.files?.[0] || null); (e.target as HTMLInputElement).value = '' }}
+            />
+            <button
+              type="button"
+              onClick={() => imgInputRef.current?.click()}
+              className="px-3 py-1.5 min-h-[36px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+            >
+              <ImageIcon size={14} /> Картинка
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleLaserTool}
+              className={`px-3 py-1.5 min-h-[36px] rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition ${laserOn
+                ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                }`}
+            >
+              <Sparkles size={14} /> Указка
+            </button>
+          </>
+        )}
+
+        {/* Правые действия */}
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            onClick={newBoard}
+            title={t('board_new')}
+            className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center"
+          >
+            <Plus size={16} />
+          </button>
+          <button
+            onClick={download}
+            title={t('board_download')}
+            className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center"
+          >
+            <Download size={16} />
+          </button>
+          <button
+            onClick={clearPage}
+            title={t('board_clear_sheet')}
+            className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 flex items-center justify-center"
+          >
+            <Trash2 size={16} />
+          </button>
+          <button
+            onClick={() => { flushDraft(); setIsFullscreen(true) }}
+            title={t('board_fullscreen_btn')}
+            className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center"
+          >
+            <Maximize2 size={15} />
+          </button>
+          <button
+            onClick={() => setShowBoards(v => !v)}
+            className="px-3 py-1.5 min-h-[36px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5"
+          >
+            <FolderOpen size={14} />
+            <span className="hidden xl:inline">{t('board_mine')}</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-indigo-600 text-white text-[10px] font-bold">{boards.length}</span>
+          </button>
+          <button
+            onClick={save}
+            className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
+          >
+            <Save size={14} /> {t('save')}
+          </button>
         </div>
-      )}
+      </div>
+
+      {/* Основная рабочая область доски */}
       <div className="flex-1 min-h-0 p-2">{tldrawArea}</div>
 
+      {/* Модальное окно удобного построителя графиков и осей */}
+      <GraphBuilderModal
+        open={graphOpen}
+        onClose={() => setGraphOpen(false)}
+        onInsert={(url, sz, label) => {
+          if (!editorRef.current) return
+          addImageAsset(editorRef.current, url, sz, sz, `graph-${Date.now()}`)
+          dirtyRef.current = true
+          showToast(`${label} добавлен на доску ✓`)
+        }}
+      />
+
+      {/* Список сохранённых досок */}
       {showBoards && (
-        <div className="absolute top-2 right-2 z-40 w-80 max-w-[calc(100vw-16px)] max-h-[80vh] bg-white dark:bg-slate-900 rounded-2xl border shadow-2xl overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 dark:border-slate-700 shrink-0">
-            <h3 className="font-bold text-sm dark:text-white">{t('board_mine')}</h3>
-            <button onClick={() => setShowBoards(false)} className="min-h-[44px] px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 dark:text-white text-sm">{t('board_hide')}</button>
+        <div className="absolute top-14 right-3 z-[600] w-80 max-w-[calc(100vw-24px)] max-h-[78vh] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-slate-800 shrink-0">
+            <h3 className="font-bold text-sm dark:text-white flex items-center gap-1.5"><PenTool size={14} /> {t('board_mine')}</h3>
+            <button onClick={() => setShowBoards(false)} className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 dark:text-white text-xs font-semibold">{t('board_hide')}</button>
           </div>
           <div className="p-3 space-y-2 overflow-auto">
             <div className="text-xs text-slate-500">{t('board_private_hint')}</div>
             {boards.map(b => (
-              <button key={b.id} onClick={() => { loadBoard(b); setShowBoards(false) }} className={`w-full text-left p-3 rounded-xl border hover:bg-white hover:shadow dark:hover:bg-slate-700 ${b.id === boardId ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 dark:bg-slate-900'}`}>
-                <div className="font-medium text-sm line-clamp-1 dark:text-white">{b.title}</div>
-                <div className="text-xs text-slate-500">{new Date(b.created_at).toLocaleDateString()} • {b.data?.mode || '2d'} • {b.data?.pages || 1}</div>
-                {typeof b.data?.image === 'string' && b.data.image.startsWith('data:image/png') && (
-                  <img src={b.data.image} className="mt-2 rounded-lg border w-full" referrerPolicy="no-referrer" />
-                )}
+              <button
+                key={b.id}
+                onClick={() => { loadBoard(b); setShowBoards(false) }}
+                className={`w-full text-left p-3 rounded-xl border hover:shadow-sm transition ${b.id === boardId
+                  ? 'bg-indigo-50 dark:bg-indigo-950/50 border-indigo-300 dark:border-indigo-700'
+                  : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
+                  }`}
+              >
+                <div className="font-semibold text-sm line-clamp-1 dark:text-white">{b.title}</div>
+                <div className="text-xs text-slate-500 mt-0.5">{new Date(b.created_at).toLocaleDateString()} • {b.data?.mode || '2d'}</div>
               </button>
             ))}
             {boards.length === 0 && <div className="text-sm text-slate-400 text-center py-6">{t('board_empty_a')}{t('save')}</div>}
           </div>
         </div>
       )}
-      {showBoards && <div className="fixed inset-0 -z-10" onClick={() => setShowBoards(false)} />}
+      {showBoards && <div className="fixed inset-0 z-[590]" onClick={() => setShowBoards(false)} />}
       {mode === '3d' && <div className="shrink-0 text-xs text-center text-slate-500 pb-1">{t('bd3_hint')}</div>}
-      {toast && <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[70] px-4 py-3 rounded-xl bg-slate-900 text-white text-sm shadow-xl">{toast}</div>}
+      {toast && <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[950] px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-medium shadow-xl">{toast}</div>}
     </div>
   )
 }
